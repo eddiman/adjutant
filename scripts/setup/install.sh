@@ -164,7 +164,7 @@ download_and_extract() {
   local version="$1"
   local install_dir="$2"
 
-  local tarball_url="${GITHUB_API}/releases/download/${version}/adjutant-${version}.tar.gz"
+  local tarball_url="https://github.com/${ADJUTANT_REPO}/releases/download/${version}/adjutant-${version}.tar.gz"
   local tmp_dir
   tmp_dir="$(mktemp -d)"
   local tmp_tarball="${tmp_dir}/adjutant.tar.gz"
