@@ -57,9 +57,7 @@ nlog "Formatting briefing..."
 
 BRIEFING="🤖 Agentic AI News — ${TODAY}
 
-$(echo "$ITEMS" | jq -r '.[] | "\(.rank). \(.title)\n   → \(.url)\n   \(.summary)\n"')
-
-Full archive: ${JOURNAL_FILE}"
+$(echo "$ITEMS" | jq -r '.[] | "\(.rank). \(.title)\n   → \(.url)\n   \(.summary)\n"')"
 
 # === Step 5: Write to journal ===
 if jq -e '.delivery.journal == true' "$CONFIG_FILE" > /dev/null 2>&1; then
