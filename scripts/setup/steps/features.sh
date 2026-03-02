@@ -40,6 +40,21 @@ step_features() {
       _features_write_news_config
       wiz_info "Created default news_config.json"
     fi
+
+    echo ""
+    printf "  ${_BOLD}Configuring news sources:${_RESET}\n"
+    echo ""
+    printf "  Edit ${_BOLD}${ADJ_DIR}/news_config.json${_RESET} to customise what you receive:\n"
+    echo ""
+    printf "  ${_DIM}keywords${_RESET}        — topics to prioritise (e.g. \"AI agent\", \"LLM\")\n"
+    printf "  ${_DIM}hackernews${_RESET}      — enabled by default, set max_items / lookback_hours\n"
+    printf "  ${_DIM}reddit${_RESET}          — disabled by default, add subreddits and set enabled: true\n"
+    printf "  ${_DIM}blogs${_RESET}           — disabled by default, add RSS/Atom feed URLs and set enabled: true\n"
+    echo ""
+    printf "  Example blog entry:\n"
+    printf "  ${_DIM}\"urls\": [\"https://simonwillison.net/atom/everything/\"]${_RESET}\n"
+    echo ""
+    wiz_info "Run 'adjutant news' to test the briefing manually after setup"
   else
     WIZARD_FEATURES_NEWS=false
     wiz_info "News briefing disabled"
