@@ -46,38 +46,48 @@ step_features() {
   fi
   echo ""
 
-  # Screenshot
-  local screenshot_available=true
-  if ! (has_command npx && npx playwright --version >/dev/null 2>&1); then
-    screenshot_available=false
-  fi
-  if $screenshot_available; then
-    if wiz_confirm "Enable screenshot capability?" "Y"; then
-      WIZARD_FEATURES_SCREENSHOT=true
-      wiz_ok "Screenshot enabled"
-    else
-      WIZARD_FEATURES_SCREENSHOT=false
-      wiz_info "Screenshot disabled"
-    fi
+  # Screenshot — requires Telegram to deliver the image
+  if [ "${WIZARD_TELEGRAM_ENABLED:-true}" = "false" ]; then
+    WIZARD_FEATURES_SCREENSHOT=false
+    wiz_info "Screenshot disabled (requires Telegram)"
   else
-    wiz_warn "Screenshot requires Playwright (not installed)"
-    if wiz_confirm "Enable anyway? (you can install Playwright later)" "N"; then
-      WIZARD_FEATURES_SCREENSHOT=true
-      wiz_ok "Screenshot enabled (install Playwright with: npx playwright install chromium)"
+    local screenshot_available=true
+    if ! (has_command npx && npx playwright --version >/dev/null 2>&1); then
+      screenshot_available=false
+    fi
+    if $screenshot_available; then
+      if wiz_confirm "Enable screenshot capability?" "Y"; then
+        WIZARD_FEATURES_SCREENSHOT=true
+        wiz_ok "Screenshot enabled"
+      else
+        WIZARD_FEATURES_SCREENSHOT=false
+        wiz_info "Screenshot disabled"
+      fi
     else
-      WIZARD_FEATURES_SCREENSHOT=false
-      wiz_info "Screenshot disabled"
+      wiz_warn "Screenshot requires Playwright (not installed)"
+      if wiz_confirm "Enable anyway? (you can install Playwright later)" "N"; then
+        WIZARD_FEATURES_SCREENSHOT=true
+        wiz_ok "Screenshot enabled (install Playwright with: npx playwright install chromium)"
+      else
+        WIZARD_FEATURES_SCREENSHOT=false
+        wiz_info "Screenshot disabled"
+      fi
     fi
   fi
   echo ""
 
-  # Vision (always available via opencode)
-  if wiz_confirm "Enable vision capability? (analyze photos sent to bot)" "Y"; then
-    WIZARD_FEATURES_VISION=true
-    wiz_ok "Vision enabled"
-  else
+  # Vision — requires Telegram (triggered by receiving photos from the bot)
+  if [ "${WIZARD_TELEGRAM_ENABLED:-true}" = "false" ]; then
     WIZARD_FEATURES_VISION=false
-    wiz_info "Vision disabled"
+    wiz_info "Vision disabled (requires Telegram)"
+  else
+    if wiz_confirm "Enable vision capability? (analyze photos sent to bot)" "Y"; then
+      WIZARD_FEATURES_VISION=true
+      wiz_ok "Vision enabled"
+    else
+      WIZARD_FEATURES_VISION=false
+      wiz_info "Vision disabled"
+    fi
   fi
   echo ""
 
