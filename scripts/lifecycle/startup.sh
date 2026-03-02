@@ -124,7 +124,26 @@ else
   fi
 fi
 
-# 3. Verify Crontab
+# 3. Post-startup PID sync — ensure tracking files reflect reality.
+# If service.sh wrote PID files correctly they already exist; this is a
+# safety net for cases where a crash or race left them missing.
+_sync_pid="$(pgrep -f "messaging/telegram/listener\\.sh" 2>/dev/null | head -1)"
+if [ -n "${_sync_pid}" ]; then
+  if [ ! -d "${ADJ_DIR}/state/listener.lock" ]; then
+    mkdir -p "${ADJ_DIR}/state/listener.lock"
+    echo "${_sync_pid}" > "${ADJ_DIR}/state/listener.lock/pid"
+  fi
+  if [ ! -f "${ADJ_DIR}/state/telegram.pid" ]; then
+    echo "${_sync_pid}" > "${ADJ_DIR}/state/telegram.pid"
+  fi
+fi
+
+_sync_web_pid="$(pgrep -f "opencode web" 2>/dev/null | head -1)"
+if [ -n "${_sync_web_pid}" ] && [ ! -f "${ADJ_DIR}/state/opencode_web.pid" ]; then
+  echo "${_sync_web_pid}" > "${ADJ_DIR}/state/opencode_web.pid"
+fi
+
+# 4. Verify Crontab
 CRON_CHECK=$(crontab -l 2>/dev/null | grep -c ".adjutant" || echo "0")
 if [ "$CRON_CHECK" -gt 0 ]; then
   echo "✓ Crontab configured ($CRON_CHECK job(s))"
