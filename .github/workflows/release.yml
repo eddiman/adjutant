@@ -70,6 +70,7 @@ jobs:
             --exclude='PAUSED' \
             --exclude='docs/evaluation/' \
             --exclude='opencode.json' \
+            --exclude='tmp/' \
             . "${STAGING}/"
 
           tar -czf "${TARBALL}" "${STAGING}/"
