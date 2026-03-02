@@ -97,8 +97,15 @@ wiz_confirm() {
   fi
 
   if [ "${DRY_RUN:-}" = "true" ]; then
-    { printf "  %s %s: (dry-run: %s)\n" "$prompt" "$hint" "$default" >/dev/tty; } 2>/dev/null || printf "  %s %s: (dry-run: %s)\n" "$prompt" "$hint" "$default"
-    [ "$default" = "Y" ] || [ "$default" = "y" ] && return 0 || return 1
+    printf "  ${_YELLOW}[DRY RUN]${_RESET} %s %s: " "$prompt" "$hint" >/dev/tty
+    local answer
+    read -r answer </dev/tty
+    answer="${answer:-$default}"
+    case "$answer" in
+      [Yy]|[Yy][Ee][Ss]) return 0 ;;
+      [Nn]|[Nn][Oo])     return 1 ;;
+      *) [ "$default" = "Y" ] || [ "$default" = "y" ] && return 0 || return 1 ;;
+    esac
   fi
 
   while true; do
@@ -125,13 +132,22 @@ wiz_choose() {
   local count=${#options[@]}
 
   if [ "${DRY_RUN:-}" = "true" ]; then
-    { printf "  %s\n\n" "$prompt" >/dev/tty; } 2>/dev/null || printf "  %s\n\n" "$prompt" >&2
+    printf "  ${_YELLOW}[DRY RUN]${_RESET} %s\n\n" "$prompt" >/dev/tty
     local i; for i in $(seq 1 "$count"); do
-      { printf "    %d)  %s\n" "$i" "${options[$((i-1))]}" >/dev/tty; } 2>/dev/null || true
+      printf "    ${_BOLD}%d)${_RESET}  %s\n" "$i" "${options[$((i-1))]}" >/dev/tty
     done
-    { printf "  Choose [1-%d]: (dry-run: 1)\n" "$count" >/dev/tty; } 2>/dev/null || printf "  Choose [1-%d]: (dry-run: 1)\n" "$count" >&2
-    echo "1"
-    return 0
+    echo "" >/dev/tty
+    while true; do
+      printf "  Choose [1-%d]: " "$count" >/dev/tty
+      local answer
+      read -r answer </dev/tty
+      answer="${answer:-1}"
+      if [[ "$answer" =~ ^[0-9]+$ ]] && [ "$answer" -ge 1 ] && [ "$answer" -le "$count" ]; then
+        echo "$answer"
+        return 0
+      fi
+      printf "  Please enter a number between 1 and %d.\n" "$count" >/dev/tty
+    done
   fi
 
   printf "  %s\n\n" "$prompt" >/dev/tty
@@ -159,21 +175,13 @@ wiz_input() {
   local prompt="$1"
   local default="${2:-}"
 
-  if [ "${DRY_RUN:-}" = "true" ]; then
-    if [ -n "$default" ]; then
-      { printf "  %s [%s]: (dry-run: accepting default)\n" "$prompt" "$default" >/dev/tty; } 2>/dev/null || printf "  %s [%s]: (dry-run: accepting default)\n" "$prompt" "$default" >&2
-      echo "$default"
-    else
-      { printf "  %s: (dry-run: empty)\n" "$prompt" >/dev/tty; } 2>/dev/null || printf "  %s: (dry-run: empty)\n" "$prompt" >&2
-      echo ""
-    fi
-    return 0
-  fi
+  local dry_prefix=""
+  [ "${DRY_RUN:-}" = "true" ] && dry_prefix="  ${_YELLOW}[DRY RUN]${_RESET}"
 
   if [ -n "$default" ]; then
-    printf "  %s [%s]: " "$prompt" "$default" >/dev/tty
+    printf "%s  %s [%s]: " "$dry_prefix" "$prompt" "$default" >/dev/tty
   else
-    printf "  %s: " "$prompt" >/dev/tty
+    printf "%s  %s: " "$dry_prefix" "$prompt" >/dev/tty
   fi
 
   local answer
@@ -187,13 +195,10 @@ wiz_input() {
 wiz_multiline() {
   local prompt="$1"
 
-  if [ "${DRY_RUN:-}" = "true" ]; then
-    { printf "  %s: (dry-run: empty)\n" "$prompt" >/dev/tty; } 2>/dev/null || printf "  %s: (dry-run: empty)\n" "$prompt" >&2
-    echo ""
-    return 0
-  fi
+  local dry_prefix=""
+  [ "${DRY_RUN:-}" = "true" ] && dry_prefix="  ${_YELLOW}[DRY RUN]${_RESET}"
 
-  printf "  %s\n" "$prompt" >/dev/tty
+  printf "%s  %s\n" "$dry_prefix" "$prompt" >/dev/tty
   printf "  ${_DIM}(Type your answer. Press Enter twice to finish.)${_RESET}\n" >/dev/tty
   printf "  > " >/dev/tty
 
@@ -227,13 +232,10 @@ wiz_multiline() {
 wiz_secret() {
   local prompt="$1"
 
-  if [ "${DRY_RUN:-}" = "true" ]; then
-    printf "  %s: (dry-run: empty)\n" "$prompt" >/dev/tty
-    echo ""
-    return 0
-  fi
+  local dry_prefix=""
+  [ "${DRY_RUN:-}" = "true" ] && dry_prefix="  ${_YELLOW}[DRY RUN]${_RESET}"
 
-  printf "  %s: " "$prompt" >/dev/tty
+  printf "%s  %s: " "$dry_prefix" "$prompt" >/dev/tty
   local answer
   read -r -s answer </dev/tty
   echo "" >/dev/tty  # newline after hidden input

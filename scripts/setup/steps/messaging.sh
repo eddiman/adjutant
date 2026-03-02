@@ -14,6 +14,15 @@ step_messaging() {
   wiz_step 4 6 "Messaging — Telegram Setup"
   echo ""
 
+  # Top-level skip — Telegram is optional
+  if ! wiz_confirm "Set up Telegram messaging? (you can do this later with 'adjutant setup')" "Y"; then
+    wiz_info "Skipping Telegram setup"
+    wiz_info "Run 'adjutant setup' at any time to configure messaging"
+    WIZARD_TELEGRAM_ENABLED=false
+    return 0
+  fi
+  WIZARD_TELEGRAM_ENABLED=true
+
   local env_file="${ADJ_DIR}/.env"
 
   # Check for existing valid credentials

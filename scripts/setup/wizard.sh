@@ -46,8 +46,8 @@ main() {
         echo "Usage: adjutant setup [--repair] [--dry-run]"
         echo ""
         echo "  --repair      Force repair mode on existing installation"
-        echo "  --dry-run     Simulate the wizard without writing any files or"
-        echo "                running any commands. Prompts auto-accept defaults."
+        echo "  --dry-run     Walk through the full wizard interactively without"
+        echo "                writing any files or running any commands."
         echo ""
         exit 0
         ;;
@@ -57,7 +57,7 @@ main() {
   wiz_banner
 
   if [ "${DRY_RUN:-}" = "true" ]; then
-    printf "  ${_YELLOW}[DRY RUN]${_RESET} No files will be written. No commands will be executed.\n"
+    printf "  ${_YELLOW}[DRY RUN]${_RESET} Simulation mode — prompts are real, but no files will be written and no commands will be executed.\n"
     echo ""
   fi
 
