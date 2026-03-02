@@ -1,0 +1,30 @@
+[//]: # (Monitoring registry: projects Adjutant watches during heartbeats — paths, watch files, agents, and active concerns.)
+
+# Adjutant — Project Registry
+
+Registered projects that Adjutant monitors. Add new projects here.
+
+---
+
+## [Project Name]
+
+- **Path**: /path/to/your/knowledge_base
+- **Priority**: High
+- **Type**: [e.g. product management, client work, research, community]
+- **Watch files**:
+  - data/current.md
+  - data/status.md
+- **Agents**: [list of KB agent names, e.g. status-monitor, report-writer]
+- **Concerns**: [active risks or things to watch, e.g. deadline approaching, dependency blocked]
+
+---
+
+## [Another Project]
+
+- **Path**: /path/to/another/knowledge_base
+- **Priority**: Medium
+- **Type**: [type]
+- **Watch files**:
+  - data/current.md
+- **Agents**: [agent names]
+- **Concerns**: [concerns]

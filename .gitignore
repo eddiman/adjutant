@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# Runtime state
+state/
+PAUSED
+
+# User-specific identity and configuration — copy from *.example to create
+adjutant.yaml
+identity/soul.md
+identity/heart.md
+identity/registry.md
+news_config.json
+
+# Knowledge bases — user data, not part of the framework
+knowledge_bases/
+
+# Generated outputs
+journal/
+insights/pending/
+insights/sent/
+photos/
+screenshots/
+
+.DS_store

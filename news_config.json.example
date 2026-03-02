@@ -1,0 +1,43 @@
+{
+  "keywords": ["your topic", "another keyword", "LLM", "AI agents"],
+
+  "sources": {
+    "hackernews": {
+      "enabled": true,
+      "max_items": 20,
+      "lookback_hours": 24
+    },
+    "reddit": {
+      "enabled": false,
+      "subreddits": ["your_subreddit"],
+      "max_items": 20,
+      "lookback_hours": 24
+    },
+    "blogs": {
+      "enabled": false,
+      "feeds": [
+        { "name": "Example Blog", "url": "https://example.com/feed", "type": "rss" }
+      ]
+    }
+  },
+
+  "analysis": {
+    "model": "anthropic/claude-haiku-4-5",
+    "top_n": 3,
+    "prefilter_limit": 20
+  },
+
+  "deduplication": {
+    "window_days": 30
+  },
+
+  "delivery": {
+    "telegram": true,
+    "journal": true
+  },
+
+  "cleanup": {
+    "raw_retention_days": 7,
+    "analyzed_retention_days": 7
+  }
+}

@@ -1,0 +1,76 @@
+# adjutant.yaml — Single source of truth for this Adjutant instance
+#
+# Copy this file to adjutant.yaml and fill in your values.
+#
+# This file is USER-SPECIFIC and should NOT be committed to version control.
+# It is listed in .gitignore. Keep it local to your install.
+#
+# Secrets (tokens, chat IDs) stay in .env — this file contains non-secret config.
+
+instance:
+  name: "adjutant"
+
+identity:
+  soul: "identity/soul.md"
+  heart: "identity/heart.md"
+  registry: "identity/registry.md"
+
+messaging:
+  backend: "telegram"        # "telegram" or "none" (CLI-only mode)
+  telegram:
+    session_timeout_seconds: 7200      # 2h session window for conversational context
+    default_model: "anthropic/claude-haiku-4-5"
+    rate_limit:
+      messages_per_minute: 10
+      backoff_exponential: true
+
+llm:
+  backend: "opencode"
+  models:
+    cheap: "anthropic/claude-haiku-4-5"      # routine chat and triage
+    medium: "anthropic/claude-sonnet-4-5"    # escalations
+    expensive: "anthropic/claude-opus-4-5"   # /reflect + /confirm only
+  caps:
+    session_tokens: 44000              # per-session token budget
+    session_window_hours: 5            # rolling window for session tracking
+    weekly_tokens: 350000              # weekly budget alert threshold
+
+features:
+  news:
+    enabled: false                     # set to true and configure news_config.json
+    config_path: "news_config.json"
+    schedule: "0 8 * * 1-5"            # weekdays 8am (crontab syntax)
+  screenshot:
+    enabled: false
+  vision:
+    enabled: false
+  usage_tracking:
+    enabled: false
+
+platform:
+  service_manager: "launchd"           # launchd (macOS) | systemd (Linux) | manual
+  process_manager: "pidfile"
+
+notifications:
+  max_per_day: 3
+  quiet_hours:
+    enabled: false
+    start: "22:00"
+    end: "07:00"
+
+security:
+  prompt_injection_guard: true
+  env_file: ".env"
+  log_unknown_senders: true
+  rate_limiting: true
+
+journal:
+  retention_days: 30                   # archive main journal entries older than this
+  news_retention_days: 14              # archive news briefings older than this
+  log_max_size_kb: 5120                # rotate adjutant.log when it exceeds 5MB
+  log_rotations: 3                     # number of compressed log backups to keep
+
+debug:
+  dry_run: false
+  verbose_logging: false
+  mock_llm: false

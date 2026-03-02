@@ -1,0 +1,10 @@
+# kb.yaml — Knowledge base metadata
+#
+# This file describes this knowledge base. Adjutant reads it during
+# registration and when spawning queries.
+
+name: "{{KB_NAME}}"
+description: "{{KB_DESCRIPTION}}"
+model: "{{KB_MODEL}}"
+access: "{{KB_ACCESS}}"
+created: "{{KB_CREATED}}"

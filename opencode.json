@@ -1,0 +1,50 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": "deny",
+    "read": {
+      "*": "allow",
+      "**/.env": "deny",
+      ".env": "deny",
+      "**/.env.example": "allow",
+      ".env.example": "allow"
+    },
+    "glob": {
+      "*": "allow",
+      "**/.env": "deny",
+      ".env": "deny"
+    },
+    "bash": {
+      "*": "allow",
+      "*cat **/.env": "deny",
+      "*cat .env": "deny",
+      "*head **/.env": "deny",
+      "*head .env": "deny",
+      "*tail **/.env": "deny",
+      "*tail .env": "deny",
+      "*less **/.env": "deny",
+      "*less .env": "deny",
+      "*source **/.env": "deny",
+      "*source .env": "deny",
+      "*grep*/**/.env*": "deny",
+      "*grep* .env*": "deny",
+      "*grep*\\.env*": "deny",
+      "*grep * **/.env": "deny",
+      "*grep * .env": "deny",
+      "*awk * **/.env": "deny",
+      "*awk * .env": "deny",
+      "*sed * **/.env": "deny",
+      "*sed * .env": "deny",
+      "*cut * **/.env": "deny",
+      "*cut * .env": "deny",
+      "**/.env*": "deny",
+      "env": "deny",
+      "env *": "deny",
+      "printenv": "deny",
+      "printenv *": "deny",
+      "*export -p*": "deny",
+      "*declare -p*": "deny",
+      "set": "deny"
+    }
+  }
+}
