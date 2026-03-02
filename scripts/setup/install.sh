@@ -36,9 +36,9 @@ else
   _BOLD="" _GREEN="" _YELLOW="" _RED="" _CYAN="" _RESET=""
 fi
 
-info()    { printf "  ${_CYAN}→${_RESET} %s\n" "$*"; }
-ok()      { printf "  ${_GREEN}✓${_RESET} %s\n" "$*"; }
-warn()    { printf "  ${_YELLOW}!${_RESET} %s\n" "$*"; }
+info()    { printf "  ${_CYAN}→${_RESET} %s\n" "$*" >&2; }
+ok()      { printf "  ${_GREEN}✓${_RESET} %s\n" "$*" >&2; }
+warn()    { printf "  ${_YELLOW}!${_RESET} %s\n" "$*" >&2; }
 die()     { printf "\n  ${_RED}✗ Error:${_RESET} %s\n\n" "$*" >&2; exit 1; }
 
 # ── Banner ───────────────────────────────────────────────────────────────────
@@ -114,7 +114,7 @@ prompt_install_dir() {
   local install_dir="${ADJUTANT_INSTALL_DIR:-}"
 
   if [ -z "$install_dir" ]; then
-    printf "  ${_BOLD}Install directory${_RESET} [${default_dir}]: "
+    printf "  ${_BOLD}Install directory${_RESET} [${default_dir}]: " >&2
     read -r install_dir
     install_dir="${install_dir:-$default_dir}"
   fi

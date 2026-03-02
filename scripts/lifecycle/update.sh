@@ -36,9 +36,9 @@ else
   _BOLD="" _GREEN="" _YELLOW="" _RED="" _CYAN="" _RESET=""
 fi
 
-info()  { printf "  ${_CYAN}→${_RESET} %s\n" "$*"; }
-ok()    { printf "  ${_GREEN}✓${_RESET} %s\n" "$*"; }
-warn()  { printf "  ${_YELLOW}!${_RESET} %s\n" "$*"; }
+info()  { printf "  ${_CYAN}→${_RESET} %s\n" "$*" >&2; }
+ok()    { printf "  ${_GREEN}✓${_RESET} %s\n" "$*" >&2; }
+warn()  { printf "  ${_YELLOW}!${_RESET} %s\n" "$*" >&2; }
 die()   { printf "\n  ${_RED}✗ Error:${_RESET} %s\n\n" "$*" >&2; exit 1; }
 
 # ── Semver comparison ────────────────────────────────────────────────────────
