@@ -109,12 +109,14 @@ check_prerequisites() {
 
 # ── Install directory ────────────────────────────────────────────────────────
 
+INSTALL_DIR=""
+
 prompt_install_dir() {
   local default_dir="${HOME}/.adjutant"
   local install_dir="${ADJUTANT_INSTALL_DIR:-}"
 
   if [ -z "$install_dir" ]; then
-    printf "  ${_BOLD}Install directory${_RESET} [${default_dir}]: " >&2
+    printf "  ${_BOLD}Install directory${_RESET} [${default_dir}]: "
     read -r install_dir
     install_dir="${install_dir:-$default_dir}"
   fi
@@ -133,29 +135,27 @@ prompt_install_dir() {
     exit 0
   fi
 
-  echo "$install_dir"
+  INSTALL_DIR="$install_dir"
 }
 
 # ── Resolve version ──────────────────────────────────────────────────────────
 
+VERSION=""
+
 resolve_version() {
   local version="${ADJUTANT_VERSION:-}"
 
-  if [ -n "$version" ]; then
-    echo "$version"
-    return 0
+  if [ -z "$version" ]; then
+    info "Fetching latest release..."
+    version="$(curl -fsSL "${GITHUB_API}/releases/latest" | jq -r '.tag_name')" \
+      || die "Could not fetch latest release from ${GITHUB_API}. Check your internet connection."
   fi
 
-  info "Fetching latest release..."
-  local latest
-  latest="$(curl -fsSL "${GITHUB_API}/releases/latest" | jq -r '.tag_name')" \
-    || die "Could not fetch latest release from ${GITHUB_API}. Check your internet connection."
-
-  if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+  if [ -z "$version" ] || [ "$version" = "null" ]; then
     die "No releases found at ${GITHUB_API}. Has a release been published?"
   fi
 
-  echo "$latest"
+  VERSION="$version"
 }
 
 # ── Download and extract ─────────────────────────────────────────────────────
@@ -209,23 +209,21 @@ main() {
   print_banner
   check_prerequisites
 
-  local install_dir
-  install_dir="$(prompt_install_dir)"
+  prompt_install_dir
   printf "\n"
 
-  local version
-  version="$(resolve_version)"
-  ok "Version: ${version}"
+  resolve_version
+  ok "Version: ${VERSION}"
   printf "\n"
 
-  download_and_extract "$version" "$install_dir"
+  download_and_extract "$VERSION" "$INSTALL_DIR"
   printf "\n"
 
   if [ "${ADJUTANT_NO_WIZARD:-}" = "true" ]; then
-    ok "Adjutant ${version} installed to ${install_dir}"
-    info "Run ${_BOLD}bash ${install_dir}/scripts/setup/wizard.sh${_RESET} to complete setup."
+    ok "Adjutant ${VERSION} installed to ${INSTALL_DIR}"
+    info "Run ${_BOLD}bash ${INSTALL_DIR}/scripts/setup/wizard.sh${_RESET} to complete setup."
   else
-    run_wizard "$install_dir"
+    run_wizard "$INSTALL_DIR"
   fi
 }
 
