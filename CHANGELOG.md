@@ -7,6 +7,21 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.0.2] — 2026-03-02
+
+### Fixed
+
+- `install.sh`: refactored `resolve_version()` and `prompt_install_dir()` to use global variables instead of subshell capture, eliminating stdout pollution that corrupted the download URL
+- `install.sh` / `update.sh`: corrected download URL from `api.github.com` to `github.com` releases endpoint
+- Wizard: added top-level Telegram skip prompt in Step 4; answering `n` disables messaging setup entirely and sets `WIZARD_TELEGRAM_ENABLED=false`
+- Wizard: screenshot and vision features now auto-disabled (with explanation) when Telegram setup is skipped
+- Wizard: added inline loading indicator before slow `npx playwright --version` check in Step 1
+- Wizard dry-run: all prompt helpers (`wiz_confirm`, `wiz_input`, `wiz_choose`, `wiz_multiline`, `wiz_secret`) now accept real user input in dry-run mode (previously auto-accepted defaults)
+- Wizard: added news source configuration instructions shown immediately after enabling the news briefing feature
+- `startup.sh`: added post-startup PID sync block to recover missing lock/PID files after listener restarts
+
+---
+
 ## [1.0.0] — 2026-03-01
 
 Initial public release.
