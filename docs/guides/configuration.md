@@ -53,6 +53,8 @@ features:
     enabled: false
   vision:
     enabled: false
+  search:
+    enabled: false                    # requires BRAVE_API_KEY in .env
   usage_tracking:
     enabled: false
 
@@ -112,9 +114,14 @@ Fill in your values:
 ```bash
 TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
 TELEGRAM_CHAT_ID=123456789
+
+# Optional — required for /search and the agent's web search tool
+BRAVE_API_KEY=BSAxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 The `.env` file is never `source`d directly — Adjutant uses grep-based extraction to read individual values by key. This prevents accidentally leaking all credentials into the environment.
+
+**`BRAVE_API_KEY`** — Required for the `/search` Telegram command and for the Adjutant agent to look things up on the web. Get a free key (2,000 queries/month) at [api.search.brave.com](https://api.search.brave.com). The setup wizard will prompt for this during feature configuration.
 
 ---
 

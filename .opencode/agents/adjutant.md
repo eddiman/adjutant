@@ -35,6 +35,10 @@ Load more only when the question requires it:
 
 When asked to screenshot/visit/show a URL: `bash scripts/capabilities/screenshot/screenshot.sh "URL" "caption"` — prints `OK:/path` or `ERROR:reason`. Never describe instead of sending. Don't read `.env` — script handles credentials.
 
+## Web Search
+
+When asked to search the web or look something up: `bash scripts/capabilities/search/search.sh "query" [count]` — prints `OK:<results>` or `ERROR:reason`. Returns title, URL, and description for top N results (default 5). Low token cost — no full page HTML. Requires `BRAVE_API_KEY` in `.env`.
+
 ## Knowledge Bases
 
 Query: `bash scripts/capabilities/kb/query.sh "<name>" "question"`

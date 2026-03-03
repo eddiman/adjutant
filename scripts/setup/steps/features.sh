@@ -7,12 +7,14 @@
 #   - News briefing (requires cron)
 #   - Screenshot capability (requires Playwright)
 #   - Vision capability (built-in)
+#   - Web search (requires Brave Search API key)
 #   - Usage tracking (built-in)
 #
 # Sets:
 #   WIZARD_FEATURES_NEWS=true/false
 #   WIZARD_FEATURES_SCREENSHOT=true/false
 #   WIZARD_FEATURES_VISION=true/false
+#   WIZARD_FEATURES_SEARCH=true/false
 #   WIZARD_FEATURES_USAGE=true/false
 
 # Requires: helpers.sh sourced, ADJ_DIR set
@@ -20,6 +22,7 @@
 WIZARD_FEATURES_NEWS=false
 WIZARD_FEATURES_SCREENSHOT=false
 WIZARD_FEATURES_VISION=true
+WIZARD_FEATURES_SEARCH=false
 WIZARD_FEATURES_USAGE=true
 
 step_features() {
@@ -106,6 +109,43 @@ step_features() {
   fi
   echo ""
 
+  # Web search — standalone, no Telegram required
+  if wiz_confirm "Enable web search? (Brave Search API — no bot detection, low token cost)" "Y"; then
+    # Check for existing key first
+    local existing_brave_key=""
+    if [ -f "${ADJ_DIR}/.env" ]; then
+      existing_brave_key="$(grep -E '^BRAVE_API_KEY=' "${ADJ_DIR}/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d "'\"")"
+    fi
+
+    if [ -n "${existing_brave_key}" ] && [ "${existing_brave_key}" != "your-brave-api-key-here" ]; then
+      WIZARD_FEATURES_SEARCH=true
+      wiz_ok "Web search enabled (existing API key found)"
+    else
+      echo ""
+      printf "  ${_BOLD}Brave Search API key required${_RESET}\n"
+      printf "  Free tier: 2,000 queries/month\n"
+      printf "  Get a key at: ${_CYAN}https://api.search.brave.com${_RESET}\n"
+      echo ""
+      local brave_key
+      brave_key="$(wiz_secret "Paste your Brave API key (or press Enter to skip)")"
+      echo ""
+
+      if [ -n "${brave_key}" ]; then
+        _features_write_brave_key "${brave_key}"
+        WIZARD_FEATURES_SEARCH=true
+        wiz_ok "Web search enabled"
+        wiz_info "Key saved to .env"
+      else
+        WIZARD_FEATURES_SEARCH=false
+        wiz_info "Web search disabled (no key provided — add BRAVE_API_KEY to .env later to enable)"
+      fi
+    fi
+  else
+    WIZARD_FEATURES_SEARCH=false
+    wiz_info "Web search disabled"
+  fi
+  echo ""
+
   # Usage tracking
   if wiz_confirm "Enable usage tracking?" "Y"; then
     WIZARD_FEATURES_USAGE=true
@@ -132,6 +172,7 @@ _features_update_config() {
   _features_yaml_set_bool "news" "$WIZARD_FEATURES_NEWS" "$config_file"
   _features_yaml_set_bool "screenshot" "$WIZARD_FEATURES_SCREENSHOT" "$config_file"
   _features_yaml_set_bool "vision" "$WIZARD_FEATURES_VISION" "$config_file"
+  _features_yaml_set_bool "search" "$WIZARD_FEATURES_SEARCH" "$config_file"
   _features_yaml_set_bool "usage_tracking" "$WIZARD_FEATURES_USAGE" "$config_file"
 }
 
@@ -155,6 +196,35 @@ _features_yaml_set_bool() {
       { print }
     ' "$file" > "$tmpfile" && mv "$tmpfile" "$file"
   fi
+}
+
+# Write or update BRAVE_API_KEY in .env
+_features_write_brave_key() {
+  local key="$1"
+  local env_file="${ADJ_DIR}/.env"
+
+  if [ "${DRY_RUN:-}" = "true" ]; then
+    dry_run_would "write BRAVE_API_KEY to ${env_file}"
+    return 0
+  fi
+
+  if [ ! -f "${env_file}" ]; then
+    # Create minimal .env if it doesn't exist yet
+    touch "${env_file}"
+    chmod 600 "${env_file}"
+  fi
+
+  if grep -qE '^BRAVE_API_KEY=' "${env_file}" 2>/dev/null; then
+    # Update existing entry
+    local tmpfile="${env_file}.tmp.$$"
+    awk -v key="BRAVE_API_KEY=${key}" '/^BRAVE_API_KEY=/ { print key; next } { print }' "${env_file}" > "${tmpfile}" \
+      && mv "${tmpfile}" "${env_file}"
+  else
+    # Append new entry
+    printf '\n# Brave Search API — /search command and agent web search\nBRAVE_API_KEY=%s\n' "${key}" >> "${env_file}"
+  fi
+
+  chmod 600 "${env_file}"
 }
 
 # Write a default news_config.json

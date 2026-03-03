@@ -13,7 +13,7 @@
 #
 # Provides: cmd_status, cmd_pause, cmd_resume, cmd_kill, cmd_pulse,
 #           cmd_restart, cmd_reflect_request, cmd_reflect_confirm,
-#           cmd_help, cmd_model, cmd_screenshot, cmd_kb
+#           cmd_help, cmd_model, cmd_screenshot, cmd_search, cmd_kb
 
 PENDING_REFLECT_FILE="${ADJ_DIR}/state/pending_reflect"
 MODEL_FILE="${ADJ_DIR}/state/telegram_model.txt"
@@ -207,6 +207,7 @@ Or use a command:
 /restart — Restart all services (listener, opencode web).
 /reflect — I'll do a deeper Opus reflection (I'll ask you to confirm first).
 /screenshot <url> — Take a full-page screenshot of any website and send it here.
+/search <query> — Search the web via Brave Search and return top results.
 /kb — List knowledge bases or query one (/kb query <name> <question>).
 /pause — I'll stop monitoring until you're ready for me to resume.
 /resume — I'll pick back up where I left off.
@@ -284,6 +285,40 @@ cmd_screenshot() {
     else
       # screenshot.sh already sent the photo; just log success
       adj_log telegram "Screenshot sent for ${url}"
+    fi
+  ) &
+  disown $!
+}
+
+# --- /search <query> ---
+cmd_search() {
+  local query="${1:-}"
+  local message_id="${2:-}"
+
+  if [ -z "${query}" ]; then
+    msg_send_text "Please provide a search query. Example: /search latest AI news" "${message_id}"
+    return
+  fi
+
+  adj_log telegram "Search requested: ${query}"
+  msg_react "${message_id}"
+
+  (
+    msg_typing start "search_${message_id}"
+
+    local result
+    result="$(bash "${ADJ_DIR}/scripts/capabilities/search/search.sh" "${query}" 2>>"${ADJ_DIR}/state/adjutant.log")"
+    local search_exit=$?
+
+    msg_typing stop "search_${message_id}"
+
+    if [ ${search_exit} -ne 0 ] || [[ "${result}" == ERROR:* ]]; then
+      local err_msg="${result#ERROR:}"
+      msg_send_text "Search failed: ${err_msg}" "${message_id}"
+      adj_log telegram "Search failed for '${query}': ${err_msg}"
+    else
+      msg_send_text "${result#OK:}" "${message_id}"
+      adj_log telegram "Search results sent for: ${query}"
     fi
   ) &
   disown $!

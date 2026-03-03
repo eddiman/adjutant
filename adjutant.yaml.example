@@ -44,6 +44,8 @@ features:
     enabled: false
   vision:
     enabled: false
+  search:
+    enabled: false                     # requires BRAVE_API_KEY in .env
   usage_tracking:
     enabled: false
 

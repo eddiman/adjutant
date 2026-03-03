@@ -133,6 +133,8 @@ dispatch_message() {
     /model\ *)      cmd_model "${text#/model }" "${message_id}" ;;
     /screenshot\ *) cmd_screenshot "${text#/screenshot }" "${message_id}" ;;
     /screenshot)    msg_send_text "Please provide a URL. Example: /screenshot https://example.com" "${message_id}" ;;
+    /search\ *)     cmd_search "${text#/search }" "${message_id}" ;;
+    /search)        msg_send_text "Please provide a search query. Example: /search latest AI news" "${message_id}" ;;
     /kb)            cmd_kb "list" "${message_id}" ;;
     /kb\ *)         cmd_kb ${text#/kb } "${message_id}" ;;
     *)

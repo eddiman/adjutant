@@ -31,6 +31,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | Command | What it does |
 |---------|-------------|
 | `/screenshot <url>` | Takes a full-page screenshot of the URL and sends it back as an image. Automatically generates a visual description caption using the vision model. Requires Playwright to be installed. |
+| `/search <query>` | Searches the web via the Brave Search API and returns the top 5 results (title, URL, description). No browser automation — fast, token-efficient, and not subject to bot detection. Requires `BRAVE_API_KEY` in `.env`. |
 | `/kb` | Lists all registered knowledge bases |
 | `/kb <name> <question>` | Queries a specific knowledge base with your question. Example: `/kb my-project what's the current status?` |
 
