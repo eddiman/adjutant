@@ -107,7 +107,7 @@ msg_typing() {
             > /dev/null 2>&1
           sleep 4
         done
-      " &
+      " </dev/null >/dev/null 2>&1 &
       echo $! > "${pidfile}"
       ;;
     stop)

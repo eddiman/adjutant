@@ -26,6 +26,13 @@ setup_mocks() {
   _ORIGINAL_PATH="${PATH}"
   export PATH="${MOCK_BIN}:${PATH}"
 
+  # Force opencode.sh to use the mock binary, not the real one.
+  # opencode.sh resolves _OPENCODE_BIN once at source time via `command -v opencode`.
+  # By the time setup_mocks runs, opencode.sh may already be sourced with the real
+  # binary path cached. Overriding _OPENCODE_BIN here ensures opencode_run() always
+  # calls the mock, preventing real OpenCode sessions from being spawned during tests.
+  export _OPENCODE_BIN="${MOCK_BIN}/opencode"
+
   # Provide a mock `timeout` so that _adj_timeout() in opencode.sh uses it
   # instead of the shell-native fallback.  The shell fallback spawns a
   # `sleep N` watchdog that becomes an orphan after SIGKILL and can hold open
@@ -43,6 +50,7 @@ setup_mocks() {
 
 teardown_mocks() {
   export PATH="${_ORIGINAL_PATH}"
+  unset _OPENCODE_BIN
   # Kill any leftover typing indicator background processes
   for pidfile in /tmp/adjutant_typing_*.pid; do
     [ -f "${pidfile}" ] || continue

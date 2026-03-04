@@ -286,7 +286,7 @@ cmd_screenshot() {
       # screenshot.sh already sent the photo; just log success
       adj_log telegram "Screenshot sent for ${url}"
     fi
-  ) &
+  ) </dev/null >/dev/null 2>&1 &
   disown $!
 }
 
@@ -320,7 +320,7 @@ cmd_search() {
       msg_send_text "${result#OK:}" "${message_id}"
       adj_log telegram "Search results sent for: ${query}"
     fi
-  ) &
+  ) </dev/null >/dev/null 2>&1 &
   disown $!
 }
 
@@ -385,7 +385,7 @@ cmd_kb() {
         msg_send_text "[${kb_name}] ${result}" "${message_id}"
         adj_log telegram "KB query answered from ${kb_name}"
       fi
-    ) &
+    ) </dev/null >/dev/null 2>&1 &
     disown $!
     return
   fi

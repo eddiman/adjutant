@@ -138,6 +138,6 @@ tg_handle_photo() {
       msg_send_text "${vision_reply}" "${message_id}"
       adj_log telegram "Vision reply sent for msg=${message_id}"
     fi
-  ) &
+  ) </dev/null >/dev/null 2>&1 &
   disown $!
 }

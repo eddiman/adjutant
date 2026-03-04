@@ -158,7 +158,7 @@ dispatch_message() {
           msg_send_text "I ran into a problem getting a response. Try again in a moment." "${message_id}"
           adj_log messaging "Fallback reply sent for msg=${message_id}"
         fi
-      ) &
+      ) </dev/null >/dev/null 2>&1 &
       local new_job_pid=$!
       _register_job "${new_job_pid}" "${message_id}"
       disown "${new_job_pid}"
