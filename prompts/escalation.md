@@ -53,3 +53,15 @@ Write `state/last_heartbeat.json` with:
   "project": "project name"
 }
 ```
+
+### 5b. Append to action ledger
+
+Append one line to `state/actions.jsonl` (create if it doesn't exist):
+```json
+{"ts":"<ISO-8601>","type":"escalation","trigger":"<insight filename>","action":"<notified|logged|flagged-for-reflect>","project":"<project name>"}
+```
+
+If a notification was sent, also append:
+```json
+{"ts":"<ISO-8601>","type":"notify","detail":"<notification text>"}
+```

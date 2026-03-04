@@ -1,7 +1,7 @@
 #!/bin/bash
 # scripts/setup/wizard.sh — Main setup wizard orchestrator
 #
-# Runs the full 6-step setup for a fresh Adjutant installation.
+# Runs the full 7-step setup for a fresh Adjutant installation.
 # For existing installs, delegates to repair.sh instead.
 #
 # Usage:
@@ -15,6 +15,7 @@
 #   4. Messaging (Telegram credentials)
 #   5. Feature selection
 #   6. Service installation
+#   7. Autonomy configuration
 
 set -euo pipefail
 
@@ -136,6 +137,12 @@ _run_fresh_setup() {
   source "${SETUP_DIR}/steps/service.sh"
   step_service || {
     wiz_warn "Service installation had issues — start manually with 'adjutant start'"
+  }
+
+  # ── Step 7: Autonomy ────────────────────────────────────────────────────
+  source "${SETUP_DIR}/steps/autonomy.sh"
+  step_autonomy || {
+    wiz_warn "Autonomy setup incomplete — configure later in adjutant.yaml"
   }
 
   # ── Done ───────────────────────────────────────────────────────────────
@@ -272,6 +279,10 @@ _show_completion() {
   printf "  Logs:    ${ADJ_DIR}/state/adjutant.log\n"
   printf "  Identity: ${ADJ_DIR}/identity/\n"
   echo ""
+
+  if wiz_confirm "Would you like to create a knowledge base now?" "N"; then
+    bash "${ADJ_DIR}/scripts/setup/steps/kb_wizard.sh"
+  fi
 }
 
 # Run

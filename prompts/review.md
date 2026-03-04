@@ -13,6 +13,16 @@ Read the file `PAUSED`. If it exists, output exactly "Adjutant is paused. Skippi
 - `identity/soul.md` — your identity and decision frameworks
 - `identity/heart.md` — current priorities and active concerns
 
+### 1b. Check dry-run mode
+
+Read `adjutant.yaml`. If `debug.dry_run` is `true`:
+- Proceed through all steps normally EXCEPT:
+  - Do NOT call `notify.sh`
+  - Do NOT move files from `insights/pending/` to `insights/sent/`
+  - Prefix every journal entry with `[DRY RUN]`
+  - Append to `state/actions.jsonl` (create if absent): `{"ts":"<ISO-8601>","type":"review","dry_run":true,"kbs_checked":["<names>"],"insights_sent":0,"recommendations":[]}`
+- Continue to the end of the prompt, then stop.
+
 ### 2. Read recent journal entries
 
 Read the most recent journal file(s) from `journal/` to understand what the last pulse(s) detected.
@@ -74,6 +84,13 @@ Write `state/last_heartbeat.json` with:
   "insights_sent": 0,
   "recommendations": ["short list"]
 }
+```
+
+### 7b. Append to action ledger
+
+Append one line to `state/actions.jsonl` (create if it doesn't exist):
+```json
+{"ts":"<ISO-8601>","type":"review","kbs_checked":["<names>"],"insights_sent":<n>,"recommendations":["<list>"]}
 ```
 
 Be thorough but concise. This is the one deep review — make it count.

@@ -7,6 +7,31 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.1.0] — Autonomy & Self-Agency
+
+### Added
+
+- Scheduled autonomous pulse checks query all registered KBs on a configurable cron schedule (`autonomy.pulse_schedule`)
+- Daily review synthesizes pulse findings and sends Telegram notifications for significant insights (`autonomy.review_schedule`)
+- Machine-readable action ledger (`state/actions.jsonl`) — one JSONL record per autonomous cycle or notification sent
+- Hard notification budget counter in `notify.sh` — date-scoped counter file enforces `notifications.max_per_day` at script layer, independent of LLM
+- Dry-run mode enforced in all three autonomous prompts: `pulse.md`, `review.md`, `escalation.md` — no side effects, `[DRY RUN]` journal prefix, `actions.jsonl` records `"dry_run":true`
+- `autonomy:` section added to `adjutant.yaml.example` with `enabled`, `pulse_schedule`, `review_schedule`
+- Wizard Step 7: guided autonomy configuration (pulse cadence, review schedule, notification budget, quiet hours, cron install)
+- Wizard completion now offers to create a knowledge base immediately after setup
+- Wizard step counter updated to 7 across all step files (was 6)
+- `/status` now surfaces last heartbeat type/timestamp, today's notification count vs. budget, and last 5 action ledger entries
+- `/status` cron job detection now recognizes `prompts/pulse.md` and `prompts/review.md` job types
+- News briefing cron schedule now read from `adjutant.yaml features.news.schedule` instead of hardcoded `"0 8 * * 1-5"`
+- `docs/guides/autonomy.md` — user guide covering enabling, cadence, budget, ledger, pause/resume, dry-run, status output
+- `docs/architecture/autonomy.md` — architecture reference covering control flow, kill-switch hierarchy, data flow, isolation guarantees, budget enforcement, ledger schema
+
+### Fixed
+
+- `scripts/capabilities/kb/manage.sh`: `kb_scaffold` used `ls *.md` glob in a `set -e` context, causing silent exit 1 when `docs/` was empty; replaced with `find -name '*.md'` (fixes integration tests `kb quick-create scaffolds and registers` and `kb quick-create with custom model and access`)
+
+---
+
 ## [0.0.2] — 2026-03-02
 
 ### Fixed

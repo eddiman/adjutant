@@ -49,6 +49,11 @@ features:
   usage_tracking:
     enabled: false
 
+autonomy:
+  enabled: false                     # set to true to enable scheduled pulses and reviews
+  pulse_schedule: "0 9,17 * * 1-5"  # cron: weekdays at 9am and 5pm
+  review_schedule: "0 20 * * 1-5"   # cron: weekdays at 8pm
+
 platform:
   service_manager: "launchd"           # launchd (macOS) | systemd (Linux) | manual
   process_manager: "pidfile"

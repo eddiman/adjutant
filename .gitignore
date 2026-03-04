@@ -4,6 +4,7 @@
 # Runtime state
 state/
 PAUSED
+# state/actions.jsonl — autonomous action ledger (covered by state/ above)
 
 # User-specific identity and configuration — copy from *.example to create
 adjutant.yaml
@@ -23,3 +24,6 @@ photos/
 screenshots/
 
 .DS_store
+
+# Local planning docs — not for tracking
+docs/reference/portfolio-kb-plan.md

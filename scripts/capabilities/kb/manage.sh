@@ -322,7 +322,7 @@ kb_scaffold() {
   if [ -f "${KB_TEMPLATES}/docs/README.md" ] && [ ! -f "${kb_path}/docs/README.md" ]; then
     # Only scaffold if there are no existing markdown files in docs/
     local existing_docs
-    existing_docs="$(ls "${kb_path}/docs/"*.md 2>/dev/null | wc -l | tr -d ' ')"
+    existing_docs="$(find "${kb_path}/docs" -maxdepth 1 -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
     if [ "${existing_docs}" -eq 0 ]; then
       sed \
         -e "s|{{KB_NAME}}|${name}|g" \

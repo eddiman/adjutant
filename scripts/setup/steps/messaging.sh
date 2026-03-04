@@ -11,7 +11,7 @@
 # Requires: helpers.sh sourced, ADJ_DIR set
 
 step_messaging() {
-  wiz_step 4 6 "Messaging — Telegram Setup"
+  wiz_step 4 7 "Messaging — Telegram Setup"
   echo ""
 
   # Top-level skip — Telegram is optional

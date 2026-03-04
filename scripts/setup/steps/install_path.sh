@@ -12,7 +12,7 @@
 # Requires: helpers.sh sourced
 
 step_install_path() {
-  wiz_step 2 6 "Installation Path"
+  wiz_step 2 7 "Installation Path"
   echo ""
 
   local default_path

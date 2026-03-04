@@ -13,7 +13,7 @@
 # Requires: helpers.sh sourced, ADJ_DIR set, ADJUTANT_OS set
 
 step_service() {
-  wiz_step 6 6 "Service Installation"
+  wiz_step 6 7 "Service Installation"
   echo ""
 
   local os="${ADJUTANT_OS:-unknown}"
@@ -278,7 +278,15 @@ _service_install_news_cron() {
     return 0
   fi
 
-  local cron_line="0 8 * * 1-5 ${ADJ_DIR}/scripts/news/briefing.sh >> ${ADJ_DIR}/state/adjutant.log 2>&1"
+  # Read schedule from adjutant.yaml features.news.schedule (default: weekdays 8am)
+  local schedule="0 8 * * 1-5"
+  if [ -f "${ADJ_DIR}/adjutant.yaml" ]; then
+    local yaml_schedule
+    yaml_schedule="$(grep -A2 'news:' "${ADJ_DIR}/adjutant.yaml" | grep 'schedule:' | head -1 | sed "s/.*schedule:[[:space:]]*//" | tr -d '"')"
+    [ -n "${yaml_schedule}" ] && schedule="${yaml_schedule}"
+  fi
+
+  local cron_line="${schedule} ${ADJ_DIR}/scripts/news/briefing.sh >> ${ADJ_DIR}/state/adjutant.log 2>&1"
 
   # Check if already installed
   if crontab -l 2>/dev/null | grep -q "news/briefing.sh\|news_briefing.sh"; then

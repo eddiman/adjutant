@@ -26,7 +26,7 @@ WIZARD_FEATURES_SEARCH=false
 WIZARD_FEATURES_USAGE=true
 
 step_features() {
-  wiz_step 5 6 "Features"
+  wiz_step 5 7 "Features"
   echo ""
 
   # News briefing

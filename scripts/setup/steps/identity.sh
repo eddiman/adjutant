@@ -82,7 +82,7 @@ Nothing muted right now.
 Keep it concise. Heart.md should be under 30 lines of content. Extract priorities from the user'\''s description.'
 
 step_identity() {
-  wiz_step 3 6 "Identity Setup"
+  wiz_step 3 7 "Identity Setup"
   echo ""
 
   # Check for existing identity files

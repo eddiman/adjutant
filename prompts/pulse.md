@@ -13,6 +13,16 @@ Read the file `PAUSED`. If it exists, output exactly "Adjutant is paused. Skippi
 - `identity/soul.md` — your identity and decision frameworks
 - `identity/heart.md` — current priorities and active concerns
 
+### 1b. Check dry-run mode
+
+Read `adjutant.yaml`. If `debug.dry_run` is `true`:
+- Proceed through all steps normally EXCEPT:
+  - Do NOT write to `insights/pending/`
+  - Do NOT write `state/last_heartbeat.json`
+  - Prefix every journal entry with `[DRY RUN]`
+  - Append to `state/actions.jsonl` (create if absent): `{"ts":"<ISO-8601>","type":"pulse","dry_run":true,"kbs_checked":["<names>"],"issues_found":[],"escalated":false}`
+- Continue to the end of the prompt, then stop.
+
 ### 2. Discover registered KBs
 
 Read `knowledge_bases/registry.yaml` to get the list of all registered knowledge bases.
@@ -60,6 +70,13 @@ Write `state/last_heartbeat.json` with:
   "issues_found": ["short descriptions or empty"],
   "escalated": true/false
 }
+```
+
+### 6b. Append to action ledger
+
+Append one line to `state/actions.jsonl` (create if it doesn't exist):
+```json
+{"ts":"<ISO-8601>","type":"pulse","kbs_checked":["<names>"],"issues_found":["<descriptions or empty>"],"escalated":<true/false>}
 ```
 
 ### 7. Escalate if needed

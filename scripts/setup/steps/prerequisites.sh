@@ -19,7 +19,7 @@ WIZARD_OPTDEPS_OK=()
 WIZARD_OPTDEPS_MISSING=()
 
 step_prerequisites() {
-  wiz_step 1 6 "Prerequisites Check"
+  wiz_step 1 7 "Prerequisites Check"
   echo ""
 
   local required_deps=(bash curl jq python3 opencode)
