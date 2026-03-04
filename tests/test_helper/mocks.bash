@@ -26,6 +26,12 @@ setup_mocks() {
   _ORIGINAL_PATH="${PATH}"
   export PATH="${MOCK_BIN}:${PATH}"
 
+  # Provide a mock `timeout` so that _adj_timeout() in opencode.sh uses it
+  # instead of the shell-native fallback.  The shell fallback spawns a
+  # `sleep N` watchdog that becomes an orphan after SIGKILL and can hold open
+  # $() pipe FDs or cause bats to wait N seconds for it to exit.
+  create_mock_timeout
+
   # Create additional directories Tier 2 scripts expect
   mkdir -p "${TEST_ADJ_DIR}/state/news_raw"
   mkdir -p "${TEST_ADJ_DIR}/state/news_analyzed"
@@ -161,6 +167,28 @@ cat <<'NDJSON_RESPONSE'
 {\"type\":\"text\",\"part\":{\"text\":\"mock reply\"}}
 NDJSON_RESPONSE
 exit 0
+"
+}
+
+# node — for playwright_screenshot.mjs and other Node scripts
+# Args: $1 = response text, $2 = exit code
+create_mock_node() {
+  local response="${1:-}"
+  local exit_code="${2:-0}"
+  # The screenshot script calls: node <script_path> <url> <outfile>
+  # We need to create the outfile so screenshot.sh doesn't fail on the file-exists check.
+  _create_mock_custom "node" "
+# Find the outfile argument: node <script> <url> <outfile>
+args=(\"\$@\")
+if [ \${#args[@]} -ge 3 ]; then
+  outfile=\"\${args[\${#args[@]}-1]}\"
+  # Create a fake PNG (1x1 pixel header)
+  printf '\\x89PNG\\r\\n\\x1a\\n' > \"\${outfile}\" 2>/dev/null || true
+fi
+cat <<'NODE_RESPONSE'
+${response}
+NODE_RESPONSE
+exit ${exit_code}
 "
 }
 

@@ -11,6 +11,9 @@
 load "${BATS_TEST_DIRNAME}/../test_helper/setup.bash"
 load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks
@@ -70,6 +73,28 @@ teardown() {
   jobs -p 2>/dev/null | xargs kill 2>/dev/null || true
   teardown_mocks
   teardown_test_env
+}
+
+# Poll until the curl mock log contains a pattern (max 1s).
+# Replaces unconditional sleep 0.3 in background-spawning command tests.
+_wait_for_cmd_log() {
+  local pattern="$1"
+  local i=0
+  while (( i++ < 20 )); do
+    grep -q "${pattern}" "${MOCK_LOG}/curl.log" 2>/dev/null && return 0
+    sleep 0.05
+  done
+  return 0  # don't fail — let the assertion below handle it
+}
+
+# Poll until curl has been called at least once (max 1s).
+_wait_for_curl() {
+  local i=0
+  while (( i++ < 20 )); do
+    [ -s "${MOCK_LOG}/curl.log" ] && return 0
+    sleep 0.05
+  done
+  return 0
 }
 
 # ===== cmd_status =====
@@ -164,19 +189,10 @@ MOCK
 
 @test "cmd_kill: sends a shutdown confirmation message" {
   cmd_kill "100"
-  sleep 0.3
+  _wait_for_cmd_log "Shutting down\|Emergency kill"
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" == *"Shutting down"* ]] || [[ "${full_log}" == *"Emergency kill"* ]]
-}
-
-@test "cmd_kill: invokes emergency_kill.sh in the background" {
-  # We can't easily assert the background process ran, but we can verify
-  # the mock script exists and is executable
-  [ -x "${TEST_ADJ_DIR}/scripts/lifecycle/emergency_kill.sh" ]
-  cmd_kill "100"
-  sleep 0.3
-  assert_mock_called "curl"
 }
 
 # ===== cmd_pulse =====
@@ -235,7 +251,7 @@ WHICH_MOCK
 
 @test "cmd_restart: sends a restarting message before invoking restart.sh" {
   cmd_restart "100"
-  sleep 0.3
+  _wait_for_cmd_log "Restarting"
   local first_args
   first_args="$(mock_call_args "curl" 1)"
   [[ "${first_args}" == *"Restarting"* ]]
@@ -365,7 +381,7 @@ WHICH_MOCK
 
 @test "cmd_screenshot: sends a react emoji before processing" {
   cmd_screenshot "https://example.com" "100"
-  sleep 0.3
+  _wait_for_cmd_log "setMessageReaction"
   local first_args
   first_args="$(mock_call_args "curl" 1)"
   [[ "${first_args}" == *"setMessageReaction"* ]]

@@ -43,15 +43,15 @@ step_prerequisites() {
   printf "  ${_DIM}Optional:${_RESET}\n"
 
   # Playwright — npx may do a network lookup, warn the user it may take a moment
-  printf "  Checking playwright... " >/dev/tty
+  printf "  Checking playwright... " >/dev/tty 2>/dev/null || true
   if has_command npx && npx playwright --version >/dev/null 2>&1; then
     local pw_ver
     pw_ver=$(npx playwright --version 2>/dev/null || echo "found")
-    printf "\r" >/dev/tty
+    printf "\r" >/dev/tty 2>/dev/null || true
     wiz_ok "playwright (${pw_ver})"
     WIZARD_OPTDEPS_OK+=("playwright")
   else
-    printf "\r" >/dev/tty
+    printf "\r" >/dev/tty 2>/dev/null || true
     wiz_warn "playwright not found"
     wiz_info "Needed for /screenshot. Install with: npx playwright install chromium"
     WIZARD_OPTDEPS_MISSING+=("playwright")

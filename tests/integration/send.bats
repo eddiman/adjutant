@@ -10,6 +10,9 @@
 load "${BATS_TEST_DIRNAME}/../test_helper/setup.bash"
 load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks
@@ -29,6 +32,18 @@ setup() {
 teardown() {
   teardown_mocks
   teardown_test_env
+}
+
+# Poll until curl mock log contains a pattern (max 2s)
+# msg_react fires curl in the background (&), so we need to wait for it.
+_wait_for_curl_log() {
+  local pattern="$1"
+  local i=0
+  while (( i++ < 40 )); do
+    grep -q "${pattern}" "${MOCK_LOG}/curl.log" 2>/dev/null && return 0
+    sleep 0.05
+  done
+  return 1
 }
 
 # ===== msg_send_text =====
@@ -125,17 +140,20 @@ teardown() {
 
 @test "send: msg_react calls curl with the setMessageReaction endpoint" {
   msg_react "12345"
+  _wait_for_curl_log "setMessageReaction"
   assert_mock_called "curl"
   assert_mock_args_contain "curl" "setMessageReaction"
 }
 
 @test "send: msg_react uses the default eyes emoji when no emoji is specified" {
   msg_react "12345"
+  _wait_for_curl_log "setMessageReaction"
   assert_mock_args_contain "curl" "👀"
 }
 
 @test "send: msg_react uses a custom emoji when provided as second argument" {
   msg_react "12345" "👍"
+  _wait_for_curl_log "setMessageReaction"
   assert_mock_args_contain "curl" "👍"
 }
 

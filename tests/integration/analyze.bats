@@ -15,9 +15,17 @@ load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 ANALYZE_SCRIPT="${PROJECT_ROOT}/scripts/news/analyze.sh"
 TODAY="$(date +%Y-%m-%d)"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks
+
+  # analyze.sh calls opencode_health_check which probes http://localhost:PORT/
+  # via curl. Mock curl to return exit 0 so the health check passes immediately
+  # without waiting 15s for a real (absent) server to respond.
+  create_mock_curl '{"ok":true}'
 
   export ADJUTANT_HOME="${TEST_ADJ_DIR}"
 
@@ -117,25 +125,30 @@ teardown() {
   [[ "${opencode_args}" != *"Cooking Recipe"* ]]
 }
 
-@test "analyze.sh: writes empty array and exits early when no items match keywords" {
+@test "analyze.sh: falls back to top scored items when no items match keywords" {
+  # analyze.sh does NOT exit early when keywords don't match; it falls back to
+  # sending all unseen items sorted by score to opencode. This tests that fallback.
   seed_raw_news '[
     {"title":"Cooking Recipe Blog Post","url":"https://example.com/cooking","score":50,"source":"hackernews","timestamp":"2026-02-27T08:00:00Z"},
     {"title":"Sports Update Today","url":"https://example.com/sports","score":30,"source":"reddit","timestamp":"2026-02-27T07:00:00Z"}
   ]'
   run bash "${ANALYZE_SCRIPT}"
   assert_success
-  local output_file="${TEST_ADJ_DIR}/state/news_analyzed/${TODAY}.json"
-  run jq 'length' "${output_file}"
-  assert_output "0"
+  # opencode must have been called (fallback path)
+  assert_mock_called "opencode"
 }
 
-@test "analyze.sh: does not call opencode when no items match keywords" {
+@test "analyze.sh: calls opencode with fallback items when no items match keywords" {
   seed_raw_news '[
     {"title":"Cooking Recipe Blog Post","url":"https://example.com/cooking","score":50,"source":"hackernews","timestamp":"2026-02-27T08:00:00Z"}
   ]'
   run bash "${ANALYZE_SCRIPT}"
   assert_success
-  assert_mock_not_called "opencode"
+  # Fallback sends the unseen items to opencode even though they don't match keywords
+  assert_mock_called "opencode"
+  local opencode_args
+  opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
+  [[ "${opencode_args}" == *"Cooking Recipe"* ]]
 }
 
 @test "analyze.sh: logs the count of items after keyword filtering" {

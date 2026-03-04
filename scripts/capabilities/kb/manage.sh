@@ -288,6 +288,7 @@ kb_scaffold() {
   # Create standard directory structure
   mkdir -p "${kb_path}/.opencode/agents"
   mkdir -p "${kb_path}/data"
+  mkdir -p "${kb_path}/docs"
   mkdir -p "${kb_path}/knowledge"
   mkdir -p "${kb_path}/history"
   mkdir -p "${kb_path}/templates"
@@ -317,12 +318,17 @@ kb_scaffold() {
       "${KB_TEMPLATES}/agents/kb.md" > "${kb_path}/.opencode/agents/kb.md"
   fi
 
-  # Render README.md from template (only if root is empty-ish)
-  if [ -f "${KB_TEMPLATES}/docs/README.md" ] && [ ! -f "${kb_path}/README.md" ]; then
-    sed \
-      -e "s|{{KB_NAME}}|${name}|g" \
-      -e "s|{{KB_DESCRIPTION}}|${description}|g" \
-      "${KB_TEMPLATES}/docs/README.md" > "${kb_path}/README.md"
+  # Render README.md from template into docs/ (only if docs/ has no existing .md files)
+  if [ -f "${KB_TEMPLATES}/docs/README.md" ] && [ ! -f "${kb_path}/docs/README.md" ]; then
+    # Only scaffold if there are no existing markdown files in docs/
+    local existing_docs
+    existing_docs="$(ls "${kb_path}/docs/"*.md 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "${existing_docs}" -eq 0 ]; then
+      sed \
+        -e "s|{{KB_NAME}}|${name}|g" \
+        -e "s|{{KB_DESCRIPTION}}|${description}|g" \
+        "${KB_TEMPLATES}/docs/README.md" > "${kb_path}/docs/README.md"
+    fi
   fi
 
   # Create data/current.md stub — the most important file to fill in

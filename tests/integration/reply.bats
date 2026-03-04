@@ -13,6 +13,9 @@ load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
 REPLY_SCRIPT="${PROJECT_ROOT}/scripts/messaging/telegram/reply.sh"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks

@@ -7,6 +7,9 @@
 load "${BATS_TEST_DIRNAME}/../test_helper/setup.bash"
 load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks
@@ -192,7 +195,12 @@ _run_noninteractive() {
     export NO_COLOR=1 ADJ_DIR='${TEST_ADJ_DIR}' ADJUTANT_OS='macos'
     export PATH=\"${MOCK_BIN}:\${PATH}\"
     source '${TEST_ADJ_DIR}/scripts/setup/helpers.sh'
-    wiz_confirm() { return 1; }
+    # First confirm ('Set up Telegram?') → yes (0); second ('Re-configure?') → no (1)
+    _wiz_confirm_count=0
+    wiz_confirm() {
+      _wiz_confirm_count=\$((_wiz_confirm_count + 1))
+      [ \"\${_wiz_confirm_count}\" -eq 1 ] && return 0 || return 1
+    }
     source '${TEST_ADJ_DIR}/scripts/setup/steps/messaging.sh'
     step_messaging
   "
@@ -357,15 +365,18 @@ YAML
     _create_mock "$cmd" "${cmd} 1.0.0" 0
   done
 
+  # Mock service.sh to report listener as running (repair.sh invokes it via bash subprocess)
+  mkdir -p "${TEST_ADJ_DIR}/scripts/messaging/telegram"
+  printf '#!/bin/bash\necho "Running (PID 12345)"\n' \
+    > "${TEST_ADJ_DIR}/scripts/messaging/telegram/service.sh"
+  chmod +x "${TEST_ADJ_DIR}/scripts/messaging/telegram/service.sh"
+
   run bash -c "
     export NO_COLOR=1 ADJ_DIR='${TEST_ADJ_DIR}' ADJUTANT_OS='macos'
     export SETUP_DIR='${TEST_ADJ_DIR}/scripts/setup'
     export PATH=\"${TEST_ADJ_DIR}:${MOCK_BIN}:\${PATH}\"
     source '${TEST_ADJ_DIR}/scripts/setup/helpers.sh'
     wiz_confirm() { return 1; }
-    # Mock pgrep to show listener running
-    pgrep() { echo 12345; return 0; }
-    export -f pgrep
     source '${TEST_ADJ_DIR}/scripts/setup/repair.sh'
     run_repair
   "

@@ -4,7 +4,7 @@
 load "${BATS_TEST_DIRNAME}/../test_helper/setup.bash"
 
 setup() {
-  setup_test_env
+  setup_test_env_no_scripts
   source "${COMMON}/paths.sh"
   source "${COMMON}/platform.sh"
 }

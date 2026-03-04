@@ -1,0 +1,73 @@
+#!/bin/bash
+# tests/run — Test runner for the Adjutant bats suite
+#
+# Usage:
+#   tests/run              # full suite
+#   tests/run unit         # unit tests only
+#   tests/run integration  # integration tests only
+#   tests/run <file.bats>  # single file
+#   tests/run --filter "pattern" [tier]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+UNIT_DIR="${SCRIPT_DIR}/unit"
+INT_DIR="${SCRIPT_DIR}/integration"
+
+# ---------------------------------------------------------------------------
+# Parallelism: use --jobs if GNU parallel or rush is available
+# ---------------------------------------------------------------------------
+JOBS_FLAG=""
+if command -v parallel >/dev/null 2>&1; then
+  JOBS_FLAG="--jobs 8"
+elif command -v rush >/dev/null 2>&1; then
+  JOBS_FLAG="--jobs 8"
+fi
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+FILTER_FLAG=""
+TARGET=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --filter|-f)
+      FILTER_FLAG="--filter $2"
+      shift 2
+      ;;
+    unit|integration|int)
+      TARGET="$1"
+      shift
+      ;;
+    *.bats)
+      TARGET="$1"
+      shift
+      ;;
+    *)
+      echo "Usage: tests/run [unit|integration|<file.bats>] [--filter <pattern>]" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# Determine target directories / files
+# ---------------------------------------------------------------------------
+case "${TARGET}" in
+  unit)        BATS_ARGS="${UNIT_DIR}" ;;
+  integration|int) BATS_ARGS="${INT_DIR}" ;;
+  *.bats)      BATS_ARGS="${TARGET}" ;;
+  *)           BATS_ARGS="${UNIT_DIR} ${INT_DIR}" ;;  # default: full suite
+esac
+
+# ---------------------------------------------------------------------------
+# Run
+# ---------------------------------------------------------------------------
+if [[ -n "${JOBS_FLAG}" ]]; then
+  echo "Running with parallelism (${JOBS_FLAG})"
+else
+  echo "Running serially (install 'parallel' via brew for --jobs 8 speedup)"
+fi
+
+# shellcheck disable=SC2086
+exec bats ${JOBS_FLAG} ${FILTER_FLAG} ${BATS_ARGS}

@@ -5,7 +5,7 @@
 #   - Takes a URL and optional caption
 #   - Normalizes URL (adds https:// if missing)
 #   - Uses python3 to parse domain for filename
-#   - Runs npx playwright screenshot to capture the page
+#   - Runs: node playwright_screenshot.mjs <url> <outfile>
 #   - Sends via curl sendPhoto, falls back to sendDocument on failure
 #   - Outputs "OK:<filepath>" or "ERROR:<reason>"
 
@@ -14,11 +14,14 @@ load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
 SCREENSHOT_SCRIPT="${PROJECT_ROOT}/scripts/capabilities/screenshot/screenshot.sh"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks
   create_mock_curl_telegram_ok
-  create_mock_npx "" 0
+  create_mock_node "" 0
   create_mock_python3 "example.com"
 }
 
@@ -35,13 +38,12 @@ teardown() {
   assert_output --partial "OK:"
 }
 
-@test "screenshot: calls npx playwright screenshot with the URL" {
+@test "screenshot: calls node with the playwright script and URL" {
   run bash "${SCREENSHOT_SCRIPT}" "https://example.com"
   assert_success
-  assert_mock_called "npx"
-  assert_mock_args_contain "npx" "playwright"
-  assert_mock_args_contain "npx" "screenshot"
-  assert_mock_args_contain "npx" "https://example.com"
+  assert_mock_called "node"
+  assert_mock_args_contain "node" "playwright_screenshot.mjs"
+  assert_mock_args_contain "node" "https://example.com"
 }
 
 @test "screenshot: creates the screenshot file in the screenshots/ directory" {
@@ -70,13 +72,13 @@ teardown() {
 @test "screenshot: prepends https:// when the URL has no protocol" {
   run bash "${SCREENSHOT_SCRIPT}" "example.com"
   assert_success
-  assert_mock_args_contain "npx" "https://example.com"
+  assert_mock_args_contain "node" "https://example.com"
 }
 
 @test "screenshot: preserves http:// URLs without modification" {
   run bash "${SCREENSHOT_SCRIPT}" "http://example.com"
   assert_success
-  assert_mock_args_contain "npx" "http://example.com"
+  assert_mock_args_contain "node" "http://example.com"
 }
 
 # --- Caption ---
@@ -106,7 +108,7 @@ teardown() {
 # --- Playwright failure ---
 
 @test "screenshot: outputs ERROR when playwright screenshot fails" {
-  create_mock_npx "Error: page.goto: net::ERR_NAME_NOT_RESOLVED" 1
+  create_mock_node "Error: page.goto: net::ERR_NAME_NOT_RESOLVED" 1
   run bash "${SCREENSHOT_SCRIPT}" "https://nonexistent.invalid"
   assert_failure
   assert_output --partial "ERROR:"
@@ -146,7 +148,8 @@ fi
 # --- Viewport configuration ---
 
 @test "screenshot: uses 1280x900 viewport dimensions" {
-  run bash "${SCREENSHOT_SCRIPT}" "https://example.com"
-  assert_success
-  assert_mock_args_contain "npx" "1280,900"
+  # The viewport is set inside playwright_screenshot.mjs (page.setViewportSize).
+  # We verify the JS script is present and contains the correct viewport dimensions.
+  grep -q "1280" "${PROJECT_ROOT}/scripts/capabilities/screenshot/playwright_screenshot.mjs"
+  grep -q "900" "${PROJECT_ROOT}/scripts/capabilities/screenshot/playwright_screenshot.mjs"
 }

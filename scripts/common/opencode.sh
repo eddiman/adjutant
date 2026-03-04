@@ -65,7 +65,11 @@ _adj_timeout() {
   # Shell-native fallback: run in background, sleep, then kill
   "$@" &
   local _child=$!
-  (sleep "${_secs}"; kill -TERM "${_child}" 2>/dev/null; sleep 1; kill -9 "${_child}" 2>/dev/null) &
+  # Redirect watchdog to /dev/null so that the `sleep` grandchild it spawns does
+  # not inherit the write-end of any $() pipe — otherwise the $() capture of the
+  # caller hangs until sleep expires (typically 90s) even after the main command
+  # exits and we kill the watchdog with SIGKILL.
+  (sleep "${_secs}"; kill -TERM "${_child}" 2>/dev/null; sleep 1; kill -9 "${_child}" 2>/dev/null) </dev/null >/dev/null 2>&1 &
   local _watchdog=$!
   wait "${_child}" 2>/dev/null
   local _rc=$?

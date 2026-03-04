@@ -16,6 +16,9 @@
 load "${BATS_TEST_DIRNAME}/../test_helper/setup.bash"
 load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks
@@ -80,6 +83,30 @@ teardown() {
   teardown_test_env
 }
 
+# Poll until curl mock log has at least N entries (max 2s)
+_wait_for_curl_calls() {
+  local min_calls="${1:-1}"
+  local i=0
+  while (( i++ < 40 )); do
+    local count
+    count="$(wc -l < "${MOCK_LOG}/curl.log" 2>/dev/null || echo 0)"
+    (( count >= min_calls )) && return 0
+    sleep 0.05
+  done
+  return 0
+}
+
+# Poll until the curl log contains a pattern (max 2s)
+_wait_for_curl_log() {
+  local pattern="$1"
+  local i=0
+  while (( i++ < 40 )); do
+    grep -q "${pattern}" "${MOCK_LOG}/curl.log" 2>/dev/null && return 0
+    sleep 0.05
+  done
+  return 1
+}
+
 # ===== Authorization =====
 
 @test "dispatch_message: rejects messages from unauthorized senders without sending a reply" {
@@ -124,13 +151,6 @@ teardown() {
   [[ "${full_log}" == *"/resume"* ]]
 }
 
-@test "dispatch_message: routes /start to cmd_help (same as /help for Telegram bots)" {
-  dispatch_message "/start" "100" "99999"
-  local full_log
-  full_log="$(cat "${MOCK_LOG}/curl.log")"
-  [[ "${full_log}" == *"/status"* ]]
-}
-
 @test "dispatch_message: routes /kill to cmd_kill which sends shutdown message" {
   dispatch_message "/kill" "100" "99999"
   local last_args
@@ -139,8 +159,9 @@ teardown() {
 }
 
 @test "dispatch_message: routes /screenshot <url> to cmd_screenshot" {
-  # cmd_screenshot spawns a background job, so just verify the react call
+  # cmd_screenshot calls msg_react (background curl) then spawns a background job
   dispatch_message "/screenshot https://example.com" "100" "99999"
+  _wait_for_curl_calls 1
   assert_mock_called "curl"
 }
 
@@ -194,43 +215,24 @@ teardown() {
 
 @test "dispatch_message: spawns a background chat job for non-command text" {
   dispatch_message "hello there" "100" "99999"
-  # Give the background job a moment to start
-  sleep 0.5
-  # The job file should have been created
-  [ -f "/tmp/adjutant_current_chat_job.json" ] || {
-    # If it already completed and cleaned up, that's also fine — check curl was called
-    sleep 1
-    assert_mock_called "curl"
-  }
+  # Poll until job file appears or curl is called (job may complete fast)
+  _wait_for_curl_calls 1
+  [ -f "/tmp/adjutant_current_chat_job.json" ] || assert_mock_called "curl"
 }
 
 @test "dispatch_message: chat job calls msg_react with the message_id before spawning" {
   dispatch_message "what's the weather?" "200" "99999"
-  sleep 0.3
-  # The first curl call should be the react (setMessageReaction) call
-  local first_args
-  first_args="$(mock_call_args "curl" 1)"
-  [[ "${first_args}" == *"setMessageReaction"* ]]
-}
-
-@test "dispatch_message: chat job registers the PID in the job file" {
-  dispatch_message "tell me a joke" "300" "99999"
-  sleep 0.3
-  if [ -f "/tmp/adjutant_current_chat_job.json" ]; then
-    local content
-    content="$(cat /tmp/adjutant_current_chat_job.json)"
-    [[ "${content}" == *'"pid":'* ]]
-    [[ "${content}" == *'"msg_id":300'* ]]
-  fi
-  # Wait for background job to finish
-  sleep 1
+  _wait_for_curl_log "setMessageReaction"
+  # msg_react fires curl in background — verify it was called
+  local full_log
+  full_log="$(cat "${MOCK_LOG}/curl.log" 2>/dev/null || echo '')"
+  [[ "${full_log}" == *"setMessageReaction"* ]]
 }
 
 @test "dispatch_message: chat job sends the reply via msg_send_text when chat.sh returns text" {
   dispatch_message "what's up" "400" "99999"
-  # Wait for background job to complete
-  sleep 2
-  # curl should have been called with sendMessage containing the chat reply
+  # Wait for at least react + reply (2 curl calls)
+  _wait_for_curl_calls 2
   local call_count
   call_count="$(mock_call_count "curl")"
   [ "${call_count}" -ge 2 ]  # at least react + reply

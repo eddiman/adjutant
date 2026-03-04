@@ -11,6 +11,9 @@ load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
 STATUS_SCRIPT="${PROJECT_ROOT}/scripts/observability/status.sh"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks

@@ -18,6 +18,9 @@ load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 FETCH_SCRIPT="${PROJECT_ROOT}/scripts/news/fetch.sh"
 TODAY="$(date +%Y-%m-%d)"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks

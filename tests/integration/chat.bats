@@ -14,6 +14,9 @@ load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
 CHAT_SCRIPT="${PROJECT_ROOT}/scripts/messaging/telegram/chat.sh"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks

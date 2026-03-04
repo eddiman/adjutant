@@ -137,16 +137,12 @@ kb_query() {
   local args=(run --agent kb --dir "${kb_path}" --format json --model "${model}")
   args+=("${query}")
 
-  # Run opencode (with timeout if available)
+  # Run opencode with timeout via OPENCODE_TIMEOUT env var (opencode_run honours it)
   local raw_file err_file
   raw_file="$(mktemp)"
   err_file="$(mktemp)"
 
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "${KB_QUERY_TIMEOUT}" opencode_run "${args[@]}" > "${raw_file}" 2>"${err_file}" || true
-  else
-    opencode_run "${args[@]}" > "${raw_file}" 2>"${err_file}" || true
-  fi
+  OPENCODE_TIMEOUT="${KB_QUERY_TIMEOUT}" opencode_run "${args[@]}" > "${raw_file}" 2>"${err_file}" || true
 
   # Parse output
   local reply

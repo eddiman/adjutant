@@ -280,8 +280,8 @@ YAML
   printf '#!/bin/bash\nexit 127\n' > "${mock_bin}/opencode"
   rm -f "${mock_bin}/opencode"
 
-  # Shadow PATH to exclude system opencode
-  export PATH="${mock_bin}"
+  # Shadow PATH to exclude system opencode but keep essential system tools
+  export PATH="${mock_bin}:/usr/bin:/bin"
   run step_prerequisites
   assert_failure
   assert_output --partial "Missing required dependencies"
@@ -665,15 +665,18 @@ ENV
   # Make all scripts executable
   find "${TEST_ADJ_DIR}/scripts" -name '*.sh' -type f -exec chmod +x {} +
 
+  # Mock service.sh to report listener as running (repair.sh invokes it via bash subprocess)
+  mkdir -p "${TEST_ADJ_DIR}/scripts/messaging/telegram"
+  printf '#!/bin/bash\necho "Running (PID 12345)"\n' \
+    > "${TEST_ADJ_DIR}/scripts/messaging/telegram/service.sh"
+  chmod +x "${TEST_ADJ_DIR}/scripts/messaging/telegram/service.sh"
+
   run bash -c "
     export NO_COLOR=1 ADJ_DIR='${TEST_ADJ_DIR}' ADJUTANT_OS='macos'
     export SETUP_DIR='${TEST_ADJ_DIR}/scripts/setup'
     export PATH=\"${TEST_ADJ_DIR}:\${PATH}\"
     source '${TEST_ADJ_DIR}/scripts/setup/helpers.sh'
     wiz_confirm() { return 1; }
-    # Mock pgrep to simulate listener running
-    pgrep() { echo 12345; return 0; }
-    export -f pgrep
     source '${TEST_ADJ_DIR}/scripts/setup/repair.sh'
     run_repair
   "

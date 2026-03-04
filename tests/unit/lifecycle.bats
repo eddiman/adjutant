@@ -3,7 +3,7 @@
 
 load "${BATS_TEST_DIRNAME}/../test_helper/setup.bash"
 
-setup()    { setup_test_env; }
+setup()    { setup_test_env_no_scripts; }
 teardown() { teardown_test_env; }
 
 # --- pause.sh: pauses Adjutant by creating the PAUSED lockfile ---

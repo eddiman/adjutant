@@ -14,6 +14,9 @@
 load "${BATS_TEST_DIRNAME}/../test_helper/setup.bash"
 load "${BATS_TEST_DIRNAME}/../test_helper/mocks.bash"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks
@@ -36,6 +39,29 @@ MOCK
 
   # Source the library under test
   source "${PROJECT_ROOT}/scripts/messaging/telegram/photos.sh"
+}
+
+# Poll until the curl mock log contains a pattern (max 2s).
+# Replaces unconditional sleep N in background-job tests.
+_wait_for_log() {
+  local pattern="$1"
+  local i=0
+  while (( i++ < 40 )); do
+    grep -q "${pattern}" "${MOCK_LOG}/curl.log" 2>/dev/null && return 0
+    sleep 0.05
+  done
+  return 1
+}
+
+# Poll until the adjutant log contains a pattern (max 1s).
+_wait_for_adj_log() {
+  local pattern="$1"
+  local i=0
+  while (( i++ < 20 )); do
+    grep -q "${pattern}" "${TEST_ADJ_DIR}/state/adjutant.log" 2>/dev/null && return 0
+    sleep 0.05
+  done
+  return 1
 }
 
 teardown() {
@@ -92,14 +118,13 @@ fi
   [[ "${output}" == *"/photos/"* ]]
 }
 
-@test "tg_download_photo: saves the file with the correct extension from the API response" {
+@test "tg_download_photo: saves the file preserving the extension from the API response" {
+  # jpg
   _setup_photo_curl "photos/file_0.jpg"
   run tg_download_photo "abc123"
   assert_success
   [[ "${output}" == *.jpg ]]
-}
-
-@test "tg_download_photo: handles png extension correctly" {
+  # png
   _setup_photo_curl "photos/image.png"
   run tg_download_photo "abc123"
   assert_success
@@ -155,11 +180,11 @@ fi
   _setup_photo_curl "photos/file.jpg"
   # First call should proceed normally (logs "Photo received")
   tg_handle_photo "99999" "100" "file_abc" ""
-  sleep 0.5
+  _wait_for_adj_log "Photo received" || true
 
   # Second call with the same file_id should be deduped
   tg_handle_photo "99999" "101" "file_abc" ""
-  sleep 0.5
+  _wait_for_adj_log "Skipping duplicate"
 
   # Check the log for the dedup message
   grep -q "Skipping duplicate photo file_id=file_abc" "${TEST_ADJ_DIR}/state/adjutant.log"
@@ -168,17 +193,17 @@ fi
 @test "tg_handle_photo: reacts to the message with an emoji" {
   _setup_photo_curl "photos/file.jpg"
   tg_handle_photo "99999" "100" "file_abc" ""
-  sleep 1
+  _wait_for_log "setMessageReaction"
   assert_mock_called "curl"
-  local first_call
-  first_call="$(mock_call_args "curl" 1)"
-  [[ "${first_call}" == *"setMessageReaction"* ]]
+  local full_log
+  full_log="$(cat "${MOCK_LOG}/curl.log")"
+  [[ "${full_log}" == *"setMessageReaction"* ]]
 }
 
 @test "tg_handle_photo: sends the vision reply when analysis succeeds" {
   _setup_photo_curl "photos/file.jpg"
   tg_handle_photo "99999" "100" "file_abc" ""
-  sleep 2
+  _wait_for_log "cat sitting on a keyboard"
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" == *"cat sitting on a keyboard"* ]]
@@ -194,7 +219,7 @@ MOCK
 
   _setup_photo_curl "photos/file.jpg"
   tg_handle_photo "99999" "100" "file_abc" "What breed is this cat?"
-  sleep 2
+  _wait_for_log "What breed is this cat"
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" == *"What breed is this cat?"* ]]
@@ -212,8 +237,16 @@ else
 fi
 '
   tg_handle_photo "99999" "100" "file_abc" ""
-  # Wait for background subshell to complete
-  sleep 2
+  # Poll for the error message in the curl log
+  local i=0
+  while (( i++ < 40 )); do
+    local full_log
+    full_log="$(cat "${MOCK_LOG}/curl.log" 2>/dev/null || true)"
+    if [[ "${full_log}" == *"couldn't retrieve"* ]] || [[ "${full_log}" == *"Try again"* ]]; then
+      break
+    fi
+    sleep 0.05
+  done
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" == *"couldn't retrieve"* ]] || [[ "${full_log}" == *"Try again"* ]]
@@ -229,8 +262,16 @@ MOCK
 
   _setup_photo_curl "photos/file.jpg"
   tg_handle_photo "99999" "100" "file_abc" ""
-  # Wait for background subshell to complete
-  sleep 2
+  # Poll for the fallback message (vision failed → fallback sent)
+  local i=0
+  while (( i++ < 40 )); do
+    local full_log
+    full_log="$(cat "${MOCK_LOG}/curl.log" 2>/dev/null || true)"
+    if [[ "${full_log}" == *"vision analysis failed"* ]] || [[ "${full_log}" == *"saved"* ]]; then
+      break
+    fi
+    sleep 0.05
+  done
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" == *"vision analysis failed"* ]] || [[ "${full_log}" == *"saved"* ]]

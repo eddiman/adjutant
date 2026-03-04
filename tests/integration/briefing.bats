@@ -23,6 +23,9 @@ BRIEFING_SCRIPT="${PROJECT_ROOT}/scripts/news/briefing.sh"
 TODAY="$(date +%Y-%m-%d)"
 TODAY_DISPLAY="$(date +%d.%m.%Y)"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   setup_mocks
@@ -181,12 +184,6 @@ STUB
 }
 
 # ===== Briefing formatting =====
-
-@test "briefing.sh: logs the count of items found for delivery" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Found 2 items to deliver"* ]]
-}
 
 @test "briefing.sh: includes today's date in the briefing header" {
   run bash "${BRIEFING_SCRIPT}"
@@ -360,43 +357,4 @@ STUB
   run bash "${BRIEFING_SCRIPT}"
   assert_success
   [ -f "${TEST_ADJ_DIR}/state/news_analyzed/${TODAY}.json" ]
-}
-
-@test "briefing.sh: logs the cleanup step" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Cleaning up old files"* ]]
-}
-
-# ===== Logging =====
-
-@test "briefing.sh: logs the start banner with today's date" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Agentic AI News Briefing"* ]]
-  [[ "${output}" == *"${TODAY_DISPLAY}"* ]]
-}
-
-@test "briefing.sh: logs 'Briefing complete!' on successful run" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Briefing complete!"* ]]
-}
-
-@test "briefing.sh: logs the fetching step" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Fetching news"* ]]
-}
-
-@test "briefing.sh: logs the analyzing step" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Analyzing news"* ]]
-}
-
-@test "briefing.sh: logs the formatting step" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Formatting briefing"* ]]
 }

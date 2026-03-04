@@ -6,6 +6,9 @@
 
 load "${BATS_TEST_DIRNAME}/../test_helper/setup.bash"
 
+setup_file()    { setup_file_scripts_template; }
+teardown_file() { teardown_file_scripts_template; }
+
 setup() {
   setup_test_env
   source "${COMMON}/paths.sh"
