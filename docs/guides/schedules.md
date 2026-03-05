@@ -171,6 +171,22 @@ When `adjutant startup` recovers from KILLED state:
 
 ---
 
+## macOS: Full Disk Access for cron
+
+On macOS, `/usr/sbin/cron` requires **Full Disk Access** to read and write files under `~/Documents/`, `~/Desktop/`, or any path protected by TCC. Without it, cron will silently spawn the job but all output is discarded and no files are written.
+
+**Symptom:** Jobs fire at the correct time (visible in `crontab -l`) but the log file is never updated and Telegram notifications never arrive. Running the script manually works fine.
+
+**Fix:**
+
+1. Open **System Settings → Privacy & Security → Full Disk Access**
+2. Click `+`, press `Cmd+Shift+G`, enter `/usr/sbin/cron`, click Open
+3. Toggle it on
+
+This is a one-time system setting and survives reboots. It does not affect portability — on Linux, cron has no equivalent restriction.
+
+---
+
 ## Troubleshooting
 
 **Job shows `[not in crontab]` in `adjutant status`**
