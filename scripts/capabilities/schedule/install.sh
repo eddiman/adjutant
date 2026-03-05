@@ -99,12 +99,7 @@ schedule_install_one() {
   marker="$(_install_marker "${name}")"
   local cron_line="${sched} ${script_path} >> ${log_path} 2>&1  ${marker}"
 
-  # Remove any existing entry for this job (old or current format)
-  local tmpfile
-  tmpfile="$(mktemp)"
-  trap 'rm -f "${tmpfile}"' RETURN
-
-  # Filter out old entry, append new one
+  # Remove any existing entry for this job, then append the new one
   { crontab -l 2>/dev/null | grep -v "${marker}"; echo "${cron_line}"; } | crontab - 2>/dev/null
 }
 

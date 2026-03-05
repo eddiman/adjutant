@@ -79,9 +79,9 @@ schedule_list() {
     in_block && /^  - name:/ {
       # Emit previous entry
       if (name != "") {
-        printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, desc, sched, script, log, enabled
+        printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, desc, sched, script, logf, enabled
       }
-      name=desc=sched=script=log=enabled=""
+      name=""; desc=""; sched=""; script=""; logf=""; enabled=""
       val=$0; sub(/.*- name: *"?/, "", val); sub(/"? *$/, "", val); name=val
     }
     in_block && name != "" && /^    description:/ {
@@ -94,14 +94,14 @@ schedule_list() {
       val=$0; sub(/.*script: *"?/, "", val); sub(/"? *$/, "", val); script=val
     }
     in_block && name != "" && /^    log:/ {
-      val=$0; sub(/.*log: *"?/, "", val); sub(/"? *$/, "", val); log=val
+      val=$0; sub(/.*log: *"?/, "", val); sub(/"? *$/, "", val); logf=val
     }
     in_block && name != "" && /^    enabled:/ {
       val=$0; sub(/.*enabled: */, "", val); sub(/ *$/, "", val); enabled=val
     }
     END {
       if (name != "") {
-        printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, desc, sched, script, log, enabled
+        printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, desc, sched, script, logf, enabled
       }
     }
   ' "${SCHEDULE_CONFIG}"
@@ -113,13 +113,13 @@ schedule_list() {
 schedule_get_field() {
   local target="$1"
   local field="$2"
-  schedule_list | while IFS=$'\t' read -r name desc sched script log enabled; do
+  schedule_list | while IFS=$'\t' read -r name desc sched script logf enabled; do
     if [ "${name}" = "${target}" ]; then
       case "${field}" in
         description) echo "${desc}" ;;
         schedule)    echo "${sched}" ;;
         script)      echo "${script}" ;;
-        log)         echo "${log}" ;;
+        log)         echo "${logf}" ;;
         enabled)     echo "${enabled}" ;;
         name)        echo "${name}" ;;
       esac
@@ -139,7 +139,7 @@ _schedule_append() {
   local description="$2"
   local schedule="$3"
   local script="$4"
-  local log="${5:-state/${name}.log}"
+  local logpath="${5:-state/${name}.log}"
   local enabled="${6:-true}"
 
   if ! grep -q '^schedules:' "${SCHEDULE_CONFIG}" 2>/dev/null; then
@@ -151,7 +151,7 @@ schedules:
     description: "${description}"
     schedule: "${schedule}"
     script: "${script}"
-    log: "${log}"
+    log: "${logpath}"
     enabled: ${enabled}
 YAML
     return 0
@@ -162,18 +162,17 @@ YAML
     # Append after the last entry in the block — find end of schedules: block
     local tmpfile
     tmpfile="$(mktemp)"
-    trap 'rm -f "${tmpfile}"' RETURN
 
     awk -v name="${name}" \
         -v desc="${description}" \
         -v sched="${schedule}" \
         -v script="${script}" \
-        -v log="${log}" \
+        -v logpath="${logpath}" \
         -v enabled="${enabled}" '
       /^schedules:/ { in_block=1; print; next }
       in_block && /^[^ ]/ {
         # End of schedules block — inject new entry before this line
-        printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, log, enabled
+        printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, logpath, enabled
         in_block=0
         print
         next
@@ -182,7 +181,7 @@ YAML
       END {
         # schedules: was the last block — append at end
         if (in_block) {
-          printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, log, enabled
+          printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, logpath, enabled
         }
       }
     ' "${SCHEDULE_CONFIG}" > "${tmpfile}" && mv "${tmpfile}" "${SCHEDULE_CONFIG}"
@@ -190,16 +189,15 @@ YAML
     # schedules: block exists but is empty — append first entry
     local tmpfile
     tmpfile="$(mktemp)"
-    trap 'rm -f "${tmpfile}"' RETURN
     awk -v name="${name}" \
         -v desc="${description}" \
         -v sched="${schedule}" \
         -v script="${script}" \
-        -v log="${log}" \
+        -v logpath="${logpath}" \
         -v enabled="${enabled}" '
       /^schedules:/ {
         print
-        printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, log, enabled
+        printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, logpath, enabled
         next
       }
       { print }
@@ -215,7 +213,7 @@ schedule_add() {
   local description="$2"
   local schedule="$3"
   local script="$4"
-  local log="${5:-state/${name}.log}"
+  local logpath="${5:-state/${name}.log}"
 
   # Validate name
   if ! echo "${name}" | grep -qE '^[a-z0-9][a-z0-9_-]*$' 2>/dev/null; then
@@ -230,7 +228,7 @@ schedule_add() {
   fi
 
   # Append to config
-  _schedule_append "${name}" "${description}" "${schedule}" "${script}" "${log}" "true"
+  _schedule_append "${name}" "${description}" "${schedule}" "${script}" "${logpath}" "true"
 
   # Install crontab entry
   source "${ADJ_DIR}/scripts/capabilities/schedule/install.sh"
@@ -255,7 +253,6 @@ schedule_remove() {
   # Remove from adjutant.yaml
   local tmpfile
   tmpfile="$(mktemp)"
-  trap 'rm -f "${tmpfile}"' RETURN
 
   awk -v target="${name}" '
     /^schedules:/ { in_block=1; print; next }
@@ -286,7 +283,6 @@ schedule_set_enabled() {
   # Update enabled: field in the job's block
   local tmpfile
   tmpfile="$(mktemp)"
-  trap 'rm -f "${tmpfile}"' RETURN
 
   awk -v target="${name}" -v val="${value}" '
     /^schedules:/ { in_block=1; print; next }
