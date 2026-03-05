@@ -1,5 +1,5 @@
 #!/bin/bash
-# Check if Adjutant is running, paused, or killed, show registered cron jobs,
+# Check if Adjutant is running, paused, or killed, show registered scheduled jobs,
 # and surface the last autonomous activity (heartbeat, notification count, recent actions).
 # Usage: adjutant status  (or scripts/observability/status.sh)
 
@@ -19,42 +19,41 @@ fi
 
 echo ""
 
-# Show registered cron jobs
-echo "Registered cron jobs:"
-CRON_JOBS=$(crontab -l 2>/dev/null | grep -v '^#' | grep -v '^$' | grep ".adjutant")
-
-if [ -z "$CRON_JOBS" ]; then
-  echo "  (none)"
+# Show registered scheduled jobs from adjutant.yaml schedules:
+echo "Scheduled jobs:"
+SCHEDULE_MANAGE="${ADJ_DIR}/scripts/capabilities/schedule/manage.sh"
+if source "${SCHEDULE_MANAGE}" 2>/dev/null; then
+  JOB_COUNT="$(schedule_count 2>/dev/null || echo "0")"
+  if [ "${JOB_COUNT}" -eq 0 ]; then
+    echo "  (none — add with: adjutant schedule add)"
+  else
+    # Get live crontab for cross-reference
+    LIVE_CRONTAB="$(crontab -l 2>/dev/null || true)"
+    while IFS=$'\t' read -r name desc sched script log enabled; do
+      [ -z "${name}" ] && continue
+      status_flag=""
+      if [ "${enabled}" = "true" ]; then
+        if ! echo "${LIVE_CRONTAB}" | grep -qF "# adjutant:${name}"; then
+          status_flag=" [not in crontab — run: adjutant schedule sync]"
+        fi
+      else
+        status_flag=" [DISABLED]"
+      fi
+      echo "  - ${name}${status_flag}: ${sched}"
+      echo "    ${desc}"
+      echo "    → ${script}"
+    done < <(schedule_list 2>/dev/null)
+  fi
 else
-  echo "$CRON_JOBS" | while IFS= read -r line; do
-    # Parse cron schedule
-    SCHEDULE=$(echo "$line" | awk '{print $1, $2, $3, $4, $5}')
-    COMMAND=$(echo "$line" | awk '{$1=$2=$3=$4=$5=""; print $0}' | sed 's/^[[:space:]]*//')
-    
-    # Identify the job type
-    if echo "$COMMAND" | grep -q "news_briefing.sh\|news/briefing.sh"; then
-      JOB_NAME="News Briefing"
-    elif echo "$COMMAND" | grep -q "prompts/pulse.md"; then
-      JOB_NAME="Autonomous Pulse"
-    elif echo "$COMMAND" | grep -q "prompts/review.md"; then
-      JOB_NAME="Daily Review"
-    else
-      JOB_NAME="Unknown Job"
-    fi
-    
-    # Format schedule description
-    case "$SCHEDULE" in
-      "0 8 * * 1-5")
-        SCHEDULE_DESC="Every weekday at 08:00"
-        ;;
-      *)
-        SCHEDULE_DESC="Schedule: $SCHEDULE"
-        ;;
-    esac
-    
-    echo "  - $JOB_NAME: $SCHEDULE_DESC"
-    echo "    → $COMMAND"
-  done
+  # Fallback: parse crontab directly if manage.sh unavailable
+  CRON_JOBS="$(crontab -l 2>/dev/null | grep -v '^#' | grep -v '^$' | grep ".adjutant" || true)"
+  if [ -z "${CRON_JOBS}" ]; then
+    echo "  (none)"
+  else
+    echo "${CRON_JOBS}" | while IFS= read -r line; do
+      echo "  - ${line}"
+    done
+  fi
 fi
 
 echo ""

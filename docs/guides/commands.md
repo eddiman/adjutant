@@ -34,6 +34,10 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | `/search <query>` | Searches the web via the Brave Search API and returns the top 5 results (title, URL, description). No browser automation — fast, token-efficient, and not subject to bot detection. Requires `BRAVE_API_KEY` in `.env`. |
 | `/kb` | Lists all registered knowledge bases |
 | `/kb <name> <question>` | Queries a specific knowledge base with your question. Example: `/kb my-project what's the current status?` |
+| `/schedule` | Lists all registered scheduled jobs with enabled/disabled status and schedule |
+| `/schedule run <name>` | Runs a scheduled job immediately. Output is sent to chat. |
+| `/schedule enable <name>` | Enables a job and installs its crontab entry |
+| `/schedule disable <name>` | Disables a job and removes its crontab entry (keeps the registry entry) |
 
 ### Configuration
 
@@ -104,6 +108,21 @@ adjutant kb query <name> "question"   # Query a KB
 adjutant kb remove <name>             # Unregister a KB (files are NOT deleted)
 ```
 
+### Scheduled jobs
+
+```bash
+adjutant schedule list              # List all jobs: name, enabled, schedule, description
+adjutant schedule add               # Interactive wizard to register a new scheduled job
+adjutant schedule enable <name>     # Enable job → install crontab entry
+adjutant schedule disable <name>    # Disable job → remove crontab entry, keep registry
+adjutant schedule remove <name>     # Remove from registry and crontab
+adjutant schedule sync              # Reconcile crontab with registry (idempotent)
+adjutant schedule run <name>        # Run a job immediately in foreground (for testing)
+adjutant schedule help              # Show usage
+```
+
+See [Schedules](schedules.md) for the full guide including adding external KB scripts.
+
 ### Maintenance
 
 ```bash
@@ -117,8 +136,9 @@ adjutant setup --repair   # Repair mode — checks and fixes an existing install
 ### Help
 
 ```bash
-adjutant help         # Show all commands
-adjutant kb help      # Show KB subcommand help
+adjutant help              # Show all commands
+adjutant kb help           # Show KB subcommand help
+adjutant schedule help     # Show schedule subcommand help
 ```
 
 ---

@@ -19,6 +19,7 @@
 #   adjutant news           Run news briefing
 #   adjutant rotate         Archive old journal entries and rotate logs
 #   adjutant kb             Knowledge base management (create, list, remove, info, query)
+#   adjutant schedule       Scheduled job management (add, list, enable, disable, remove, run, sync)
 #   adjutant logs           Tail the listener log
 #   adjutant doctor         Check health and dependencies
 #   adjutant setup          Interactive setup wizard
@@ -171,6 +172,95 @@ KBEOF
     esac
     ;;
 
+  schedule)
+    SCHED_ACTION="${1:-help}"
+    shift 2>/dev/null || true
+
+    source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh"
+    source "${ADJ_DIR}/scripts/capabilities/schedule/install.sh"
+
+    case "$SCHED_ACTION" in
+      add)
+        exec bash "${ADJ_DIR}/scripts/setup/steps/schedule_wizard.sh"
+        ;;
+      list)
+        count="$(schedule_count)"
+        if [ "${count}" -eq 0 ]; then
+          echo "No scheduled jobs registered."
+          echo "Add one with: adjutant schedule add"
+        else
+          echo "Scheduled jobs (${count}):"
+          echo ""
+          printf "  %-22s %-8s %-20s %s\n" "NAME" "ENABLED" "SCHEDULE" "DESCRIPTION"
+          printf "  %-22s %-8s %-20s %s\n" "----" "-------" "--------" "-----------"
+          while IFS=$'\t' read -r name desc sched script log enabled; do
+            printf "  %-22s %-8s %-20s %s\n" "${name}" "${enabled}" "${sched}" "${desc}"
+          done < <(schedule_list)
+        fi
+        ;;
+      remove)
+        if [ -z "${1:-}" ]; then
+          echo "Usage: adjutant schedule remove <name>"
+          exit 1
+        fi
+        schedule_remove "$1"
+        echo "Removed scheduled job '$1' from registry and crontab."
+        ;;
+      enable)
+        if [ -z "${1:-}" ]; then
+          echo "Usage: adjutant schedule enable <name>"
+          exit 1
+        fi
+        schedule_set_enabled "$1" "true"
+        echo "Enabled job '$1' — crontab entry installed."
+        ;;
+      disable)
+        if [ -z "${1:-}" ]; then
+          echo "Usage: adjutant schedule disable <name>"
+          exit 1
+        fi
+        schedule_set_enabled "$1" "false"
+        echo "Disabled job '$1' — crontab entry removed."
+        ;;
+      sync)
+        schedule_install_all
+        echo "Crontab reconciled with adjutant.yaml schedules:."
+        ;;
+      run)
+        if [ -z "${1:-}" ]; then
+          echo "Usage: adjutant schedule run <name>"
+          exit 1
+        fi
+        schedule_run_now "$1"
+        ;;
+      help|--help|-h)
+        cat <<'SCHEDEOF'
+Scheduled Job Management
+
+Usage: adjutant schedule <command> [args]
+
+Commands:
+  add                   Interactive wizard to register a new scheduled job
+  list                  List all registered jobs with status
+  enable <name>         Enable a job (installs crontab entry)
+  disable <name>        Disable a job (removes crontab entry, keeps registry)
+  remove <name>         Remove a job from registry and crontab
+  sync                  Reconcile crontab with adjutant.yaml schedules: (idempotent)
+  run <name>            Run a job immediately in foreground (for testing)
+  help                  Show this help
+
+Jobs are declared in adjutant.yaml schedules:.
+Edit that file directly or use 'adjutant schedule add' to register a new job.
+SCHEDEOF
+        ;;
+      *)
+        echo "Unknown schedule command: $SCHED_ACTION"
+        echo "Run 'adjutant schedule help' for usage."
+        exit 1
+        ;;
+    esac
+    ;;
+
   setup)
     exec bash "${ADJ_DIR}/scripts/setup/wizard.sh" "$@"
     ;;
@@ -269,6 +359,7 @@ Commands:
   news               Run the news briefing
   rotate             Archive old journal entries and rotate logs
   kb <command>       Knowledge base management (create, list, remove, info, query)
+  schedule <command> Scheduled job management (add, list, enable, disable, remove, run, sync)
   logs               Tail the listener log
   doctor             Check health and dependencies
   setup              Interactive setup wizard (--repair for health check)

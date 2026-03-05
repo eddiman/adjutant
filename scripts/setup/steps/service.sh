@@ -36,11 +36,9 @@ step_service() {
       ;;
   esac
 
-  # Cron for news briefing
-  if [ "${WIZARD_FEATURES_NEWS:-false}" = "true" ]; then
-    echo ""
-    _service_install_news_cron
-  fi
+  # Cron jobs — install all enabled schedules from adjutant.yaml
+  echo ""
+  _service_install_schedules
 
   echo ""
   return 0
@@ -271,41 +269,42 @@ SERVICE
   fi
 }
 
-# Install cron job for news briefing
-_service_install_news_cron() {
-  if ! wiz_confirm "Install news briefing cron job (weekdays 8am)?" "Y"; then
-    wiz_info "Run manually with: adjutant news"
+# Install all enabled scheduled jobs from adjutant.yaml schedules:
+_service_install_schedules() {
+  local count
+  count="$(bash -c "source \"${ADJ_DIR}/scripts/capabilities/schedule/manage.sh\" 2>/dev/null && schedule_count" 2>/dev/null || echo "0")"
+
+  if [ "${count}" -eq 0 ]; then
+    wiz_info "No scheduled jobs configured in adjutant.yaml schedules:"
+    wiz_info "Add one later with: adjutant schedule add"
     return 0
   fi
 
-  # Read schedule from adjutant.yaml features.news.schedule (default: weekdays 8am)
-  local schedule="0 8 * * 1-5"
-  if [ -f "${ADJ_DIR}/adjutant.yaml" ]; then
-    local yaml_schedule
-    yaml_schedule="$(grep -A2 'news:' "${ADJ_DIR}/adjutant.yaml" | grep 'schedule:' | head -1 | sed "s/.*schedule:[[:space:]]*//" | tr -d '"')"
-    [ -n "${yaml_schedule}" ] && schedule="${yaml_schedule}"
-  fi
-
-  local cron_line="${schedule} ${ADJ_DIR}/scripts/news/briefing.sh >> ${ADJ_DIR}/state/adjutant.log 2>&1"
-
-  # Check if already installed
-  if crontab -l 2>/dev/null | grep -q "news/briefing.sh\|news_briefing.sh"; then
-    wiz_ok "News briefing cron job already installed"
+  if ! wiz_confirm "Install cron entries for enabled scheduled jobs?" "Y"; then
+    wiz_info "Run manually with: adjutant schedule sync"
     return 0
   fi
 
-  # Add to crontab
   if [ "${DRY_RUN:-}" = "true" ]; then
-    dry_run_would "crontab: add '${cron_line}'"
-    wiz_ok "Would install news briefing cron"
+    dry_run_would "adjutant schedule sync (install all enabled cron entries)"
+    wiz_ok "Would install scheduled job cron entries"
     return 0
   fi
 
-  (crontab -l 2>/dev/null; echo "$cron_line") | crontab - 2>/dev/null && {
-    wiz_ok "Cron job installed: weekdays at 8:00am"
-  } || {
-    wiz_warn "Failed to install cron job"
-    wiz_info "Add manually: ${cron_line}"
-  }
+  source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh"
+  source "${ADJ_DIR}/scripts/capabilities/schedule/install.sh"
+  schedule_install_all
+
+  local enabled_count=0
+  while IFS=$'\t' read -r name desc sched script log enabled; do
+    [ "${enabled}" = "true" ] && enabled_count=$(( enabled_count + 1 ))
+  done < <(schedule_list)
+
+  if [ "${enabled_count}" -gt 0 ]; then
+    wiz_ok "Installed ${enabled_count} cron job(s) from schedules:"
+  else
+    wiz_info "No enabled jobs in schedules: — nothing installed."
+    wiz_info "Enable a job with: adjutant schedule enable <name>"
+  fi
 }
 

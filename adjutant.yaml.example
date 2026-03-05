@@ -41,7 +41,6 @@ features:
   news:
     enabled: false                     # set to true and configure news_config.json
     config_path: "news_config.json"
-    schedule: "0 8 * * 1-5"            # weekdays 8am (crontab syntax)
   screenshot:
     enabled: false
   vision:
@@ -52,9 +51,45 @@ features:
     enabled: false
 
 autonomy:
-  enabled: false                     # set to true to enable scheduled pulses and reviews
-  pulse_schedule: "0 9,17 * * 1-5"  # cron: weekdays at 9am and 5pm
-  review_schedule: "0 20 * * 1-5"   # cron: weekdays at 8pm
+  enabled: false                     # set to true, then enable autonomous_pulse / autonomous_review in schedules:
+
+# Scheduled jobs — managed by `adjutant schedule` commands.
+# Each entry is installed as a crontab line: <schedule> <script> >> <log> 2>&1
+# script: relative to ADJ_DIR, or absolute path. Must be executable.
+# log:    relative to ADJ_DIR, or absolute path. Created if missing.
+# enabled: true installs the crontab entry; false keeps the registry entry but removes it from crontab.
+#
+# Add a new job interactively: adjutant schedule add
+# Manage jobs:                 adjutant schedule list | enable | disable | remove | run
+schedules:
+  - name: "news_briefing"
+    description: "Daily AI news digest"
+    schedule: "0 8 * * 1-5"
+    script: "scripts/news/briefing.sh"
+    log: "state/news_briefing.log"
+    enabled: false                     # set to true when features.news.enabled is true
+
+  - name: "autonomous_pulse"
+    description: "Scheduled autonomous pulse check across knowledge bases"
+    schedule: "0 9,17 * * 1-5"
+    script: "scripts/lifecycle/pulse_cron.sh"
+    log: "state/pulse.log"
+    enabled: false                     # set to true when autonomy.enabled is true
+
+  - name: "autonomous_review"
+    description: "End-of-day synthesis and review"
+    schedule: "0 20 * * 1-5"
+    script: "scripts/lifecycle/review_cron.sh"
+    log: "state/review.log"
+    enabled: false                     # set to true when autonomy.enabled is true
+
+  # External job example — uncomment and fill in to register a KB script:
+  # - name: "portfolio_fetch"
+  #   description: "Fetch Nordnet portfolio positions and prices"
+  #   schedule: "0 9,16 * * 1-5"
+  #   script: "/absolute/path/to/portfolio-kb/scripts/fetch.sh"
+  #   log: "/absolute/path/to/portfolio-kb/state/fetch.log"
+  #   enabled: false
 
 platform:
   service_manager: "launchd"           # launchd (macOS) | systemd (Linux) | manual

@@ -137,6 +137,8 @@ dispatch_message() {
     /search)        msg_send_text "Please provide a search query. Example: /search latest AI news" "${message_id}" ;;
     /kb)            cmd_kb "list" "${message_id}" ;;
     /kb\ *)         cmd_kb ${text#/kb } "${message_id}" ;;
+    /schedule)      cmd_schedule "list" "${message_id}" ;;
+    /schedule\ *)   cmd_schedule "${text#/schedule }" "${message_id}" ;;
     *)
       # Natural language conversation
       adj_log messaging "Chat msg=${message_id}: ${text}"

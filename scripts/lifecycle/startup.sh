@@ -57,6 +57,12 @@ if [ "$RECOVERY_MODE" = true ]; then
   else
     echo "⚠ No crontab backup found"
   fi
+
+  # Re-sync schedule registry to crontab — catches any jobs added since the backup
+  if source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh" 2>/dev/null && \
+     source "${ADJ_DIR}/scripts/capabilities/schedule/install.sh" 2>/dev/null; then
+    schedule_install_all 2>/dev/null && echo "✓ Schedule registry re-synced to crontab"
+  fi
   
   # Log recovery
   adj_log "startup" "System recovered from emergency kill switch"

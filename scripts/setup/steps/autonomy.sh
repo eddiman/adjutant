@@ -3,22 +3,24 @@
 #
 # Guides the user through enabling autonomous pulse checks and daily reviews:
 #   - Enable/disable the autonomous cycle
-#   - Configure pulse and review cron schedules
 #   - Set notification budget (max_per_day)
 #   - Configure quiet hours
-#   - Install cron jobs if autonomy is enabled
+#   - Enable pulse/review scheduled jobs via the schedule registry
+#
+# Pulse and review schedules are managed in adjutant.yaml schedules: as the
+# autonomous_pulse and autonomous_review entries. To change their schedule,
+# edit adjutant.yaml schedules: directly or use:
+#   adjutant schedule disable autonomous_pulse
+#   adjutant schedule remove autonomous_pulse
+#   adjutant schedule add
 #
 # Sets:
 #   WIZARD_AUTONOMY_ENABLED=true/false
-#   WIZARD_AUTONOMY_PULSE_SCHEDULE=<cron expression>
-#   WIZARD_AUTONOMY_REVIEW_SCHEDULE=<cron expression>
 #   WIZARD_AUTONOMY_MAX_PER_DAY=<integer>
 #
 # Requires: helpers.sh sourced, ADJ_DIR set
 
 WIZARD_AUTONOMY_ENABLED=false
-WIZARD_AUTONOMY_PULSE_SCHEDULE="0 9,17 * * 1-5"
-WIZARD_AUTONOMY_REVIEW_SCHEDULE="0 20 * * 1-5"
 WIZARD_AUTONOMY_MAX_PER_DAY=3
 
 step_autonomy() {
@@ -29,10 +31,15 @@ step_autonomy() {
   printf "  surface significant signals, and send you Telegram notifications.\n"
   printf "  You remain in full control via the PAUSED kill switch and a notification budget.\n"
   echo ""
+  printf "  ${_DIM}Pulse schedule:  0 9,17 * * 1-5  (weekdays 9am and 5pm)${_RESET}\n"
+  printf "  ${_DIM}Review schedule: 0 20 * * 1-5    (weekdays 8pm)${_RESET}\n"
+  printf "  ${_DIM}Edit in adjutant.yaml schedules: or with: adjutant schedule disable autonomous_pulse${_RESET}\n"
+  echo ""
 
   if ! wiz_confirm "Enable autonomous pulse checks?" "N"; then
     WIZARD_AUTONOMY_ENABLED=false
     wiz_info "Autonomy disabled — enable later by setting autonomy.enabled: true in adjutant.yaml"
+    wiz_info "Then run: adjutant schedule enable autonomous_pulse"
     _autonomy_update_config
     echo ""
     return 0
@@ -40,41 +47,6 @@ step_autonomy() {
 
   WIZARD_AUTONOMY_ENABLED=true
   wiz_ok "Autonomy enabled"
-  echo ""
-
-  # Pulse schedule
-  printf "  ${_BOLD}Pulse schedule${_RESET} (cron syntax — how often to check all KBs)\n"
-  printf "  Default: ${_DIM}0 9,17 * * 1-5${_RESET}  (weekdays at 9am and 5pm)\n"
-  echo ""
-  if wiz_confirm "Use the default pulse schedule?" "Y"; then
-    WIZARD_AUTONOMY_PULSE_SCHEDULE="0 9,17 * * 1-5"
-    wiz_ok "Pulse: weekdays at 9am and 5pm"
-  else
-    local custom_pulse
-    custom_pulse="$(wiz_input "Pulse cron schedule" "0 9,17 * * 1-5")"
-    WIZARD_AUTONOMY_PULSE_SCHEDULE="${custom_pulse:-0 9,17 * * 1-5}"
-    wiz_ok "Pulse: ${WIZARD_AUTONOMY_PULSE_SCHEDULE}"
-  fi
-  echo ""
-
-  # Daily review
-  printf "  ${_BOLD}Daily review${_RESET} (deep synthesis, may trigger Telegram notifications)\n"
-  printf "  Default: ${_DIM}0 20 * * 1-5${_RESET}  (weekdays at 8pm)\n"
-  echo ""
-  if wiz_confirm "Enable daily review?" "Y"; then
-    if wiz_confirm "Use the default review schedule?" "Y"; then
-      WIZARD_AUTONOMY_REVIEW_SCHEDULE="0 20 * * 1-5"
-      wiz_ok "Review: weekdays at 8pm"
-    else
-      local custom_review
-      custom_review="$(wiz_input "Review cron schedule" "0 20 * * 1-5")"
-      WIZARD_AUTONOMY_REVIEW_SCHEDULE="${custom_review:-0 20 * * 1-5}"
-      wiz_ok "Review: ${WIZARD_AUTONOMY_REVIEW_SCHEDULE}"
-    fi
-  else
-    WIZARD_AUTONOMY_REVIEW_SCHEDULE=""
-    wiz_info "Daily review disabled"
-  fi
   echo ""
 
   # Notification budget
@@ -100,15 +72,15 @@ step_autonomy() {
     _autonomy_update_config
   fi
 
-  # Install cron jobs
+  # Enable scheduled jobs via registry
   echo ""
-  _autonomy_install_crons
+  _autonomy_enable_schedules
   echo ""
 
   return 0
 }
 
-# Write autonomy config values to adjutant.yaml
+# Write autonomy config values to adjutant.yaml (enabled flag only)
 _autonomy_update_config() {
   local config_file="${ADJ_DIR}/adjutant.yaml"
   [ ! -f "${config_file}" ] && return 0
@@ -121,39 +93,20 @@ _autonomy_update_config() {
   local enabled_val="false"
   [ "${WIZARD_AUTONOMY_ENABLED}" = "true" ] && enabled_val="true"
 
-  # Update autonomy.enabled
-  if grep -qE '^autonomy:' "${config_file}" 2>/dev/null; then
-    local tmpfile="${config_file}.tmp.$$"
-    awk -v enabled="${enabled_val}" \
-        -v pulse="${WIZARD_AUTONOMY_PULSE_SCHEDULE}" \
-        -v review="${WIZARD_AUTONOMY_REVIEW_SCHEDULE}" \
-        -v maxday="${WIZARD_AUTONOMY_MAX_PER_DAY}" '
-      /^autonomy:/ { in_autonomy=1; print; next }
-      in_autonomy && /^[^ ]/ { in_autonomy=0 }
-      in_autonomy && /enabled:/ {
-        sub(/enabled:.*/, "enabled: " enabled)
-      }
-      in_autonomy && /pulse_schedule:/ {
-        sub(/pulse_schedule:.*/, "pulse_schedule: \"" pulse "\"")
-      }
-      in_autonomy && /review_schedule:/ && review != "" {
-        sub(/review_schedule:.*/, "review_schedule: \"" review "\"")
-      }
-      /max_per_day:/ {
-        sub(/max_per_day:.*/, "max_per_day: " maxday)
-      }
-      { print }
-    ' "${config_file}" > "${tmpfile}" && mv "${tmpfile}" "${config_file}"
-  else
-    # Append autonomy block if missing (shouldn't happen after Step 9, but be safe)
-    cat >> "${config_file}" <<YAML
-
-autonomy:
-  enabled: ${enabled_val}
-  pulse_schedule: "${WIZARD_AUTONOMY_PULSE_SCHEDULE}"
-  review_schedule: "${WIZARD_AUTONOMY_REVIEW_SCHEDULE}"
-YAML
-  fi
+  # Update notifications.max_per_day
+  local tmpfile="${config_file}.tmp.$$"
+  awk -v enabled="${enabled_val}" \
+      -v maxday="${WIZARD_AUTONOMY_MAX_PER_DAY}" '
+    /^autonomy:/ { in_autonomy=1; print; next }
+    in_autonomy && /^[^ ]/ { in_autonomy=0 }
+    in_autonomy && /enabled:/ {
+      sub(/enabled:.*/, "enabled: " enabled)
+    }
+    /max_per_day:/ {
+      sub(/max_per_day:.*/, "max_per_day: " maxday)
+    }
+    { print }
+  ' "${config_file}" > "${tmpfile}" && mv "${tmpfile}" "${config_file}"
 }
 
 # Update quiet_hours settings in adjutant.yaml
@@ -182,53 +135,45 @@ _autonomy_update_quiet_hours() {
   ' "${config_file}" > "${tmpfile}" && mv "${tmpfile}" "${config_file}"
 }
 
-# Install cron jobs for pulse and review
-_autonomy_install_crons() {
-  if ! wiz_confirm "Install cron jobs for pulse and review now?" "Y"; then
-    wiz_info "Add manually to crontab:"
-    printf "  ${_DIM}${WIZARD_AUTONOMY_PULSE_SCHEDULE} ${ADJ_DIR}/scripts/lifecycle/startup.sh --pulse${_RESET}\n"
-    if [ -n "${WIZARD_AUTONOMY_REVIEW_SCHEDULE}" ]; then
-      printf "  ${_DIM}${WIZARD_AUTONOMY_REVIEW_SCHEDULE} ${ADJ_DIR}/scripts/lifecycle/startup.sh --review${_RESET}\n"
-    fi
-    return 0
-  fi
-
-  local pulse_cron="${WIZARD_AUTONOMY_PULSE_SCHEDULE} opencode run --print \"${ADJ_DIR}/prompts/pulse.md\" --cwd \"${ADJ_DIR}\" >> \"${ADJ_DIR}/state/adjutant.log\" 2>&1"
-  local review_cron="${WIZARD_AUTONOMY_REVIEW_SCHEDULE} opencode run --print \"${ADJ_DIR}/prompts/review.md\" --cwd \"${ADJ_DIR}\" >> \"${ADJ_DIR}/state/adjutant.log\" 2>&1"
-
+# Enable autonomous_pulse and autonomous_review in the schedule registry
+_autonomy_enable_schedules() {
   if [ "${DRY_RUN:-}" = "true" ]; then
-    dry_run_would "crontab: add pulse job '${pulse_cron}'"
-    wiz_ok "Would install pulse cron: ${WIZARD_AUTONOMY_PULSE_SCHEDULE}"
-    if [ -n "${WIZARD_AUTONOMY_REVIEW_SCHEDULE}" ]; then
-      dry_run_would "crontab: add review job '${review_cron}'"
-      wiz_ok "Would install review cron: ${WIZARD_AUTONOMY_REVIEW_SCHEDULE}"
-    fi
+    dry_run_would "schedule_set_enabled autonomous_pulse true"
+    dry_run_would "schedule_set_enabled autonomous_review true"
+    wiz_ok "Would enable autonomous_pulse and autonomous_review in schedules:"
     return 0
   fi
 
-  # Install pulse cron (skip if already present)
-  if crontab -l 2>/dev/null | grep -qF "prompts/pulse.md"; then
-    wiz_ok "Pulse cron job already installed"
-  else
-    (crontab -l 2>/dev/null; echo "${pulse_cron}") | crontab - 2>/dev/null && {
-      wiz_ok "Pulse cron installed: ${WIZARD_AUTONOMY_PULSE_SCHEDULE}"
-    } || {
-      wiz_warn "Failed to install pulse cron — add manually:"
-      wiz_info "${pulse_cron}"
-    }
+  if ! source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh" 2>/dev/null; then
+    wiz_warn "Could not load schedule manager — enable manually with: adjutant schedule enable autonomous_pulse"
+    return 0
   fi
 
-  # Install review cron (only if review schedule is set)
-  if [ -n "${WIZARD_AUTONOMY_REVIEW_SCHEDULE}" ]; then
-    if crontab -l 2>/dev/null | grep -qF "prompts/review.md"; then
-      wiz_ok "Review cron job already installed"
+  local installed=0
+
+  if schedule_exists "autonomous_pulse" 2>/dev/null; then
+    if schedule_set_enabled "autonomous_pulse" "true" 2>/dev/null; then
+      wiz_ok "autonomous_pulse enabled (weekdays 9am and 5pm)"
+      installed=$(( installed + 1 ))
     else
-      (crontab -l 2>/dev/null; echo "${review_cron}") | crontab - 2>/dev/null && {
-        wiz_ok "Review cron installed: ${WIZARD_AUTONOMY_REVIEW_SCHEDULE}"
-      } || {
-        wiz_warn "Failed to install review cron — add manually:"
-        wiz_info "${review_cron}"
-      }
+      wiz_warn "Failed to enable autonomous_pulse — run: adjutant schedule enable autonomous_pulse"
     fi
+  else
+    wiz_warn "autonomous_pulse not found in schedules: — add it with: adjutant schedule add"
+  fi
+
+  if schedule_exists "autonomous_review" 2>/dev/null; then
+    if schedule_set_enabled "autonomous_review" "true" 2>/dev/null; then
+      wiz_ok "autonomous_review enabled (weekdays 8pm)"
+      installed=$(( installed + 1 ))
+    else
+      wiz_warn "Failed to enable autonomous_review — run: adjutant schedule enable autonomous_review"
+    fi
+  else
+    wiz_warn "autonomous_review not found in schedules: — add it with: adjutant schedule add"
+  fi
+
+  if [ "${installed}" -gt 0 ]; then
+    wiz_info "Cron entries installed. Adjust schedules in adjutant.yaml schedules: if needed."
   fi
 }

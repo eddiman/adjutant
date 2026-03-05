@@ -223,6 +223,63 @@ trap 'rm -f "${TMP_FILE}"' EXIT
 
 ---
 
+## Registering a scheduled job
+
+Any script — whether it lives in the Adjutant repo or in an external knowledge base — can be registered as a scheduled job in `adjutant.yaml schedules:`.
+
+### Requirements for a scheduled script
+
+1. **Executable:** `chmod +x /path/to/script.sh`
+2. **Exit codes:** Exit 0 on success, non-zero on failure
+3. **Stdout:** Captured when the job is run via `/schedule run <name>` or `adjutant schedule run <name>`. For Telegram-visible results, follow the `OK:<result>` / `ERROR:<reason>` convention.
+4. **No interactive input:** Scripts must run non-interactively — they are called from cron without a terminal.
+5. **Self-contained environment:** Cron inherits a minimal PATH. Use absolute paths inside the script or source `scripts/common/paths.sh` to resolve `ADJ_DIR`.
+
+### Registering via CLI wizard
+
+```bash
+adjutant schedule add
+```
+
+Prompts for name, description, script path, schedule, and log file. Installs the crontab entry immediately.
+
+### Registering manually
+
+Add to `adjutant.yaml schedules:`:
+
+```yaml
+schedules:
+  - name: "my-kb-fetch"
+    description: "Fetch and update my KB data"
+    schedule: "0 9 * * 1-5"
+    script: "/absolute/path/to/my-kb/scripts/fetch.sh"
+    log: "/absolute/path/to/my-kb/state/fetch.log"
+    enabled: true
+```
+
+Then: `adjutant schedule sync`
+
+### How crontab entries are formatted
+
+```
+<schedule> <resolved_script> >> <resolved_log> 2>&1  # adjutant:<name>
+```
+
+The `# adjutant:<name>` suffix is the identity marker used by `install.sh` to manage entries individually. All entries contain `.adjutant`, so existing `startup.sh` grep counts remain valid.
+
+### Removing a scheduled job
+
+```bash
+adjutant schedule remove <name>     # removes from registry and crontab
+adjutant schedule disable <name>    # keeps in registry, removes from crontab
+```
+
+### Full documentation
+
+See [docs/guides/schedules.md](../guides/schedules.md) for the user-facing guide.
+
+---
+
 ## Reference: Screenshot Capability
 
 `scripts/capabilities/screenshot/screenshot.sh` is the most complete example:

@@ -48,7 +48,7 @@ llm:
 features:
   news:
     enabled: false                    # set to true and configure news_config.json
-    schedule: "0 8 * * 1-5"          # weekdays 8am (crontab syntax)
+    config_path: "news_config.json"
   screenshot:
     enabled: false
   vision:
@@ -56,6 +56,34 @@ features:
   search:
     enabled: false                    # requires BRAVE_API_KEY in .env
   usage_tracking:
+    enabled: false
+
+autonomy:
+  enabled: false                    # set to true, then enable autonomous_pulse/review in schedules:
+
+# Scheduled jobs — managed by `adjutant schedule` commands
+# Add new jobs with: adjutant schedule add
+# Full docs: docs/guides/schedules.md
+schedules:
+  - name: "news_briefing"
+    description: "Daily AI news digest"
+    schedule: "0 8 * * 1-5"
+    script: "scripts/news/briefing.sh"
+    log: "state/news_briefing.log"
+    enabled: false
+
+  - name: "autonomous_pulse"
+    description: "Scheduled autonomous pulse check"
+    schedule: "0 9,17 * * 1-5"
+    script: "scripts/lifecycle/pulse_cron.sh"
+    log: "state/pulse.log"
+    enabled: false
+
+  - name: "autonomous_review"
+    description: "End-of-day review"
+    schedule: "0 20 * * 1-5"
+    script: "scripts/lifecycle/review_cron.sh"
+    log: "state/review.log"
     enabled: false
 
 platform:
@@ -91,6 +119,10 @@ debug:
 **`llm.models`** — Three tiers. Adjutant uses `cheap` by default, escalates to `medium` when flagged, and only uses `expensive` for `/reflect` (the deep reasoning command that requires explicit `/confirm`). You can change these to any model supported by your OpenCode setup.
 
 **`llm.caps`** — Token budget guardrails. These generate usage warnings but do not hard-block requests.
+
+**`autonomy.enabled`** — Master switch for autonomous pulse and review jobs. Set to `true` to enable, then also enable the corresponding `schedules:` entries: `adjutant schedule enable autonomous_pulse`.
+
+**`schedules:`** — Registry of all scheduled jobs. Each entry maps to one crontab line. `enabled: true` installs the entry; `enabled: false` tracks it in the registry but removes it from crontab. Manage with `adjutant schedule` commands or edit this file and run `adjutant schedule sync`. See [Schedules](schedules.md) for the full guide.
 
 **`notifications.max_per_day`** — Adjutant respects this limit when sending proactive notifications. It will batch and suppress rather than spam.
 

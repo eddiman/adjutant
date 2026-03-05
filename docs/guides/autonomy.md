@@ -28,21 +28,16 @@ The autonomous cycle has three tiers:
 
 Run `adjutant setup`. Step 7 "Autonomy Configuration" asks:
 1. Enable autonomous pulse checks? [y/N]
-2. Pulse schedule (default: `0 9,17 * * 1-5` — weekdays 9am and 5pm)
-3. Enable daily review? [Y/n]
-4. Review schedule (default: `0 20 * * 1-5` — weekdays 8pm)
-5. Maximum notifications per day? [3]
-6. Enable quiet hours? [y/N]
+2. Maximum notifications per day? [3]
+3. Enable quiet hours? [y/N]
 
-If you answer yes to enabling, the wizard writes the `autonomy:` block to `adjutant.yaml` and optionally installs cron jobs.
+If you answer yes to enabling, the wizard writes `autonomy.enabled: true` to `adjutant.yaml` and enables the `autonomous_pulse` and `autonomous_review` schedule entries (installing their crontab entries). The default schedules are weekdays 9am/5pm for pulse and weekdays 8pm for review.
 
 ### Manually in `adjutant.yaml`
 
 ```yaml
 autonomy:
   enabled: true
-  pulse_schedule: "0 9,17 * * 1-5"   # weekdays at 9am and 5pm
-  review_schedule: "0 20 * * 1-5"    # weekdays at 8pm
 
 notifications:
   max_per_day: 3
@@ -52,21 +47,38 @@ notifications:
     end: "07:00"
 ```
 
-Install cron jobs manually:
+Then enable the schedule entries:
 
 ```bash
-# Pulse (runs the pulse prompt via opencode)
-crontab -e
-# Add:
-0 9,17 * * 1-5 opencode run --print "$HOME/.adjutant/prompts/pulse.md" --cwd "$HOME/.adjutant" >> "$HOME/.adjutant/state/adjutant.log" 2>&1
-0 20 * * 1-5   opencode run --print "$HOME/.adjutant/prompts/review.md" --cwd "$HOME/.adjutant" >> "$HOME/.adjutant/state/adjutant.log" 2>&1
+adjutant schedule enable autonomous_pulse
+adjutant schedule enable autonomous_review
 ```
 
 ---
 
 ## 3. Configuring pulse cadence and review schedule
 
-Both use standard cron syntax. Examples:
+Pulse and review schedules are managed as regular schedule entries in `adjutant.yaml schedules:`. See the [Schedules guide](schedules.md) for full documentation.
+
+To change the schedule of `autonomous_pulse`:
+
+```bash
+# Disable current entry and remove it
+adjutant schedule disable autonomous_pulse
+adjutant schedule remove autonomous_pulse
+
+# Add it back with a new schedule
+adjutant schedule add
+# Name: autonomous_pulse
+# Description: Scheduled autonomous pulse check across knowledge bases
+# Script path: scripts/lifecycle/pulse_cron.sh
+# Schedule: 0 12 * * *      ← your new schedule
+# Log file: state/pulse.log
+```
+
+Or edit `adjutant.yaml schedules:` directly and run `adjutant schedule sync`.
+
+Common schedule examples:
 
 | Schedule | Cron expression |
 |----------|----------------|
@@ -74,22 +86,6 @@ Both use standard cron syntax. Examples:
 | Every 4 hours on weekdays | `0 */4 * * 1-5` |
 | Once daily at noon | `0 12 * * *` |
 | Weekday evenings at 8pm | `0 20 * * 1-5` |
-
-Update the value in `adjutant.yaml`:
-
-```yaml
-autonomy:
-  pulse_schedule: "0 12 * * *"
-  review_schedule: "0 21 * * 1-5"
-```
-
-Then reinstall the cron job:
-
-```bash
-crontab -l | grep -v "prompts/pulse.md" | crontab -
-# Add new line
-(crontab -l; echo "0 12 * * * opencode run --print \"$HOME/.adjutant/prompts/pulse.md\" --cwd \"$HOME/.adjutant\" >> \"$HOME/.adjutant/state/adjutant.log\" 2>&1") | crontab -
-```
 
 ---
 

@@ -87,19 +87,32 @@ pkill -TERM -f "messaging/telegram/listener.sh" 2>/dev/null || true
 echo "✓ Telegram listener terminated"
 
 # =========================
-# TERMINATE NEWS JOBS
+# TERMINATE SCHEDULED JOBS
 # =========================
 
-echo "Terminating news jobs..."
+echo "Terminating registered scheduled jobs..."
 
-pkill -TERM -f "news_briefing.sh" 2>/dev/null || true
-pkill -TERM -f "news/briefing.sh" 2>/dev/null || true
-pkill -TERM -f "fetch_news.sh" 2>/dev/null || true
-pkill -TERM -f "news/fetch.sh" 2>/dev/null || true
-pkill -TERM -f "analyze_news.sh" 2>/dev/null || true
-pkill -TERM -f "news/analyze.sh" 2>/dev/null || true
-
-echo "✓ News jobs terminated"
+# Kill processes for all registered script paths in adjutant.yaml schedules:
+SCHEDULE_MANAGE="${ADJ_DIR}/scripts/capabilities/schedule/manage.sh"
+if source "${SCHEDULE_MANAGE}" 2>/dev/null; then
+  while IFS=$'\t' read -r name desc sched script log enabled; do
+    [ -z "${script}" ] && continue
+    # Resolve relative paths
+    case "${script}" in
+      /*) resolved_script="${script}" ;;
+      *)  resolved_script="${ADJ_DIR}/${script}" ;;
+    esac
+    pkill -TERM -f "${resolved_script}" 2>/dev/null || true
+  done < <(schedule_list 2>/dev/null)
+  echo "✓ Scheduled job processes terminated (registry-driven)"
+else
+  # Fallback: kill known legacy script names
+  pkill -TERM -f "news_briefing.sh" 2>/dev/null || true
+  pkill -TERM -f "news/briefing.sh" 2>/dev/null || true
+  pkill -TERM -f "pulse_cron.sh" 2>/dev/null || true
+  pkill -TERM -f "review_cron.sh" 2>/dev/null || true
+  echo "✓ Scheduled job processes terminated (fallback)"
+fi
 
 # =========================
 # DISABLE CRONTAB

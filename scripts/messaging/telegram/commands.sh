@@ -202,13 +202,14 @@ cmd_help() {
 You can just talk to me naturally — ask about your projects, priorities, upcoming events, or anything in your files and I'll look it up and answer.
 
 Or use a command:
-/status — I'll tell you if I'm running or paused, show registered cron jobs, and when I last checked in.
+/status — I'll tell you if I'm running or paused, show registered scheduled jobs, and when I last checked in.
 /pulse — I'll run a quick check across your projects and summarise what I find.
 /restart — Restart all services (listener, opencode web).
 /reflect — I'll do a deeper Opus reflection (I'll ask you to confirm first).
 /screenshot <url> — Take a full-page screenshot of any website and send it here.
 /search <query> — Search the web via Brave Search and return top results.
 /kb — List knowledge bases or query one (/kb query <name> <question>).
+/schedule — List scheduled jobs or manage them (/schedule run <name>, /schedule enable <name>, /schedule disable <name>).
 /pause — I'll stop monitoring until you're ready for me to resume.
 /resume — I'll pick back up where I left off.
 /model — Show current model, or switch with /model <name>.
@@ -393,4 +394,117 @@ cmd_kb() {
   # Unknown action
   msg_send_text "Usage: /kb list — show knowledge bases
 /kb query <name> <question> — ask a KB" "${message_id}"
+}
+
+# --- /schedule [list|run <name>|enable <name>|disable <name>] ---
+cmd_schedule() {
+  local input="${1:-}"
+  local message_id="${2:-}"
+
+  # Parse subcommand and optional name argument
+  local action name
+  action="$(echo "${input}" | awk '{print $1}')"
+  name="$(echo "${input}" | awk '{print $2}')"
+
+  # Source schedule management functions
+  source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh"
+
+  if [ -z "${action}" ] || [ "${action}" = "list" ]; then
+    local count
+    count="$(schedule_count)"
+    if [ "${count}" -eq 0 ]; then
+      msg_send_text "No scheduled jobs registered yet. Add one with \`adjutant schedule add\`." "${message_id}"
+      return
+    fi
+
+    local list_text="*Scheduled Jobs* (${count}):"$'\n'
+    while IFS=$'\t' read -r jname desc sched script log enabled; do
+      local flag=""
+      [ "${enabled}" = "false" ] && flag=" _(disabled)_"
+      list_text="${list_text}"$'\n'"• *${jname}*${flag} — ${sched}"$'\n'"  ${desc}"
+    done < <(schedule_list)
+    list_text="${list_text}"$'\n'$'\n'"Manage: /schedule run <name> | /schedule enable <name> | /schedule disable <name>"
+
+    msg_send_text "${list_text}" "${message_id}"
+    return
+  fi
+
+  if [ "${action}" = "run" ]; then
+    if [ -z "${name}" ]; then
+      msg_send_text "Usage: /schedule run <name>" "${message_id}"
+      return
+    fi
+
+    if ! schedule_exists "${name}"; then
+      msg_send_text "Job '${name}' not found. Use /schedule list to see registered jobs." "${message_id}"
+      return
+    fi
+
+    msg_react "${message_id}"
+
+    (
+      msg_typing start "sched_${message_id}"
+
+      source "${ADJ_DIR}/scripts/capabilities/schedule/install.sh"
+      local script_raw log_raw
+      script_raw="$(schedule_get_field "${name}" script)"
+      local script_path
+      case "${script_raw}" in
+        /*) script_path="${script_raw}" ;;
+        *)  script_path="${ADJ_DIR}/${script_raw}" ;;
+      esac
+
+      local result run_exit
+      result="$(bash "${script_path}" 2>>"${ADJ_DIR}/state/adjutant.log")" || run_exit=$?
+      run_exit="${run_exit:-0}"
+
+      msg_typing stop "sched_${message_id}"
+
+      if [ "${run_exit}" -ne 0 ] || [ -z "${result}" ]; then
+        msg_send_text "[${name}] Job completed (exit ${run_exit})." "${message_id}"
+      else
+        msg_send_text "[${name}] ${result}" "${message_id}"
+      fi
+      adj_log telegram "Schedule job '${name}' run via Telegram (exit ${run_exit})"
+    ) </dev/null >/dev/null 2>&1 &
+    disown $!
+    return
+  fi
+
+  if [ "${action}" = "enable" ]; then
+    if [ -z "${name}" ]; then
+      msg_send_text "Usage: /schedule enable <name>" "${message_id}"
+      return
+    fi
+    if ! schedule_exists "${name}"; then
+      msg_send_text "Job '${name}' not found. Use /schedule list to see registered jobs." "${message_id}"
+      return
+    fi
+    schedule_set_enabled "${name}" "true"
+    msg_send_text "Job *${name}* enabled — crontab entry installed." "${message_id}"
+    adj_log telegram "Schedule job '${name}' enabled via Telegram"
+    return
+  fi
+
+  if [ "${action}" = "disable" ]; then
+    if [ -z "${name}" ]; then
+      msg_send_text "Usage: /schedule disable <name>" "${message_id}"
+      return
+    fi
+    if ! schedule_exists "${name}"; then
+      msg_send_text "Job '${name}' not found. Use /schedule list to see registered jobs." "${message_id}"
+      return
+    fi
+    schedule_set_enabled "${name}" "false"
+    msg_send_text "Job *${name}* disabled — crontab entry removed." "${message_id}"
+    adj_log telegram "Schedule job '${name}' disabled via Telegram"
+    return
+  fi
+
+  # Unknown subcommand
+  msg_send_text "Usage:
+/schedule list — show all scheduled jobs
+/schedule run <name> — run a job immediately
+/schedule enable <name> — enable a job
+/schedule disable <name> — disable a job" "${message_id}"
 }

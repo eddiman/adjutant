@@ -58,6 +58,7 @@ step_features() {
     printf "  ${_DIM}\"urls\": [\"https://simonwillison.net/atom/everything/\"]${_RESET}\n"
     echo ""
     wiz_info "Run 'adjutant news' to test the briefing manually after setup"
+    wiz_info "The news_briefing cron job will be enabled in schedules: during service installation."
   else
     WIZARD_FEATURES_NEWS=false
     wiz_info "News briefing disabled"
@@ -168,12 +169,21 @@ _features_update_config() {
   local config_file="${ADJ_DIR}/adjutant.yaml"
   [ ! -f "$config_file" ] && return 0
 
+  [ "${DRY_RUN:-}" = "true" ] && { dry_run_would "update features in ${config_file}"; return 0; }
+
   # Update each feature's enabled flag
   _features_yaml_set_bool "news" "$WIZARD_FEATURES_NEWS" "$config_file"
   _features_yaml_set_bool "screenshot" "$WIZARD_FEATURES_SCREENSHOT" "$config_file"
   _features_yaml_set_bool "vision" "$WIZARD_FEATURES_VISION" "$config_file"
   _features_yaml_set_bool "search" "$WIZARD_FEATURES_SEARCH" "$config_file"
   _features_yaml_set_bool "usage_tracking" "$WIZARD_FEATURES_USAGE" "$config_file"
+
+  # Sync news_briefing schedule entry with news feature state
+  if type schedule_set_enabled &>/dev/null || source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh" 2>/dev/null; then
+    if type schedule_exists &>/dev/null && schedule_exists "news_briefing" 2>/dev/null; then
+      schedule_set_enabled "news_briefing" "${WIZARD_FEATURES_NEWS}" 2>/dev/null || true
+    fi
+  fi
 }
 
 # Set a feature's enabled: true/false in adjutant.yaml
