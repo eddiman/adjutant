@@ -2,6 +2,22 @@
 #
 # This file describes this knowledge base. Adjutant reads it during
 # registration and when spawning queries.
+#
+# model: controls which LLM is used for sub-agent queries from this KB.
+#
+#   Named tiers (resolved from adjutant.yaml llm.models at query time):
+#     cheap     — retrieval, formatting, status summaries  (default: claude-haiku)
+#     medium    — reasoning, analysis, signal generation   (default: claude-sonnet)
+#     expensive — deep reflection, /confirm only           (default: claude-opus)
+#
+#   Special:
+#     inherit   — use the active Telegram session model (or cheap tier if none set)
+#
+#   Explicit override (pins regardless of adjutant.yaml):
+#     "anthropic/claude-sonnet-4-6"
+#
+#   Recommended: use a named tier. adjutant.yaml stays the single source of truth
+#   for model selection across all KBs.
 
 name: "{{KB_NAME}}"
 description: "{{KB_DESCRIPTION}}"

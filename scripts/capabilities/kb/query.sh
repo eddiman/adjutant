@@ -26,21 +26,55 @@ KB_QUERY_TIMEOUT=120  # seconds
 
 # --- Model Resolution ---
 # Resolves the model for a KB query.
-# If KB model is "inherit", uses the current Telegram model or Adjutant default.
+#
+# Resolution order:
+#   1. "inherit"   → state/telegram_model.txt → adjutant.yaml cheap tier → hardcoded default
+#   2. "cheap"     → adjutant.yaml llm.models.cheap    → "anthropic/claude-haiku-4-5"
+#   3. "medium"    → adjutant.yaml llm.models.medium   → "anthropic/claude-sonnet-4-6"
+#   4. "expensive" → adjutant.yaml llm.models.expensive → "anthropic/claude-opus-4-5"
+#   5. explicit    → used as-is
+#
+# Using named tiers keeps Adjutant in control: changing a tier in adjutant.yaml
+# propagates to all KBs that reference it — no per-KB edits required.
 _resolve_model() {
   local kb_model="$1"
+  local adj_yaml="${ADJ_DIR}/adjutant.yaml"
 
-  if [ "${kb_model}" = "inherit" ] || [ -z "${kb_model}" ]; then
-    # Check for Telegram model override first
-    local model_file="${ADJ_DIR}/state/telegram_model.txt"
-    if [ -f "${model_file}" ]; then
-      cat "${model_file}" | tr -d '\n'
-    else
-      echo "anthropic/claude-haiku-4-5"
+  # Read a named tier from adjutant.yaml llm.models.<tier>, with fallback
+  _tier_model() {
+    local tier="$1"
+    local fallback="$2"
+    if [ -f "${adj_yaml}" ]; then
+      local val
+      val="$(grep -E "^[[:space:]]+${tier}:" "${adj_yaml}" | head -1 \
+            | sed 's/^[^:]*:[[:space:]]*//' | tr -d '"'"'")"
+      [ -n "${val}" ] && echo "${val}" && return
     fi
-  else
-    echo "${kb_model}"
-  fi
+    echo "${fallback}"
+  }
+
+  case "${kb_model}" in
+    inherit|"")
+      local model_file="${ADJ_DIR}/state/telegram_model.txt"
+      if [ -f "${model_file}" ]; then
+        tr -d '\n' < "${model_file}"
+      else
+        _tier_model "cheap" "anthropic/claude-haiku-4-5"
+      fi
+      ;;
+    cheap)
+      _tier_model "cheap" "anthropic/claude-haiku-4-5"
+      ;;
+    medium)
+      _tier_model "medium" "anthropic/claude-sonnet-4-6"
+      ;;
+    expensive)
+      _tier_model "expensive" "anthropic/claude-opus-4-5"
+      ;;
+    *)
+      echo "${kb_model}"
+      ;;
+  esac
 }
 
 # --- NDJSON Parser ---

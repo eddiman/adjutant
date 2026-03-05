@@ -308,3 +308,4 @@ _service_install_news_cron() {
     wiz_info "Add manually: ${cron_line}"
   }
 }
+

@@ -27,8 +27,10 @@ messaging:
 llm:
   backend: "opencode"
   models:
-    cheap: "anthropic/claude-haiku-4-5"      # routine chat and triage
-    medium: "anthropic/claude-sonnet-4-5"    # escalations
+    # Named tiers — referenced by KB agents via kb.yaml model: cheap|medium|expensive
+    # Changing a tier here propagates to all KBs that use it. No per-KB edits needed.
+    cheap: "anthropic/claude-haiku-4-5"      # retrieval, formatting, notifications, triage
+    medium: "anthropic/claude-sonnet-4-6"    # reasoning, analysis, signal generation, escalations
     expensive: "anthropic/claude-opus-4-5"   # /reflect + /confirm only
   caps:
     session_tokens: 44000              # per-session token budget
