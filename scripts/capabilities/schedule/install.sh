@@ -100,7 +100,8 @@ schedule_install_one() {
   local cron_line="${sched} ${script_path} >> ${log_path} 2>&1  ${marker}"
 
   # Remove any existing entry for this job, then append the new one
-  { crontab -l 2>/dev/null | grep -v "${marker}"; echo "${cron_line}"; } | crontab - 2>/dev/null
+  # grep -v exits 1 when no lines match — use || true to prevent set -e abort
+  { crontab -l 2>/dev/null | grep -v "${marker}" || true; echo "${cron_line}"; } | crontab - 2>/dev/null
 }
 
 # Remove the crontab entry for a single job.
@@ -116,7 +117,8 @@ schedule_uninstall_one() {
   existing="$(crontab -l 2>/dev/null)" || existing=""
 
   if echo "${existing}" | grep -qF "${marker}"; then
-    echo "${existing}" | grep -vF "${marker}" | crontab - 2>/dev/null
+    # grep -v exits 1 when nothing matches — use || true to prevent set -e abort
+    { echo "${existing}" | grep -vF "${marker}" || true; } | crontab - 2>/dev/null
   fi
 }
 
