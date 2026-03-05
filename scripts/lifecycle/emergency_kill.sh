@@ -25,8 +25,8 @@ echo "Sending pre-kill notification to Telegram..."
 
 Terminating:
 - All opencode processes
-- Telegram listener  
-- News briefing jobs
+- Telegram listener
+- All scheduled jobs
 - Cron scheduler
 
 System will be locked until recovery." 2>/dev/null || true
@@ -106,12 +106,7 @@ if source "${SCHEDULE_MANAGE}" 2>/dev/null; then
   done < <(schedule_list 2>/dev/null)
   echo "✓ Scheduled job processes terminated (registry-driven)"
 else
-  # Fallback: kill known legacy script names
-  pkill -TERM -f "news_briefing.sh" 2>/dev/null || true
-  pkill -TERM -f "news/briefing.sh" 2>/dev/null || true
-  pkill -TERM -f "pulse_cron.sh" 2>/dev/null || true
-  pkill -TERM -f "review_cron.sh" 2>/dev/null || true
-  echo "✓ Scheduled job processes terminated (fallback)"
+  echo "⚠ Could not load schedule registry — scheduled job processes may still be running"
 fi
 
 # =========================

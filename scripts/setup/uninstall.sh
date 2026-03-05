@@ -98,13 +98,19 @@ _uninstall_stop_processes() {
 
   wiz_ok "Telegram listener stopped"
 
-  # ── News briefing jobs ──
-  printf "  Stopping news jobs...\n"
-  pkill -TERM -f "news/briefing\.sh"  2>/dev/null || true
-  pkill -TERM -f "news_briefing\.sh"  2>/dev/null || true
-  pkill -TERM -f "news/fetch\.sh"     2>/dev/null || true
-  pkill -TERM -f "news/analyze\.sh"   2>/dev/null || true
-  wiz_ok "News jobs stopped"
+  # ── Scheduled jobs (registry-driven) ──
+  printf "  Stopping scheduled jobs...\n"
+  if source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh" 2>/dev/null; then
+    while IFS=$'\t' read -r name desc sched script logf enabled; do
+      [ -z "${script}" ] && continue
+      case "${script}" in
+        /*) resolved="${script}" ;;
+        *)  resolved="${ADJ_DIR}/${script}" ;;
+      esac
+      pkill -TERM -f "${resolved}" 2>/dev/null || true
+    done < <(schedule_list 2>/dev/null)
+  fi
+  wiz_ok "Scheduled jobs stopped"
 
   # Clear any KILLED lockfile so it doesn't matter for uninstall
   rm -f "${ADJ_DIR}/KILLED"
@@ -259,13 +265,13 @@ _uninstall_remove_files() {
     return 1  # caller checks return value
   fi
 
-  # Remove the news crontab entry before deleting files
-  if crontab -l 2>/dev/null | grep -q "adjutant\|news/briefing\.sh\|news_briefing\.sh"; then
+  # Remove all adjutant-managed crontab entries before deleting files
+  if crontab -l 2>/dev/null | grep -q "# adjutant:"; then
     printf "  Removing crontab entries...\n"
     # Backup first
     crontab -l 2>/dev/null > "/tmp/adjutant_crontab_backup_$(date +%s).txt" || true
-    # Strip adjutant-related lines
-    ( crontab -l 2>/dev/null | grep -v "adjutant\|news/briefing\.sh\|news_briefing\.sh" ) | crontab - 2>/dev/null || true
+    # Strip all adjutant-managed entries (identified by the # adjutant:<name> marker)
+    { crontab -l 2>/dev/null | grep -v "# adjutant:" || true; } | crontab - 2>/dev/null
     wiz_ok "Crontab entries removed"
   fi
 

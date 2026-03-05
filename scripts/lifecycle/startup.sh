@@ -149,19 +149,18 @@ if [ -n "${_sync_web_pid}" ] && [ ! -f "${ADJ_DIR}/state/opencode_web.pid" ]; th
   echo "${_sync_web_pid}" > "${ADJ_DIR}/state/opencode_web.pid"
 fi
 
-# 4. Verify Crontab
-CRON_CHECK=$(crontab -l 2>/dev/null | grep -c ".adjutant" || echo "0")
-if [ "$CRON_CHECK" -gt 0 ]; then
-  echo "✓ Crontab configured ($CRON_CHECK job(s))"
-else
-  echo "⚠ No crontab found"
-  echo ""
-  read -p "Install news briefing cron job? (y/N): " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]]; then
-    (crontab -l 2>/dev/null; echo "0 8 * * 1-5 ${ADJ_DIR}/scripts/news/briefing.sh >> ${ADJ_DIR}/state/news_briefing.log 2>&1") | crontab -
-    echo "✓ Crontab installed"
+# 4. Sync schedule registry to crontab
+if source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh" 2>/dev/null && \
+   source "${ADJ_DIR}/scripts/capabilities/schedule/install.sh" 2>/dev/null; then
+  schedule_install_all 2>/dev/null
+  CRON_CHECK=$(crontab -l 2>/dev/null | grep -c "# adjutant:" || echo "0")
+  if [ "$CRON_CHECK" -gt 0 ]; then
+    echo "✓ Crontab synced ($CRON_CHECK registered job(s))"
+  else
+    echo "✓ Crontab synced (no enabled jobs)"
   fi
+else
+  echo "⚠ Could not load schedule registry — crontab not synced"
 fi
 
 # =========================

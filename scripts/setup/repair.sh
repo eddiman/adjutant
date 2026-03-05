@@ -15,7 +15,7 @@
 #   - Required directories exist
 #   - Dependencies available
 #   - Listener running
-#   - News cron installed (if enabled)
+#   - Scheduled jobs synced to crontab
 #
 # Requires: helpers.sh sourced, ADJ_DIR set
 
@@ -268,29 +268,44 @@ YAML
     fi
   fi
 
-  # ── News Cron (if enabled) ──────────────────────────────────────────────
-  local news_enabled
-  news_enabled=$(yaml_get "features.news.enabled" "${ADJ_DIR}/adjutant.yaml" 2>/dev/null || echo "false")
-  if [ "$news_enabled" = "true" ]; then
-    if crontab -l 2>/dev/null | grep -q "news/briefing.sh\|news_briefing.sh"; then
-      wiz_ok "News briefing cron installed"
-    else
-      wiz_warn "News briefing enabled but cron not installed"
-      issues_found=$((issues_found + 1))
-      if wiz_confirm "Install news briefing cron (weekdays 8am)?" "Y"; then
-        local cron_line="0 8 * * 1-5 ${ADJ_DIR}/scripts/news/briefing.sh >> ${ADJ_DIR}/state/adjutant.log 2>&1"
-        if [ "${DRY_RUN:-}" = "true" ]; then
-          dry_run_would "crontab: add '${cron_line}'"
-          wiz_ok "  -> would install"
+  # ── Scheduled Jobs ───────────────────────────────────────────────────────
+  # Check that every enabled job in the registry has a crontab entry.
+  # Uses the schedule registry — not hardcoded job names.
+  if source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh" 2>/dev/null && \
+     source "${ADJ_DIR}/scripts/capabilities/schedule/install.sh" 2>/dev/null; then
+    local sched_count
+    sched_count="$(schedule_count 2>/dev/null || echo 0)"
+    if [ "${sched_count}" -gt 0 ]; then
+      local missing_jobs=0
+      while IFS=$'\t' read -r name desc sched script logf enabled; do
+        [ -z "${name}" ] && continue
+        [ "${enabled}" != "true" ] && continue
+        local marker="# adjutant:${name}"
+        if ! crontab -l 2>/dev/null | grep -qF "${marker}"; then
+          missing_jobs=$((missing_jobs + 1))
+        fi
+      done < <(schedule_list 2>/dev/null)
+
+      if [ "${missing_jobs}" -eq 0 ]; then
+        wiz_ok "Scheduled jobs: all ${sched_count} job(s) synced to crontab"
+      else
+        wiz_warn "Scheduled jobs: ${missing_jobs} enabled job(s) missing from crontab"
+        issues_found=$((issues_found + 1))
+        if wiz_confirm "Sync schedule registry to crontab now?" "Y"; then
+          if [ "${DRY_RUN:-}" = "true" ]; then
+            dry_run_would "adjutant schedule sync (schedule_install_all)"
+            wiz_ok "  -> would sync"
+          else
+            schedule_install_all 2>/dev/null && wiz_ok "  -> synced" || wiz_warn "  -> sync failed"
+          fi
           issues_fixed=$((issues_fixed + 1))
-        else
-          (crontab -l 2>/dev/null; echo "$cron_line") | crontab - 2>/dev/null && {
-            wiz_ok "  -> installed"
-            issues_fixed=$((issues_fixed + 1))
-          } || wiz_warn "  -> failed to install"
         fi
       fi
+    else
+      wiz_info "Scheduled jobs: none registered"
     fi
+  else
+    wiz_warn "Scheduled jobs: could not load schedule registry (skipping check)"
   fi
 
   # ── Summary ──────────────────────────────────────────────────────────────
