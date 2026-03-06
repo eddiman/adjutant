@@ -6,8 +6,9 @@
 #      that survive after the parent exits. Over days these accumulate and eat RAM.
 #   2. If `opencode run` hangs (e.g. post-sleep server degradation), callers block
 #      indefinitely with no timeout or error signal.
-#   3. After a sleep/wake cycle the opencode web server can enter a degraded state;
-#      subsequent `opencode run` calls hang trying to reach it.
+#   3. After a sleep/wake cycle or overnight idle, the opencode web server can enter
+#      a degraded state OR its Anthropic auth token can expire silently. An HTTP ping
+#      alone cannot detect token expiry — a real API call is required.
 #
 # Solutions:
 #   1. Snapshot child PIDs before/after each call; kill any new stragglers.
@@ -35,7 +36,7 @@
 # Provides:
 #   opencode_run           — drop-in replacement for `opencode` with timeout + cleanup
 #   opencode_reap          — periodic cleanup of orphaned language servers
-#   opencode_health_check  — probe server health; restart opencode web if degraded
+#   opencode_health_check  — two-stage probe (HTTP ping + real API call); restart if either fails
 
 # Resolve opencode binary once
 _OPENCODE_BIN="${_OPENCODE_BIN:-$(command -v opencode 2>/dev/null || echo "")}"
@@ -187,9 +188,16 @@ opencode_reap() {
 
 # --- opencode_health_check: probe server; restart opencode web if degraded ---
 #
-# Runs a minimal opencode call with a short timeout to verify the server is
-# responsive. If it fails or times out, kills and restarts opencode web, then
-# waits up to 15s for recovery.
+# Two-stage probe:
+#   1. HTTP ping  — verify the web process is alive at all.
+#   2. Real API call — cheap single-token Haiku call to verify the Anthropic
+#      auth token is still valid. An HTTP 200 from the web server does NOT
+#      guarantee this; "Token refresh failed: 400" only surfaces when an actual
+#      model call is attempted (as seen on 2026-03-06 when the 08:00 briefing
+#      failed despite the server being up).
+#
+# If either stage fails, runs scripts/lifecycle/restart.sh (clean shutdown of
+# all services + fresh startup), then waits up to 30s for recovery.
 #
 # Returns:
 #   0  — server is healthy (or was successfully restarted)
@@ -201,53 +209,65 @@ opencode_health_check() {
   fi
 
   local _probe_timeout=5
-  local _rc=0
+  local _api_probe_timeout=15
+  local _http_rc=0
 
-  # Probe: HTTP GET against the web server — this actually tests server health
-  # curl --max-time is available on macOS without coreutils
-  curl -sf --max-time "${_probe_timeout}" "http://localhost:${_OPENCODE_WEB_PORT}/" >/dev/null 2>&1 || _rc=$?
+  # Stage 1: HTTP ping — verify the web process is alive at all.
+  curl -sf --max-time "${_probe_timeout}" "http://localhost:${_OPENCODE_WEB_PORT}/" >/dev/null 2>&1 || _http_rc=$?
 
-  if [ "${_rc}" -eq 0 ]; then
-    return 0
+  if [ "${_http_rc}" -ne 0 ]; then
+    if type adj_log &>/dev/null; then
+      adj_log "opencode" "Health check stage 1 failed: HTTP ping (rc=${_http_rc}) — attempting restart"
+    fi
+    # Fall through to restart logic below.
+  else
+    # Stage 2: Real API probe — a cheap single-token call to verify the auth
+    # token is still valid. HTTP ping alone cannot detect expired tokens.
+    local _probe_response _probe_rc=0
+    _probe_response="$(OPENCODE_TIMEOUT="${_api_probe_timeout}" opencode_run run "ping" \
+      --model "anthropic/claude-haiku-4-5" --format json 2>&1)" || _probe_rc=$?
+
+    # Accept the probe if it returned exit 0 OR produced any JSON event output
+    # (even a model error event means auth succeeded and the server is healthy).
+    if [ "${_probe_rc}" -eq 0 ] || echo "${_probe_response}" | grep -q '"type"'; then
+      return 0
+    fi
+
+    if type adj_log &>/dev/null; then
+      adj_log "opencode" "Health check stage 2 failed: API probe (rc=${_probe_rc}) — token likely expired, attempting restart"
+    fi
   fi
 
   if type adj_log &>/dev/null; then
-    adj_log "opencode" "Health check failed (rc=${_rc}) — attempting opencode web restart"
+    adj_log "opencode" "Restarting opencode web via restart.sh for clean shutdown"
   fi
 
-  # Kill existing web server
-  local _web_pid
-  _web_pid="$(_opencode_web_pid)"
-  if [ -n "${_web_pid}" ]; then
-    kill -TERM "${_web_pid}" 2>/dev/null || true
-    sleep 2
-    kill -0 "${_web_pid}" 2>/dev/null && kill -9 "${_web_pid}" 2>/dev/null || true
-  fi
-
-  # Restart web server
   local _adj_dir="${ADJ_DIR:-${HOME}/.adjutant}"
-  local _startup="${_adj_dir}/scripts/startup.sh"
-  if [ -f "${_startup}" ]; then
-    bash "${_startup}" restart-web >/dev/null 2>&1 &
-    disown $!
-  else
-    # Fallback: start directly
-    nohup "${_OPENCODE_BIN}" web --mdns \
-      >"${_adj_dir}/state/opencode_web.log" 2>&1 &
-    echo $! > "${_OPENCODE_WEB_PID_FILE}"
-    disown $!
+  local _restart_sh="${_adj_dir}/scripts/lifecycle/restart.sh"
+
+  if [ ! -f "${_restart_sh}" ]; then
+    if type adj_log &>/dev/null; then
+      adj_log "opencode" "restart.sh not found at ${_restart_sh} — cannot restart"
+    fi
+    return 1
   fi
 
-  # Wait up to 15s for the server to respond
+  # Run restart.sh in the background (it is interactive/verbose by design).
+  # Redirect all output so it does not pollute the caller's stdout/stderr.
+  bash "${_restart_sh}" >/dev/null 2>&1 &
+  disown $!
+
+  # Wait up to 30s for the server to come back up (restart.sh stops + starts
+  # both the Telegram listener and opencode web, so allow extra time).
   local _wait=0
-  while [ "${_wait}" -lt 15 ]; do
+  while [ "${_wait}" -lt 30 ]; do
     sleep 1
     _wait=$((_wait + 1))
     curl -sf --max-time "${_probe_timeout}" "http://localhost:${_OPENCODE_WEB_PORT}/" >/dev/null 2>&1 && return 0
   done
 
   if type adj_log &>/dev/null; then
-    adj_log "opencode" "opencode web restart did not recover within 15s"
+    adj_log "opencode" "opencode web did not recover within 30s after restart.sh"
   fi
   return 1
 }
