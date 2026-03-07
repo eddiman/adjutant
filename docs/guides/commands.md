@@ -105,6 +105,7 @@ adjutant kb create --quick \
   --desc "What this KB is about"      # Quick non-interactive create
 adjutant kb info <name>               # Show details about a KB
 adjutant kb query <name> "question"   # Query a KB
+adjutant kb run <name> <operation>    # Run a KB-local operation by convention
 adjutant kb remove <name>             # Unregister a KB (files are NOT deleted)
 ```
 
@@ -121,7 +122,7 @@ adjutant schedule run <name>        # Run a job immediately in foreground (for t
 adjutant schedule help              # Show usage
 ```
 
-See [Schedules](schedules.md) for the full guide including adding external KB scripts.
+See [Schedules](schedules.md) for the full guide including generic KB-backed scheduled jobs.
 
 ### Maintenance
 

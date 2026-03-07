@@ -39,7 +39,9 @@ For each KB in the registry, run:
 bash scripts/capabilities/kb/query.sh "<name>" "Full reflection: give me a thorough status report. What's on track, what's at risk, what's stale or missing? Any deadlines in the next 2–4 weeks? If any of your data files look outdated or incomplete, update them now. Be specific — cite file names and sections."
 ```
 
-The KB sub-agent for read-write KBs has write and bash access — it can update `data/current.md`, run data-fetch scripts, and make corrections directly. If the KB's data is visibly stale, the sub-agent should act on it during this call.
+The KB sub-agent for read-write KBs has write and bash access — it can update `data/current.md`, run data-refresh scripts, rebuild rendered views, run reconciliation, and make corrections directly. If the KB's data is visibly stale, the sub-agent should act on it during this call.
+
+Important: for safety-sensitive or operational KBs, this does not authorize sensitive real-world side effects. Refreshing, repairing, and reconciling data is allowed. External actions with real-world consequences still require explicit user intent.
 
 Collect each response. If a KB is unreachable or returns an error, note it as unavailable.
 

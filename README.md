@@ -180,6 +180,7 @@ All operations go through the `adjutant` command. Add `~/.adjutant` to your `PAT
 | `adjutant kb list` | List registered knowledge bases |
 | `adjutant kb create` | Create a new knowledge base (interactive wizard) |
 | `adjutant kb query <name> "q"` | Query a knowledge base |
+| `adjutant kb run <name> <op>` | Run a KB-local operation by convention |
 | `adjutant kb remove <name>` | Unregister a knowledge base |
 | `adjutant kb info <name>` | Show details about a knowledge base |
 | `adjutant help` | Show all commands |

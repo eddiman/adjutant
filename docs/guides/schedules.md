@@ -9,7 +9,8 @@ Adjutant can run any script on a cron schedule — internal Adjutant jobs (news 
 Each job in `adjutant.yaml schedules:` has:
 - A **name** — used for CLI and Telegram commands
 - A **schedule** — standard cron syntax (5 fields)
-- A **script** — path to an executable file (relative to your Adjutant directory, or absolute)
+- A **script** — path to an executable file (relative to your Adjutant directory, or absolute), or
+- A **KB operation pair** — `kb_name` + `kb_operation` for generic KB execution
 - A **log** — where stdout/stderr is written
 - An **enabled** flag — `true` installs the crontab entry; `false` keeps the registry entry but removes it from crontab
 
@@ -116,20 +117,28 @@ Note: there is no `/schedule add` — use the CLI wizard for job creation.
 
 ---
 
-## Registering a KB script as a scheduled job
+## Registering a KB operation as a scheduled job
 
-Knowledge base scripts are external to the Adjutant repo and run with the KB's own environment. To schedule one, use its absolute path:
+Prefer scheduling KB work through Adjutant's generic KB runner instead of pointing directly at external KB script paths.
 
-```bash
-adjutant schedule add
-# Name: portfolio_fetch
-# Description: Fetch Nordnet positions and market prices
-# Script path: /Volumes/Mandalor/JottaSync/AI_knowledge_bases/portfolio-kb/scripts/fetch.sh
-# Schedule: 0 9,16 * * 1-5
-# Log file: /Volumes/Mandalor/JottaSync/AI_knowledge_bases/portfolio-kb/state/fetch.log
+```yaml
+schedules:
+  - name: "ops_fetch"
+    description: "Fetch fresh state for an operational KB"
+    schedule: "0 9,12,15 * * 1-5"
+    kb_name: "ops-kb"
+    kb_operation: "fetch"
+    log: "/absolute/path/to/ops-kb/state/fetch.log"
+    enabled: true
 ```
 
-Or manually in `adjutant.yaml schedules:` (see above), then `adjutant schedule sync`.
+This runs the equivalent of:
+
+```bash
+adjutant kb run ops-kb fetch
+```
+
+The KB must already be registered in `knowledge_bases/registry.yaml`.
 
 **Script requirements:**
 - Must be executable (`chmod +x`)
@@ -146,7 +155,9 @@ schedules:
   - name: "job-name"          # required — unique, lowercase alphanumeric + hyphens/underscores
     description: "What it does"  # required — shown in list and /schedule
     schedule: "0 8 * * 1-5"  # required — 5-field cron syntax
-    script: "scripts/foo.sh"  # required — relative to ADJ_DIR, or absolute
+    script: "scripts/foo.sh"  # optional — relative to ADJ_DIR, or absolute
+    kb_name: "my-kb"          # optional alternative to script
+    kb_operation: "fetch"     # optional alternative to script
     log: "state/foo.log"      # optional — defaults to state/<name>.log
     enabled: true             # required — true = installed in crontab
 ```

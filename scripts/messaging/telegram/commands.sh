@@ -28,22 +28,7 @@ cmd_status() {
   local status_output
   status_output=$("${ADJ_DIR}/scripts/observability/status.sh" 2>/dev/null) || status_output="Could not retrieve status."
 
-  # Get last heartbeat time
-  local last_run="not recorded yet"
-  local heartbeat_file="${ADJ_DIR}/state/last_heartbeat.json"
-  if [ -f "${heartbeat_file}" ]; then
-    # Extract timestamp from JSON using grep/sed — no Python
-    local raw_ts
-    raw_ts="$(grep -o '"timestamp":"[^"]*"' "${heartbeat_file}" 2>/dev/null | head -1 | cut -d'"' -f4)"
-    [ -z "${raw_ts}" ] && raw_ts="$(grep -o '"last_run":"[^"]*"' "${heartbeat_file}" 2>/dev/null | head -1 | cut -d'"' -f4)"
-    if [ -n "${raw_ts}" ]; then
-      last_run="$(fmt_ts "${raw_ts}")"
-    fi
-  fi
-
-  msg_send_text "${status_output}
-
-Last heartbeat: ${last_run}" "${message_id}"
+  msg_send_text "${status_output}" "${message_id}"
 }
 
 # --- /pause ---
@@ -418,7 +403,7 @@ cmd_schedule() {
     fi
 
     local list_text="*Scheduled Jobs* (${count}):"$'\n'
-    while IFS=$'\t' read -r jname desc sched script log enabled; do
+    while IFS=$'\t' read -r jname desc sched script log enabled notify kb_name kb_operation; do
       local flag=""
       [ "${enabled}" = "false" ] && flag=" _(disabled)_"
       list_text="${list_text}"$'\n'"• *${jname}*${flag} — ${sched}"$'\n'"  ${desc}"

@@ -241,6 +241,51 @@ teardown() {
   assert_mock_args_contain "opencode" "--agent kb"
 }
 
+@test "kb integration: run.sh executes KB-local operation by name" {
+  source "${TEST_ADJ_DIR}/scripts/capabilities/kb/manage.sh"
+
+  local kb_dir="${TEST_ADJ_DIR}/runner-kb"
+  kb_create "runner-test" "${kb_dir}" "Runner test KB" "inherit" "read-write"
+  mkdir -p "${kb_dir}/scripts"
+  cat > "${kb_dir}/scripts/fetch.sh" <<'EOF'
+#!/bin/bash
+echo "OK:runner fetch worked"
+EOF
+  chmod +x "${kb_dir}/scripts/fetch.sh"
+
+  run bash "${TEST_ADJ_DIR}/scripts/capabilities/kb/run.sh" "runner-test" "fetch"
+  assert_success
+  assert_output "OK:runner fetch worked"
+}
+
+@test "kb integration: adjutant kb run routes to generic runner" {
+  source "${TEST_ADJ_DIR}/scripts/capabilities/kb/manage.sh"
+
+  local kb_dir="${TEST_ADJ_DIR}/cli-runner-kb"
+  kb_create "cli-runner" "${kb_dir}" "CLI runner test" "inherit" "read-write"
+  mkdir -p "${kb_dir}/scripts"
+  cat > "${kb_dir}/scripts/reconcile.sh" <<'EOF'
+#!/bin/bash
+echo "OK:cli reconcile worked"
+EOF
+  chmod +x "${kb_dir}/scripts/reconcile.sh"
+
+  run bash "${PROJECT_ROOT}/adjutant" kb run "cli-runner" reconcile
+  assert_success
+  assert_output "OK:cli reconcile worked"
+}
+
+@test "kb integration: run.sh fails clearly for missing operation" {
+  source "${TEST_ADJ_DIR}/scripts/capabilities/kb/manage.sh"
+
+  local kb_dir="${TEST_ADJ_DIR}/missing-runner-kb"
+  kb_create "missing-runner" "${kb_dir}" "Missing runner test"
+
+  run bash "${TEST_ADJ_DIR}/scripts/capabilities/kb/run.sh" "missing-runner" fetch
+  assert_failure
+  assert_output --partial "does not implement operation 'fetch'"
+}
+
 # ===== /kb Telegram command =====
 
 @test "kb integration: cmd_kb list shows registered KBs" {
@@ -294,6 +339,7 @@ teardown() {
   assert_output --partial "list"
   assert_output --partial "remove"
   assert_output --partial "query"
+  assert_output --partial "run <name> <op>"
 }
 
 @test "kb integration: adjutant kb list shows empty state" {

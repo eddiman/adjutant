@@ -456,6 +456,8 @@ State seeders:
 |------|------:|-----------------|
 | Full lifecycle | 3 | Create/list/info/remove cycle; multiple KBs coexist; scaffold on existing directory with content |
 | Query pipeline | 8 | Parses NDJSON and returns text; handles multi-part text responses; returns fallback for empty response; fails for non-existent KB; passes correct model; uses inherited model from telegram state; passes --dir flag; passes --agent kb flag |
+| Generic KB run | 3 | Runs a KB-local operation by name; CLI routes to generic runner; missing operation fails clearly |
+| Schedule KB integration | 1 | `schedule_run_now` supports KB-backed jobs via `kb_name` and `kb_operation` |
 | Telegram /kb command | 2 | cmd_kb list shows registered KBs; cmd_kb with no args defaults to list |
 | CLI routing | 2 | `adjutant kb help` shows usage; `adjutant kb list` shows empty state |
 | Quick create wizard | 3 | Scaffolds and registers; fails without required args; custom model and access |

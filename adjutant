@@ -18,7 +18,7 @@
 #   adjutant screenshot URL Take and send a screenshot
 #   adjutant news           Run news briefing
 #   adjutant rotate         Archive old journal entries and rotate logs
-#   adjutant kb             Knowledge base management (create, list, remove, info, query)
+#   adjutant kb             Knowledge base management (create, list, remove, info, query, run)
 #   adjutant schedule       Scheduled job management (add, list, enable, disable, remove, run, sync)
 #   adjutant logs           Tail the listener log
 #   adjutant doctor         Check health and dependencies
@@ -148,6 +148,13 @@ case "$COMMAND" in
         fi
         exec bash "${ADJ_DIR}/scripts/capabilities/kb/query.sh" "$@"
         ;;
+      run)
+        if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+          echo "Usage: adjutant kb run <name> <operation> [args...]"
+          exit 1
+        fi
+        exec bash "${ADJ_DIR}/scripts/capabilities/kb/run.sh" "$@"
+        ;;
       help|--help|-h)
         cat <<'KBEOF'
 Knowledge Base Management
@@ -161,6 +168,7 @@ Commands:
   remove <name>       Unregister a KB (files are NOT deleted)
   info <name>         Show details about a KB
   query <name> "q"    Query a KB with a question
+  run <name> <op>     Run a KB-local operation by convention
   help                Show this help
 KBEOF
         ;;
@@ -193,7 +201,7 @@ KBEOF
           echo ""
           printf "  %-22s %-8s %-20s %s\n" "NAME" "ENABLED" "SCHEDULE" "DESCRIPTION"
           printf "  %-22s %-8s %-20s %s\n" "----" "-------" "--------" "-----------"
-          while IFS=$'\t' read -r name desc sched script log enabled; do
+          while IFS=$'\t' read -r name desc sched script log enabled notify kb_name kb_operation; do
             printf "  %-22s %-8s %-20s %s\n" "${name}" "${enabled}" "${sched}" "${desc}"
           done < <(schedule_list)
         fi

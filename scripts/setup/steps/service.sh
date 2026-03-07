@@ -296,7 +296,7 @@ _service_install_schedules() {
   schedule_install_all
 
   local enabled_count=0
-  while IFS=$'\t' read -r name desc sched script log enabled; do
+  while IFS=$'\t' read -r name desc sched script log enabled notify kb_name kb_operation; do
     [ "${enabled}" = "true" ] && enabled_count=$(( enabled_count + 1 ))
   done < <(schedule_list)
 
@@ -307,4 +307,3 @@ _service_install_schedules() {
     wiz_info "Enable a job with: adjutant schedule enable <name>"
   fi
 }
-

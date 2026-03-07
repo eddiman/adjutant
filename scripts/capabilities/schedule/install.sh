@@ -7,7 +7,7 @@
 # This file is a sourced library — do NOT add set -euo pipefail here.
 #
 # Crontab entry format:
-#   <schedule> <resolved_script> >> <resolved_log> 2>&1  # adjutant:<name>
+#   <schedule> <resolved_command> >> <resolved_log> 2>&1  # adjutant:<name>
 #
 # The "# adjutant:<name>" marker is the identity key. All entries still contain
 # ".adjutant" so existing startup.sh grep counts remain valid.
@@ -54,7 +54,7 @@ schedule_install_all() {
     source "${ADJ_DIR}/scripts/capabilities/schedule/manage.sh"
   fi
 
-  while IFS=$'\t' read -r name desc sched script log enabled; do
+  while IFS=$'\t' read -r name desc sched script log enabled notify kb_name kb_operation; do
     [ -z "${name}" ] && continue
     if [ "${enabled}" = "true" ]; then
       schedule_install_one "${name}"
@@ -80,24 +80,39 @@ schedule_install_one() {
     return 1
   fi
 
-  local sched script_raw log_raw
+  local sched log_raw notify
   sched="$(schedule_get_field "${name}" schedule)"
-  script_raw="$(schedule_get_field "${name}" script)"
   log_raw="$(schedule_get_field "${name}" log)"
+  notify="$(schedule_get_field "${name}" notify)"
 
   # Default log if empty
   [ -z "${log_raw}" ] && log_raw="state/${name}.log"
 
   local script_path log_path
-  script_path="$(_install_resolve_path "${script_raw}")"
+  script_path="$(_schedule_resolve_command "${name}")"
   log_path="$(_install_resolve_path "${log_raw}")"
+
+  if [ -z "${script_path}" ]; then
+    echo "ERROR: Job '${name}' has no runnable script or KB operation configured." >&2
+    return 1
+  fi
 
   # Ensure log directory exists
   mkdir -p "$(dirname "${log_path}")" 2>/dev/null || true
 
   local marker
   marker="$(_install_marker "${name}")"
-  local cron_line="${sched} ${script_path} >> ${log_path} 2>&1  ${marker}"
+
+  # When notify: true, wrap the script with notify_wrap.sh so a Telegram
+  # notification is sent on every run (success or failure).
+  local cron_line
+  if [ "${notify}" = "true" ]; then
+    local wrap_sh
+    wrap_sh="${ADJ_DIR}/scripts/capabilities/schedule/notify_wrap.sh"
+    cron_line="${sched} bash ${wrap_sh} ${name} ${script_path} >> ${log_path} 2>&1  ${marker}"
+  else
+    cron_line="${sched} ${script_path} >> ${log_path} 2>&1  ${marker}"
+  fi
 
   # Remove any existing entry for this job, then append the new one
   # grep -v exits 1 when no lines match — use || true to prevent set -e abort
@@ -139,21 +154,23 @@ schedule_run_now() {
     return 1
   fi
 
-  local script_raw
-  script_raw="$(schedule_get_field "${name}" script)"
-
   local script_path
-  script_path="$(_install_resolve_path "${script_raw}")"
+  script_path="$(_schedule_resolve_command "${name}")"
 
-  if [ ! -f "${script_path}" ]; then
+  if [ -z "${script_path}" ]; then
+    echo "ERROR: Job '${name}' has no runnable script or KB operation configured." >&2
+    return 1
+  fi
+
+  if [[ "${script_path}" != bash* ]] && [ ! -f "${script_path}" ]; then
     echo "ERROR: Script not found: ${script_path}" >&2
     return 1
   fi
 
-  if [ ! -x "${script_path}" ]; then
+  if [[ "${script_path}" != bash* ]] && [ ! -x "${script_path}" ]; then
     echo "ERROR: Script is not executable: ${script_path}" >&2
     return 1
   fi
 
-  exec bash "${script_path}"
+  eval "${script_path}"
 }

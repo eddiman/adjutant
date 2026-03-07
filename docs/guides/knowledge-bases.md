@@ -28,9 +28,11 @@ Adjutant collects the responses, evaluates them against `heart.md` priorities, a
 **`/reflect`** queries every registered KB in depth:
 > "Full reflection: give me a thorough status report. What's on track, what's at risk, what's stale? Any deadlines in the next 2–4 weeks? If any of your data files look outdated, update them now."
 
-For read-write KBs, the sub-agent has write and bash access — it can update `data/current.md`, run data-fetch scripts, and fix gaps directly during a reflect call. This means `/reflect` isn't just a read — it's an opportunity to bring KB data current.
+For read-write KBs, the sub-agent has write and bash access — it can update `data/current.md`, run data-refresh scripts, rebuild rendered views, and fix stale state directly during a reflect call. This means `/reflect` isn't just a read — it's an opportunity to bring KB data current.
 
-**Practical implication:** `data/current.md` is the first file the KB agent reads during any pulse or reflect. Keeping it fresh makes both commands more useful. Stale `current.md` = stale answers.
+For safety-sensitive or operational KBs, read-write access does not imply blanket permission to perform sensitive external actions. Refresh, repair, and reconciliation are acceptable. Real-world side effects still require explicit user intent.
+
+**Practical implication:** `data/current.md` is the first file the KB agent reads during any pulse or reflect. Keeping it fresh makes both commands more useful. For structured-state KBs, `current.md` should be a rendered summary of canonical state, not the state authority itself.
 
 ---
 
@@ -42,6 +44,8 @@ README.md            — what this KB is about, what questions it can answer
 ```
 
 `kb.yaml` is what Adjutant reads to register and query the KB. `README.md` is what the sub-agent reads first to orient itself.
+
+For automation-heavy KBs, `README.md` and `data/current.md` should point clearly at any canonical structured state files. Adjutant does not need to understand those files directly, but the KB agent should be able to use them for precision.
 
 ---
 
@@ -67,8 +71,11 @@ README.md            — what this KB is about, what questions it can answer
 │   └── <year>/
 │       └── <record>.md
 │
-└── templates/               # Reusable formats for creating new records
-    └── <template-name>.md
+├── templates/               # Reusable formats for creating new records
+│   └── <template-name>.md
+│
+├── state/                   # Runtime state for advanced operational KBs (optional)
+└── docs/reference/          # Architectural notes and implementation plans (optional)
 ```
 
 ---
@@ -133,6 +140,28 @@ Last updated: YYYY-MM-DD
 
 Keep it under ~100 lines. Compress, don't accumulate. When something is resolved, move it to `history/` — don't leave it in `current.md` as a completed item.
 
+For structured-state KBs, `current.md` should be regenerated from canonical JSON or other machine-readable state. Treat it as the agent landing page, not as the database.
+
+---
+
+## Rendered views vs canonical state
+
+Some KBs are simple and can keep their primary truth in markdown.
+
+Operational KBs often need stronger contracts. In those KBs:
+
+- `data/current.md` is the human-readable summary
+- markdown tables and reports are rendered views
+- canonical truth lives in machine-readable state files such as JSON
+
+Recommended pattern:
+
+- `data/current.md` — concise operational summary
+- `data/<topic>/*.json` — canonical state for automation-heavy workflows
+- `data/<topic>/*.md` — rendered reports derived from canonical state
+
+Adjutant should remain agnostic about the exact schema. The KB agent is responsible for knowing which files are authoritative inside its own workspace.
+
 ---
 
 ## Access levels
@@ -176,6 +205,9 @@ adjutant kb list
 
 # Show details for a KB
 adjutant kb info my-kb
+
+# Run a generic KB-local operation
+adjutant kb run my-kb fetch
 
 # Remove a KB from the registry (does not delete files)
 adjutant kb remove my-kb

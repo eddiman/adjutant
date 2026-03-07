@@ -25,5 +25,11 @@ screenshots/
 
 .DS_store
 
+# Temporary working directory
+tmp/
+
+# Release tarballs
+*.tar.gz
+
 # Local planning docs — not for tracking
 docs/reference/portfolio-kb-plan.md

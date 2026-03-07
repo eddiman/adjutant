@@ -182,6 +182,30 @@ teardown() { teardown_test_env; }
   assert_output "anthropic/claude-haiku-4-5"
 }
 
+# ===== kb_get_operation_script =====
+
+@test "kb: kb_get_operation_script resolves conventional script path" {
+  local kb_dir="${TEST_ADJ_DIR}/ops-kb"
+  kb_scaffold "ops-test" "${kb_dir}" "Ops test" "inherit" "read-write"
+  mkdir -p "${kb_dir}/scripts"
+  printf '#!/bin/bash\necho OK:fetch\n' > "${kb_dir}/scripts/fetch.sh"
+  chmod +x "${kb_dir}/scripts/fetch.sh"
+  kb_register "ops-test" "${kb_dir}" "Ops test" "inherit" "read-write"
+
+  run kb_get_operation_script "ops-test" "fetch"
+  assert_success
+  assert_output "${kb_dir}/scripts/fetch.sh"
+}
+
+@test "kb: kb_get_operation_script fails when operation script is missing" {
+  local kb_dir="${TEST_ADJ_DIR}/missing-op-kb"
+  kb_create "missing-op" "${kb_dir}" "Missing op test"
+
+  run kb_get_operation_script "missing-op" "fetch"
+  assert_failure
+  assert_output --partial "does not implement operation 'fetch'"
+}
+
 # ===== kb_scaffold =====
 
 @test "kb: kb_scaffold creates directory structure" {
@@ -191,6 +215,8 @@ teardown() { teardown_test_env; }
   [ -d "${kb_dir}" ]
   [ -d "${kb_dir}/.opencode/agents" ]
   [ -d "${kb_dir}/docs" ]
+  [ -d "${kb_dir}/docs/reference" ]
+  [ -d "${kb_dir}/state" ]
   [ -f "${kb_dir}/kb.yaml" ]
   [ -f "${kb_dir}/opencode.json" ]
   [ -f "${kb_dir}/.opencode/agents/kb.md" ]

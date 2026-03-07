@@ -130,6 +130,40 @@ kb_get_field() {
   kb_info "${target}" 2>/dev/null | grep "^${field}=" | cut -d'=' -f2-
 }
 
+# Resolve a KB-local operation script by convention.
+# Args: $1 = kb name, $2 = operation name
+# Output: absolute script path on success
+# Returns: 0 on success, 1 on error
+kb_get_operation_script() {
+  local target="$1"
+  local operation="$2"
+  local kb_path
+
+  if ! kb_exists "${target}"; then
+    echo "ERROR: Knowledge base '${target}' not found in registry." >&2
+    return 1
+  fi
+
+  if ! echo "${operation}" | grep -qE '^[a-z][a-z0-9_-]*$' 2>/dev/null; then
+    echo "ERROR: Invalid KB operation '${operation}'. Use lowercase letters, digits, hyphens, or underscores." >&2
+    return 1
+  fi
+
+  kb_path="$(kb_get_field "${target}" "path")"
+  if [ -z "${kb_path}" ] || [ ! -d "${kb_path}" ]; then
+    echo "ERROR: KB directory does not exist: ${kb_path}" >&2
+    return 1
+  fi
+
+  local script_path="${kb_path}/scripts/${operation}.sh"
+  if [ ! -f "${script_path}" ]; then
+    echo "ERROR: KB '${target}' does not implement operation '${operation}' (expected ${script_path})." >&2
+    return 1
+  fi
+
+  echo "${script_path}"
+}
+
 # ── Registry Mutations ─────────────────────────────────────────────────────
 
 # Register a KB in the registry
@@ -269,6 +303,8 @@ kb_unregister() {
 #   knowledge/.gitkeep       — stable reference docs
 #   history/.gitkeep         — archived records
 #   templates/.gitkeep       — reusable document formats
+#   state/.gitkeep           — optional runtime state for advanced KBs
+#   docs/reference/.gitkeep  — optional reference plans / architecture notes
 #
 # Args: $1=name $2=path $3=description $4=model $5=access
 kb_scaffold() {
@@ -289,8 +325,10 @@ kb_scaffold() {
   mkdir -p "${kb_path}/.opencode/agents"
   mkdir -p "${kb_path}/data"
   mkdir -p "${kb_path}/docs"
+  mkdir -p "${kb_path}/docs/reference"
   mkdir -p "${kb_path}/knowledge"
   mkdir -p "${kb_path}/history"
+  mkdir -p "${kb_path}/state"
   mkdir -p "${kb_path}/templates"
 
   # Render kb.yaml from template
@@ -360,6 +398,8 @@ CURRENT_EOF
   # Placeholder .gitkeep files so directories are tracked by git
   touch "${kb_path}/knowledge/.gitkeep"
   touch "${kb_path}/history/.gitkeep"
+  touch "${kb_path}/state/.gitkeep"
+  touch "${kb_path}/docs/reference/.gitkeep"
   touch "${kb_path}/templates/.gitkeep"
 }
 

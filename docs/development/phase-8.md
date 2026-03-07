@@ -62,12 +62,13 @@ schedules:
     log: "state/review.log"
     enabled: false
 
-  # External KB job example:
-  # - name: "portfolio_fetch"
-  #   description: "Fetch Nordnet portfolio data"
+  # KB-backed job example:
+  # - name: "ops_fetch"
+  #   description: "Fetch fresh state for an operational KB"
   #   schedule: "0 9,16 * * 1-5"
-  #   script: "/absolute/path/to/kb/scripts/fetch.sh"
-  #   log: "/absolute/path/to/kb/state/fetch.log"
+  #   kb_name: "ops-kb"
+  #   kb_operation: "fetch"
+  #   log: "/absolute/path/to/ops-kb/state/fetch.log"
   #   enabled: false
 ```
 
@@ -75,6 +76,7 @@ schedules:
 - `name` — unique, lowercase alphanumeric + hyphens
 - `schedule` — standard crontab syntax (5 fields)
 - `script` — relative paths resolved from `ADJ_DIR`; absolute paths used as-is; must be executable
+- `kb_name` + `kb_operation` — generic KB-backed alternative to `script`
 - `log` — optional; defaults to `state/<name>.log` if omitted
 - `enabled` — `true` installs crontab entry; `false` tracks in registry but does not install
 
@@ -102,7 +104,7 @@ Public functions:
 |---|---|
 | `schedule_count` | Count entries in registry |
 | `schedule_exists name` | Boolean check |
-| `schedule_list` | Tab-separated output: name, description, schedule, script, log, enabled |
+| `schedule_list` | Tab-separated output including script or KB-backed operation fields |
 | `schedule_get_field name field` | Read one field from an entry |
 | `schedule_add name desc schedule script log` | Append entry, call `schedule_install_all` |
 | `schedule_remove name` | Remove entry, call `schedule_uninstall_one` |
@@ -117,9 +119,9 @@ Public functions:
 | Function | Purpose |
 |---|---|
 | `schedule_install_all` | Read registry, reconcile full crontab (idempotent) |
-| `schedule_install_one name` | Resolve paths, build and install one crontab line |
+| `schedule_install_one name` | Resolve script or KB operation, build and install one crontab line |
 | `schedule_uninstall_one name` | Remove line matching `# adjutant:<name>` |
-| `schedule_run_now name` | Resolve script path, exec in foreground (for testing) |
+| `schedule_run_now name` | Resolve script or KB operation, exec in foreground (for testing) |
 
 Backwards compatibility: crontab lines containing `.adjutant` but without `# adjutant:<name>` (old format) are left untouched by `schedule_install_all`.
 

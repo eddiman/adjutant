@@ -35,6 +35,31 @@ _schedule_resolve_path() {
   esac
 }
 
+# Resolve a schedule entry to an executable command.
+# Supports either:
+#   - script: <path>
+#   - kb_name: <name> + kb_operation: <operation>
+_schedule_resolve_command() {
+  local name="$1"
+  local script_raw kb_name kb_operation
+
+  script_raw="$(schedule_get_field "${name}" script)"
+  kb_name="$(schedule_get_field "${name}" kb_name)"
+  kb_operation="$(schedule_get_field "${name}" kb_operation)"
+
+  if [ -n "${kb_name}" ] && [ -n "${kb_operation}" ]; then
+    echo "bash ${ADJ_DIR}/scripts/capabilities/kb/run.sh ${kb_name} ${kb_operation}"
+    return 0
+  fi
+
+  if [ -n "${script_raw}" ]; then
+    echo "$(_schedule_resolve_path "${script_raw}")"
+    return 0
+  fi
+
+  echo ""
+}
+
 # ── Registry Queries ───────────────────────────────────────────────────────
 
 # Count registered schedule entries.
@@ -68,7 +93,7 @@ schedule_exists() {
 }
 
 # List all registered jobs.
-# Output: one tab-separated line per job: name<TAB>description<TAB>schedule<TAB>script<TAB>log<TAB>enabled
+# Output: one tab-separated line per job: name<TAB>description<TAB>schedule<TAB>script-or-<kb><TAB>log<TAB>enabled<TAB>notify<TAB>kb_name<TAB>kb_operation
 schedule_list() {
   [ -f "${SCHEDULE_CONFIG}" ] || return 0
 
@@ -79,9 +104,10 @@ schedule_list() {
     in_block && /^  - name:/ {
       # Emit previous entry
       if (name != "") {
-        printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, desc, sched, script, logf, enabled
+        script_out = (script == "" ? "<kb>" : script)
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, desc, sched, script_out, logf, enabled, notify, kb_name, kb_operation
       }
-      name=""; desc=""; sched=""; script=""; logf=""; enabled=""
+      name=""; desc=""; sched=""; script=""; logf=""; enabled=""; notify="false"; kb_name=""; kb_operation=""
       val=$0; sub(/.*- name: *"?/, "", val); sub(/"? *$/, "", val); name=val
     }
     in_block && name != "" && /^    description:/ {
@@ -99,33 +125,52 @@ schedule_list() {
     in_block && name != "" && /^    enabled:/ {
       val=$0; sub(/.*enabled: */, "", val); sub(/ *$/, "", val); enabled=val
     }
+    in_block && name != "" && /^    notify:/ {
+      val=$0; sub(/.*notify: */, "", val); sub(/ *$/, "", val); notify=val
+    }
+    in_block && name != "" && /^    kb_name:/ {
+      val=$0; sub(/.*kb_name: *"?/, "", val); sub(/"? *$/, "", val); kb_name=val
+    }
+    in_block && name != "" && /^    kb_operation:/ {
+      val=$0; sub(/.*kb_operation: *"?/, "", val); sub(/"? *$/, "", val); kb_operation=val
+    }
     END {
       if (name != "") {
-        printf "%s\t%s\t%s\t%s\t%s\t%s\n", name, desc, sched, script, logf, enabled
+        script_out = (script == "" ? "<kb>" : script)
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", name, desc, sched, script_out, logf, enabled, notify, kb_name, kb_operation
       }
     }
   ' "${SCHEDULE_CONFIG}"
 }
 
 # Get a single field from a job entry.
-# Args: $1 = name, $2 = field (description|schedule|script|log|enabled)
+# Args: $1 = name, $2 = field (description|schedule|script|log|enabled|notify|kb_name|kb_operation)
 # Output: field value (empty string if not found)
 schedule_get_field() {
   local target="$1"
   local field="$2"
-  schedule_list | while IFS=$'\t' read -r name desc sched script logf enabled; do
-    if [ "${name}" = "${target}" ]; then
-      case "${field}" in
-        description) echo "${desc}" ;;
-        schedule)    echo "${sched}" ;;
-        script)      echo "${script}" ;;
-        log)         echo "${logf}" ;;
-        enabled)     echo "${enabled}" ;;
-        name)        echo "${name}" ;;
-      esac
-      return 0
-    fi
-  done
+  awk -v target="${target}" -v field="${field}" '
+    /^schedules:/ { in_block=1; next }
+    in_block && /^[^ ]/ { in_block=0 }
+
+    in_block && /^  - name:/ {
+      current=$0; sub(/.*- name: *"?/, "", current); sub(/"? *$/, "", current)
+      in_entry=(current == target)
+      next
+    }
+
+    in_entry {
+      if (field == "name") { print target; exit }
+      if (field == "description" && /^    description:/) { val=$0; sub(/.*description: *"?/, "", val); sub(/"? *$/, "", val); print val; exit }
+      if (field == "schedule" && /^    schedule:/) { val=$0; sub(/.*schedule: *"?/, "", val); sub(/"? *$/, "", val); print val; exit }
+      if (field == "script" && /^    script:/) { val=$0; sub(/.*script: *"?/, "", val); sub(/"? *$/, "", val); print val; exit }
+      if (field == "log" && /^    log:/) { val=$0; sub(/.*log: *"?/, "", val); sub(/"? *$/, "", val); print val; exit }
+      if (field == "enabled" && /^    enabled:/) { val=$0; sub(/.*enabled: */, "", val); sub(/ *$/, "", val); print val; exit }
+      if (field == "notify" && /^    notify:/) { val=$0; sub(/.*notify: */, "", val); sub(/ *$/, "", val); print val; exit }
+      if (field == "kb_name" && /^    kb_name:/) { val=$0; sub(/.*kb_name: *"?/, "", val); sub(/"? *$/, "", val); print val; exit }
+      if (field == "kb_operation" && /^    kb_operation:/) { val=$0; sub(/.*kb_operation: *"?/, "", val); sub(/"? *$/, "", val); print val; exit }
+    }
+  ' "${SCHEDULE_CONFIG}"
 }
 
 # ── Registry Mutations ─────────────────────────────────────────────────────
@@ -141,6 +186,7 @@ _schedule_append() {
   local script="$4"
   local logpath="${5:-state/${name}.log}"
   local enabled="${6:-true}"
+  local notify="${7:-false}"
 
   if ! grep -q '^schedules:' "${SCHEDULE_CONFIG}" 2>/dev/null; then
     # Append a new schedules: block
@@ -153,6 +199,7 @@ schedules:
     script: "${script}"
     log: "${logpath}"
     enabled: ${enabled}
+    notify: ${notify}
 YAML
     return 0
   fi
@@ -168,11 +215,12 @@ YAML
         -v sched="${schedule}" \
         -v script="${script}" \
         -v logpath="${logpath}" \
-        -v enabled="${enabled}" '
+        -v enabled="${enabled}" \
+        -v notify="${notify}" '
       /^schedules:/ { in_block=1; print; next }
       in_block && /^[^ ]/ {
         # End of schedules block — inject new entry before this line
-        printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, logpath, enabled
+        printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n    notify: %s\n", name, desc, sched, script, logpath, enabled, notify
         in_block=0
         print
         next
@@ -181,7 +229,7 @@ YAML
       END {
         # schedules: was the last block — append at end
         if (in_block) {
-          printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, logpath, enabled
+          printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n    notify: %s\n", name, desc, sched, script, logpath, enabled, notify
         }
       }
     ' "${SCHEDULE_CONFIG}" > "${tmpfile}" && mv "${tmpfile}" "${SCHEDULE_CONFIG}"
@@ -194,10 +242,11 @@ YAML
         -v sched="${schedule}" \
         -v script="${script}" \
         -v logpath="${logpath}" \
-        -v enabled="${enabled}" '
+        -v enabled="${enabled}" \
+        -v notify="${notify}" '
       /^schedules:/ {
         print
-        printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n", name, desc, sched, script, logpath, enabled
+        printf "  - name: \"%s\"\n    description: \"%s\"\n    schedule: \"%s\"\n    script: \"%s\"\n    log: \"%s\"\n    enabled: %s\n    notify: %s\n", name, desc, sched, script, logpath, enabled, notify
         next
       }
       { print }
