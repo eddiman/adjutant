@@ -117,7 +117,7 @@ ${summary}" "${message_id}"
     | grep -o '"text":"[^"]*"' \
     | sed 's/^"text":"//;s/"$//' \
     | tr -d '\000-\010\013-\037' \
-    | paste -sd '' \
+    | tr -d '\n' \
     | tail -c 3800)"
   _pulse_exit=$?
   _after_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
@@ -191,7 +191,7 @@ cmd_reflect_confirm() {
     | grep -o '"text":"[^"]*"' \
     | sed 's/^"text":"//;s/"$//' \
     | tr -d '\000-\010\013-\037' \
-    | paste -sd '' \
+    | tr -d '\n' \
     | tail -c 3800)"
   _reflect_exit=$?
   _after_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
