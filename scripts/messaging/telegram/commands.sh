@@ -109,14 +109,29 @@ ${summary}" "${message_id}"
   fi
 
   local result
+  local _pulse_exit
   local _before_lsp _after_lsp _orphan_lsp
   _before_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
-  result="$(timeout 240 "${opencode_bin}" run --print "$(cat "${pulse_prompt}")" 2>/dev/null | tail -20 || echo 'The pulse check timed out or ran into an error.')"
+  result="$(_adj_timeout 240 "${opencode_bin}" run --dir "${ADJ_DIR}" --format json "$(cat "${pulse_prompt}")" 2>>"${ADJ_DIR}/state/adjutant.log" \
+    | grep '"type":"text"' \
+    | grep -o '"text":"[^"]*"' \
+    | sed 's/^"text":"//;s/"$//' \
+    | tr -d '\000-\010\013-\037' \
+    | paste -sd '' \
+    | tail -c 3800)"
+  _pulse_exit=$?
   _after_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
   _orphan_lsp="$(comm -13 <(echo "${_before_lsp}") <(echo "${_after_lsp}") 2>/dev/null || true)"
   [ -n "${_orphan_lsp}" ] && { for _p in ${_orphan_lsp}; do kill "${_p}" 2>/dev/null || true; done; }
+  if [ ${_pulse_exit} -eq 124 ]; then
+    adj_log telegram "Pulse timed out after 240s (exit 124)."
+    result="The pulse check timed out after 4 minutes."
+  elif [ ${_pulse_exit} -ne 0 ] && [ -z "${result}" ]; then
+    adj_log telegram "Pulse failed with exit code ${_pulse_exit} and no output."
+    result="The pulse check ran into an error (exit ${_pulse_exit}). Check adjutant.log for details."
+  fi
+  adj_log telegram "Pulse completed via Telegram (exit ${_pulse_exit}, output: $(echo "${result}" | wc -w | tr -d ' ') words)."
   msg_send_text "${result}" "${message_id}"
-  adj_log telegram "Pulse completed via Telegram."
 }
 
 # --- /restart ---
@@ -168,14 +183,29 @@ cmd_reflect_confirm() {
   fi
 
   local result
+  local _reflect_exit
   local _before_lsp _after_lsp _orphan_lsp
   _before_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
-  result="$(timeout 300 "${opencode_bin}" run --model claude-opus-4-5 --print "$(cat "${reflect_prompt}")" 2>/dev/null | tail -30 || echo 'The reflection timed out or ran into an error. Try again from inside OpenCode.')"
+  result="$(_adj_timeout 300 "${opencode_bin}" run --dir "${ADJ_DIR}" --model claude-opus-4-5 --format json "$(cat "${reflect_prompt}")" 2>>"${ADJ_DIR}/state/adjutant.log" \
+    | grep '"type":"text"' \
+    | grep -o '"text":"[^"]*"' \
+    | sed 's/^"text":"//;s/"$//' \
+    | tr -d '\000-\010\013-\037' \
+    | paste -sd '' \
+    | tail -c 3800)"
+  _reflect_exit=$?
   _after_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
   _orphan_lsp="$(comm -13 <(echo "${_before_lsp}") <(echo "${_after_lsp}") 2>/dev/null || true)"
   [ -n "${_orphan_lsp}" ] && { for _p in ${_orphan_lsp}; do kill "${_p}" 2>/dev/null || true; done; }
+  if [ ${_reflect_exit} -eq 124 ]; then
+    adj_log telegram "Reflect timed out after 300s (exit 124)."
+    result="The reflection timed out after 5 minutes. Try again from inside OpenCode."
+  elif [ ${_reflect_exit} -ne 0 ] && [ -z "${result}" ]; then
+    adj_log telegram "Reflect failed with exit code ${_reflect_exit} and no output."
+    result="The reflection ran into an error (exit ${_reflect_exit}). Check adjutant.log for details."
+  fi
+  adj_log telegram "Reflect completed via Telegram (exit ${_reflect_exit}, output: $(echo "${result}" | wc -w | tr -d ' ') words)."
   msg_send_text "${result}" "${message_id}"
-  adj_log telegram "Reflect completed via Telegram."
 }
 
 # --- /help ---

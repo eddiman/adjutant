@@ -141,12 +141,12 @@ A KB is a sandboxed OpenCode workspace in its own directory. The main Adjutant a
 
 **Query a KB:**
 ```bash
-bash ~/.adjutant/scripts/capabilities/kb/query.sh "<name>" "question"
+bash "${ADJ_DIR}/scripts/capabilities/kb/query.sh" "<name>" "question"
 ```
 
 **Create a KB** (interactive wizard):
 ```bash
-bash ~/.adjutant/scripts/setup/steps/kb_wizard.sh
+bash "${ADJ_DIR}/scripts/setup/steps/kb_wizard.sh"
 ```
 
 **Scaffold structure** (generated from `templates/kb/`):

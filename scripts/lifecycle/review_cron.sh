@@ -26,4 +26,4 @@ if ! command -v opencode >/dev/null 2>&1; then
   exit 1
 fi
 
-exec opencode run --print "${REVIEW_PROMPT}" --cwd "${ADJ_DIR}"
+exec opencode run --dir "${ADJ_DIR}" "$(cat "${REVIEW_PROMPT}")"
