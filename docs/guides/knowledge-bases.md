@@ -206,12 +206,48 @@ adjutant kb list
 # Show details for a KB
 adjutant kb info my-kb
 
-# Run a generic KB-local operation
+# Run a KB-local operation by name
 adjutant kb run my-kb fetch
 
 # Remove a KB from the registry (does not delete files)
 adjutant kb remove my-kb
 ```
+
+---
+
+## KB-local operations (`scripts/`)
+
+`adjutant kb run <name> <op>` executes a script inside the KB by convention:
+
+```
+<kb-path>/scripts/<op>.sh
+```
+
+`<op>` is the operation name — lowercase letters, digits, hyphens, and underscores. The script must exist and be executable, otherwise the command fails with a clear error.
+
+For portfolio-kb, the valid operations are `fetch`, `news`, `analyze`, `reconcile`, `trade`. Running one manually:
+
+```bash
+adjutant kb run portfolio-kb fetch
+adjutant kb run portfolio-kb analyze
+adjutant kb run portfolio-kb reconcile
+```
+
+The same convention is used when scheduling a KB job without a hardcoded path:
+
+```yaml
+schedules:
+  - name: "portfolio_fetch"
+    schedule: "0 9,12,15 * * 1-5"
+    kb_name: "portfolio-kb"
+    kb_operation: "fetch"
+    log: "/path/to/portfolio-kb/state/fetch.log"
+    enabled: true
+```
+
+Adjutant resolves `kb_operation: fetch` to `<kb-path>/scripts/fetch.sh` at install and run time — no absolute paths needed in the config.
+
+**Script contract:** the operation script must output `OK:<result>` on success (exit 0) or `ERROR:<reason>` on failure (exit non-zero), matching the standard Adjutant entry script contract.
 
 ---
 
