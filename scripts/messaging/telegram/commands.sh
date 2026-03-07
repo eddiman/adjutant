@@ -156,7 +156,7 @@ cmd_reflect_request() {
   local message_id="${1:-}"
 
   touch "${PENDING_REFLECT_FILE}"
-  msg_send_text "Just so you know — a full reflection uses Opus, which costs roughly \$0.10–0.30. Reply */confirm* if you'd like me to go ahead, or send anything else to cancel." "${message_id}"
+  msg_send_text "Starting a full reflection — this goes deeper than a pulse and may take a couple of minutes. Reply */confirm* if you'd like me to go ahead, or send anything else to cancel." "${message_id}"
   adj_log telegram "Reflect requested via Telegram — awaiting confirmation."
 }
 
@@ -186,7 +186,7 @@ cmd_reflect_confirm() {
   local _reflect_exit
   local _before_lsp _after_lsp _orphan_lsp
   _before_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
-  result="$(_adj_timeout 300 "${opencode_bin}" run --dir "${ADJ_DIR}" --model claude-opus-4-5 --format json "$(cat "${reflect_prompt}")" 2>>"${ADJ_DIR}/state/adjutant.log" \
+  result="$(_adj_timeout 300 "${opencode_bin}" run --dir "${ADJ_DIR}" --format json "$(cat "${reflect_prompt}")" 2>>"${ADJ_DIR}/state/adjutant.log" \
     | grep '"type":"text"' \
     | grep -o '"text":"[^"]*"' \
     | sed 's/^"text":"//;s/"$//' \
