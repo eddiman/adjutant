@@ -187,7 +187,12 @@ run_opencode "${EXISTING_SESSION}" "${RAW_FILE}" "${ERR_FILE}" || OPENCODE_RC=$?
 
 if [[ "${OPENCODE_RC}" -eq 124 ]]; then
   rm -f "${RAW_FILE}" "${SID_FILE}" "${ERR_FILE}" "${REPLY_FILE}"
-  echo "Request timed out after 240s — the AI server may be slow. Try again in a moment."
+  _timeout_model="$(get_model)"
+  if [[ "${_timeout_model}" == anthropic/* ]]; then
+    echo "Request timed out after 240s. If this keeps happening, you may have hit your Anthropic 5-hour usage limit — check usage.anthropic.com. Otherwise the server may just be slow; try again in a moment."
+  else
+    echo "Request timed out after 240s — the AI server may be slow. Try again in a moment."
+  fi
   exit 0
 fi
 
