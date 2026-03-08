@@ -137,6 +137,10 @@ tg_handle_photo() {
     else
       msg_send_text "${vision_reply}" "${message_id}"
       adj_log telegram "Vision reply sent for msg=${message_id}"
+      
+      # Inject into session context (silent)
+      local session_msg="[PHOTO] User sent a photo${caption:+ with caption: \"${caption}\"}. Vision analysis: ${vision_reply}"
+      bash "${ADJ_DIR}/scripts/messaging/telegram/chat.sh" "${session_msg}" >/dev/null 2>>"${ADJ_DIR}/state/adjutant.log" || true
     fi
   ) </dev/null >/dev/null 2>&1 &
   disown $!

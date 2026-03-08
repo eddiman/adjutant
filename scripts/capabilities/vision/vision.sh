@@ -36,8 +36,25 @@ if [ ! -f "${IMAGE_PATH}" ]; then
   exit 1
 fi
 
-# --- Get current model ---
-get_model() {
+# --- Get vision model from config, fall back to session model ---
+get_vision_model_from_config() {
+  local in_vision=0
+  while IFS= read -r line; do
+    case "$line" in
+      *"vision:"*) in_vision=1 ;;
+      *"search:"*|*"screenshot:"*|*"news:"*|*"usage_tracking:"*) in_vision=0 ;;
+      *"model:"*)
+        if [ "$in_vision" -eq 1 ]; then
+          echo "$line" | sed 's/.*model:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/' | tr -d '\n'
+          return 0
+        fi
+        ;;
+    esac
+  done < "${ADJ_DIR}/adjutant.yaml" 2>/dev/null
+  return 1
+}
+
+get_session_model() {
   if [ -f "${MODEL_FILE}" ]; then
     cat "${MODEL_FILE}" | tr -d '\n'
   else
@@ -45,7 +62,7 @@ get_model() {
   fi
 }
 
-MODEL="$(get_model)"
+MODEL="$(get_vision_model_from_config || get_session_model)"
 adj_log "vision" "Vision analysis: ${IMAGE_PATH} using ${MODEL}"
 
 # --- Run opencode with image attached ---

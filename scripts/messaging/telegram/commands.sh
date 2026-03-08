@@ -299,8 +299,17 @@ cmd_screenshot() {
       msg_send_text "Screenshot failed: ${err_msg}" "${message_id}"
       adj_log telegram "Screenshot failed for ${url}: ${err_msg}"
     else
-      # screenshot.sh already sent the photo; just log success
+      # Parse result: OK:<filepath>:::<vision_caption>
+      local filepath vision_result
+      filepath="${result#OK:}"
+      vision_result="${filepath##*:::}"
+      filepath="${filepath%:::*}"
+      
       adj_log telegram "Screenshot sent for ${url}"
+      
+      # Inject into session context (silent)
+      local session_msg="[SCREENSHOT] User requested screenshot of ${url}. Vision analysis: ${vision_result}"
+      bash "${ADJ_DIR}/scripts/messaging/telegram/chat.sh" "${session_msg}" >/dev/null 2>>"${ADJ_DIR}/state/adjutant.log" || true
     fi
   ) </dev/null >/dev/null 2>&1 &
   disown $!

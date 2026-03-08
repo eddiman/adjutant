@@ -119,7 +119,7 @@ OK="$(echo "${SEND_RESPONSE}" | jq -r 'if .ok then "yes" else "no" end' 2>/dev/n
 
 if [ "${OK}" = "yes" ]; then
   adj_log "screenshot" "Screenshot sent via sendPhoto for ${URL}"
-  echo "OK:${OUTFILE}"
+  echo "OK:${OUTFILE}:::${CAPTION}"
   exit 0
 fi
 
@@ -137,7 +137,7 @@ OK2="$(echo "${SEND_RESPONSE2}" | jq -r 'if .ok then "yes" else "no" end' 2>/dev
 
 if [ "${OK2}" = "yes" ]; then
   adj_log "screenshot" "Screenshot sent via sendDocument for ${URL}"
-  echo "OK:${OUTFILE}"
+  echo "OK:${OUTFILE}:::${CAPTION}"
   exit 0
 fi
 
