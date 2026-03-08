@@ -188,7 +188,7 @@ bats-core, two tiers:
 - **Unit** (`tests/unit/`) — pure logic, no external calls, `ADJUTANT_HOME` isolation per test
 - **Integration** (`tests/integration/`) — mock `curl`/`opencode`/`npx` via PATH injection
 
-**Parallelism is required.** The suite has 583 tests and cannot complete within typical timeout limits (~2 min) when run serially. GNU `parallel` must be installed before running `tests/run`.
+**Parallelism is required.** The suite has 518 tests and cannot complete within typical timeout limits (~2 min) when run serially. GNU `parallel` must be installed before running `tests/run`.
 
 ```bash
 brew install parallel              # macOS (required — do this first)
@@ -204,7 +204,7 @@ bats tests/unit/lockfiles.bats
 bats tests/integration/commands.bats
 ```
 
-All 583 tests must pass before release. No CI — discipline-enforced.
+All 518 tests must pass before release. No CI — discipline-enforced.
 
 Full guide: `docs/development/testing.md`
 

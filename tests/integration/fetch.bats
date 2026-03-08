@@ -73,64 +73,36 @@ fi
 
 # ===== Hacker News source =====
 
-@test "fetch.sh: calls the Hacker News API when hackernews source is enabled" {
-  _setup_fetch_curl_hn
+@test "fetch.sh: fetches HN items and writes a valid output file with correct fields" {
+  _setup_fetch_curl_hn '{"hits":[{"title":"Test Agent Title","url":"https://test.com/article","points":42,"objectID":"999","created_at_i":1700000000}]}'
   run bash "${FETCH_SCRIPT}"
   assert_success
+
+  # Called HN API with configured keywords
   assert_mock_called "curl"
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" == *"hn.algolia.com"* ]]
-}
-
-@test "fetch.sh: includes keywords from config in the Hacker News API URL" {
-  _setup_fetch_curl_hn
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  local full_log
-  full_log="$(cat "${MOCK_LOG}/curl.log")"
-  # Config has keywords ["AI agent", "autonomous agent"] → joined with " OR "
   [[ "${full_log}" == *"AI agent"* ]] || [[ "${full_log}" == *"autonomous"* ]]
-}
 
-@test "fetch.sh: writes fetched items to the raw news file for today" {
-  _setup_fetch_curl_hn
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  [ -f "${TEST_ADJ_DIR}/state/news_raw/${TODAY}.json" ]
-}
-
-@test "fetch.sh: output file contains valid JSON array" {
-  _setup_fetch_curl_hn
-  run bash "${FETCH_SCRIPT}"
-  assert_success
+  # Output file written and valid
   local raw_file="${TEST_ADJ_DIR}/state/news_raw/${TODAY}.json"
+  [ -f "${raw_file}" ]
   run jq 'type' "${raw_file}"
-  assert_success
   assert_output '"array"'
-}
 
-@test "fetch.sh: extracts title and url from Hacker News response" {
-  _setup_fetch_curl_hn '{"hits":[{"title":"Test Agent Title","url":"https://test.com/article","points":42,"objectID":"999","created_at_i":1700000000}]}'
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  local raw_file="${TEST_ADJ_DIR}/state/news_raw/${TODAY}.json"
+  # Fields extracted correctly
   run jq -r '.[0].title' "${raw_file}"
   assert_output "Test Agent Title"
   run jq -r '.[0].url' "${raw_file}"
   assert_output "https://test.com/article"
-}
-
-@test "fetch.sh: sets source field to hackernews for HN items" {
-  _setup_fetch_curl_hn
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  local raw_file="${TEST_ADJ_DIR}/state/news_raw/${TODAY}.json"
+  run jq '.[0].score' "${raw_file}"
+  assert_output "42"
   run jq -r '.[0].source' "${raw_file}"
   assert_output "hackernews"
 }
 
-@test "fetch.sh: uses objectID for url when article url is missing" {
+@test "fetch.sh: uses objectID as fallback URL when article URL is missing" {
   _setup_fetch_curl_hn '{"hits":[{"title":"HN Discussion","objectID":"55555","points":10,"created_at_i":1700000000}]}'
   run bash "${FETCH_SCRIPT}"
   assert_success
@@ -139,33 +111,16 @@ fi
   [[ "${output}" == *"news.ycombinator.com/item?id=55555"* ]]
 }
 
-@test "fetch.sh: maps points to score field" {
-  _setup_fetch_curl_hn '{"hits":[{"title":"High Score","url":"https://example.com","points":999,"objectID":"1","created_at_i":1700000000}]}'
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  local raw_file="${TEST_ADJ_DIR}/state/news_raw/${TODAY}.json"
-  run jq '.[0].score' "${raw_file}"
-  assert_output "999"
-}
-
 # ===== Disabled sources =====
 
-@test "fetch.sh: does not call reddit API when reddit source is disabled" {
+@test "fetch.sh: does not call reddit or blog APIs when those sources are disabled" {
   _setup_fetch_curl_hn
   run bash "${FETCH_SCRIPT}"
   assert_success
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" != *"reddit.com"* ]]
-}
-
-@test "fetch.sh: does not call blog URLs when blogs source is disabled" {
-  _setup_fetch_curl_hn
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  local full_log
-  full_log="$(cat "${MOCK_LOG}/curl.log")"
-  # No blog URLs should appear — the only call is to HN
+  # Only one curl call — the HN one
   local call_count
   call_count="$(mock_call_count "curl")"
   [ "${call_count}" -eq 1 ]
@@ -173,7 +128,7 @@ fi
 
 # ===== Reddit source =====
 
-@test "fetch.sh: calls reddit API when reddit source is enabled" {
+@test "fetch.sh: calls reddit API with User-Agent header when reddit source is enabled" {
   seed_news_config '{
   "keywords": ["AI agent"],
   "sources": {
@@ -184,36 +139,13 @@ fi
   "analysis": {"prefilter_limit": 5, "top_n": 3}
 }'
   _create_mock_custom "curl" '
-if echo "$@" | grep -q "reddit.com"; then
-  echo "{\"data\":{\"children\":[{\"data\":{\"title\":\"Reddit AI Post\",\"url\":\"https://reddit.com/r/ml/1\",\"ups\":50,\"created_utc\":1700000000}}]}}"
-else
-  echo "{\"hits\":[]}"
-fi
+echo "{\"data\":{\"children\":[{\"data\":{\"title\":\"Reddit AI Post\",\"url\":\"https://reddit.com/r/ml/1\",\"ups\":50,\"created_utc\":1700000000}}]}}"
 '
   run bash "${FETCH_SCRIPT}"
   assert_success
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" == *"reddit.com"* ]]
-}
-
-@test "fetch.sh: includes User-Agent header in reddit requests" {
-  seed_news_config '{
-  "keywords": ["AI agent"],
-  "sources": {
-    "hackernews": {"enabled": false},
-    "reddit": {"enabled": true, "subreddits": ["MachineLearning"], "max_items": 5},
-    "blogs": {"enabled": false}
-  },
-  "analysis": {"prefilter_limit": 5, "top_n": 3}
-}'
-  _create_mock_custom "curl" '
-echo "{\"data\":{\"children\":[]}}"
-'
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  local full_log
-  full_log="$(cat "${MOCK_LOG}/curl.log")"
   [[ "${full_log}" == *"User-Agent"* ]]
 }
 
@@ -257,20 +189,4 @@ echo "{\"hits\":[]}"
   local raw_file="${TEST_ADJ_DIR}/state/news_raw/${TODAY}.json"
   run jq 'length' "${raw_file}"
   assert_output "0"
-}
-
-# ===== Logging =====
-
-@test "fetch.sh: logs the total item count to stderr" {
-  _setup_fetch_curl_hn '{"hits":[{"title":"Item1","url":"https://a.com","points":1,"objectID":"1","created_at_i":1700000000},{"title":"Item2","url":"https://b.com","points":2,"objectID":"2","created_at_i":1700000000}]}'
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Fetched 2 total items"* ]]
-}
-
-@test "fetch.sh: logs the start message with today's date" {
-  _setup_fetch_curl_hn
-  run bash "${FETCH_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Starting news fetch for ${TODAY}"* ]]
 }

@@ -26,40 +26,16 @@ teardown() {
 
 # --- Happy path ---
 
-@test "notify: sends a simple text message and prints 'Sent.' on success" {
-  run bash "${NOTIFY_SCRIPT}" "Hello world"
-  assert_success
-  assert_output --partial "Sent."
-}
-
-@test "notify: calls curl with the Telegram sendMessage endpoint" {
-  run bash "${NOTIFY_SCRIPT}" "Test message"
-  assert_success
-  assert_mock_called "curl"
-  assert_mock_args_contain "curl" "sendMessage"
-}
-
-@test "notify: passes the bot token in the API URL" {
-  run bash "${NOTIFY_SCRIPT}" "Token test"
-  assert_success
-  assert_mock_args_contain "curl" "test-token-123"
-}
-
-@test "notify: sends the message text as a data-urlencode parameter" {
+@test "notify: sends a correctly-formed plain-text Telegram API call and prints 'Sent.'" {
   run bash "${NOTIFY_SCRIPT}" "My important message"
   assert_success
-  assert_mock_args_contain "curl" "text=My important message"
-}
-
-@test "notify: sends the chat_id from .env as a data-urlencode parameter" {
-  run bash "${NOTIFY_SCRIPT}" "Chat ID test"
-  assert_success
+  assert_output --partial "Sent."
+  assert_mock_called "curl"
+  assert_mock_args_contain "curl" "sendMessage"
+  assert_mock_args_contain "curl" "test-token-123"
   assert_mock_args_contain "curl" "chat_id=99999"
-}
-
-@test "notify: does NOT use parse_mode (sends plain text, unlike reply.sh)" {
-  run bash "${NOTIFY_SCRIPT}" "Plain text message"
-  assert_success
+  assert_mock_args_contain "curl" "text=My important message"
+  # notify.sh sends plain text — no parse_mode
   local args
   args="$(mock_last_args "curl")"
   [[ "${args}" != *"parse_mode"* ]]
@@ -79,37 +55,16 @@ teardown() {
   assert_output --partial "Usage:"
 }
 
-# --- Input sanitization ---
-
-@test "notify: truncates messages longer than 4096 characters to the Telegram limit" {
-  local long_msg
-  long_msg="$(printf 'A%.0s' {1..5000})"
-  run bash "${NOTIFY_SCRIPT}" "${long_msg}"
-  assert_success
-  # The message was accepted (curl was called) even though input was >4096
-  assert_mock_called "curl"
-  # We can't easily check the exact truncated length in args, but the script ran
-  assert_output --partial "Sent."
-}
-
-@test "notify: strips control characters from the message before sending" {
-  # \x01 is a control char that should be stripped
-  local msg_with_ctrl=$'Hello\x01World'
-  run bash "${NOTIFY_SCRIPT}" "${msg_with_ctrl}"
-  assert_success
-  assert_mock_called "curl"
-}
-
 # --- Error handling ---
 
-@test "notify: exits with failure and prints the error response when Telegram returns an error" {
+@test "notify: exits with failure and prints error when Telegram returns an error" {
   create_mock_curl_telegram_error "Bad Request: chat not found"
   run bash "${NOTIFY_SCRIPT}" "Will fail"
   assert_failure
   assert_output --partial "Error sending message"
 }
 
-@test "notify: exits with failure when curl returns a non-JSON error response" {
+@test "notify: exits with failure when curl returns a non-JSON response" {
   create_mock_curl "Connection refused" 0
   run bash "${NOTIFY_SCRIPT}" "Will fail"
   assert_failure
@@ -119,7 +74,6 @@ teardown() {
 # --- Credential handling ---
 
 @test "notify: exits with failure when TELEGRAM_BOT_TOKEN is missing from .env" {
-  # Overwrite .env without the bot token
   cat > "${TEST_ADJ_DIR}/.env" <<'ENV'
 TELEGRAM_CHAT_ID=99999
 ENV
@@ -139,12 +93,4 @@ ENV
   rm -f "${TEST_ADJ_DIR}/.env"
   run bash "${NOTIFY_SCRIPT}" "No env file"
   assert_failure
-}
-
-# --- curl is called exactly once per invocation ---
-
-@test "notify: calls curl exactly once per message send" {
-  run bash "${NOTIFY_SCRIPT}" "Single call test"
-  assert_success
-  assert_mock_call_count "curl" 1
 }

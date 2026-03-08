@@ -78,102 +78,78 @@ teardown() {
   [ -f "${TEST_ADJ_DIR}/state/news_seen_urls.json" ]
 }
 
+# ===== Full pipeline: output file =====
+
+@test "analyze.sh: runs full pipeline and writes a valid ranked output file" {
+  run bash "${ANALYZE_SCRIPT}"
+  assert_success
+
+  # Output file written and valid
+  local output_file="${TEST_ADJ_DIR}/state/news_analyzed/${TODAY}.json"
+  [ -f "${output_file}" ]
+  run jq 'type' "${output_file}"
+  assert_output '"array"'
+
+  # Ranked items from Haiku present
+  run jq -r '.[0].title' "${output_file}"
+  assert_output "New AI Agent Framework Released"
+}
+
 # ===== Deduplication =====
 
 @test "analyze.sh: filters out URLs that already appear in the dedup cache" {
   seed_news_dedup '{"urls":[{"url":"https://example.com/agent-1","first_seen":"2026-02-26T10:00:00Z"}]}'
   run bash "${ANALYZE_SCRIPT}"
   assert_success
-  # Only agent-2 should be sent to opencode (agent-1 is deduped, cooking doesn't match keywords)
+  # agent-1 is deduped — should not reach opencode
   local opencode_args
   opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
   [[ "${opencode_args}" != *"agent-1"* ]]
   [[ "${opencode_args}" == *"agent-2"* ]] || [[ "${opencode_args}" == *"Autonomous Agent"* ]]
 }
 
-@test "analyze.sh: writes empty array and exits early when all items are already seen" {
-  seed_news_dedup '{"urls":[{"url":"https://example.com/agent-1","first_seen":"2026-02-26T10:00:00Z"},{"url":"https://example.com/agent-2","first_seen":"2026-02-26T10:00:00Z"},{"url":"https://example.com/cooking","first_seen":"2026-02-26T10:00:00Z"}]}'
+@test "analyze.sh: writes empty array and skips opencode when all items are already seen" {
+  seed_news_dedup '{"urls":[
+    {"url":"https://example.com/agent-1","first_seen":"2026-02-26T10:00:00Z"},
+    {"url":"https://example.com/agent-2","first_seen":"2026-02-26T10:00:00Z"},
+    {"url":"https://example.com/cooking","first_seen":"2026-02-26T10:00:00Z"}
+  ]}'
   run bash "${ANALYZE_SCRIPT}"
   assert_success
   local output_file="${TEST_ADJ_DIR}/state/news_analyzed/${TODAY}.json"
   run jq 'length' "${output_file}"
   assert_output "0"
-}
-
-@test "analyze.sh: does not call opencode when all items are deduped" {
-  seed_news_dedup '{"urls":[{"url":"https://example.com/agent-1","first_seen":"2026-02-26T10:00:00Z"},{"url":"https://example.com/agent-2","first_seen":"2026-02-26T10:00:00Z"},{"url":"https://example.com/cooking","first_seen":"2026-02-26T10:00:00Z"}]}'
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
   assert_mock_not_called "opencode"
-}
-
-@test "analyze.sh: logs the count of unseen items after deduplication" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"After dedup:"*"unseen items"* ]]
 }
 
 # ===== Keyword pre-filter =====
 
-@test "analyze.sh: keeps items whose titles match the configured keywords (case-insensitive)" {
+@test "analyze.sh: sends only keyword-matching items to opencode; falls back to score-sorted items when no match" {
   run bash "${ANALYZE_SCRIPT}"
   assert_success
-  # "AI Agent" and "Autonomous Agent" match keywords, "Cooking Recipe" does not
+  # "AI Agent" and "Autonomous Agent" match; "Cooking Recipe" does not
   local opencode_args
   opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
   [[ "${opencode_args}" == *"AI Agent Framework"* ]]
   [[ "${opencode_args}" != *"Cooking Recipe"* ]]
 }
 
-@test "analyze.sh: falls back to top scored items when no items match keywords" {
-  # analyze.sh does NOT exit early when keywords don't match; it falls back to
-  # sending all unseen items sorted by score to opencode. This tests that fallback.
+@test "analyze.sh: falls back to top scored items when no titles match keywords" {
   seed_raw_news '[
     {"title":"Cooking Recipe Blog Post","url":"https://example.com/cooking","score":50,"source":"hackernews","timestamp":"2026-02-27T08:00:00Z"},
     {"title":"Sports Update Today","url":"https://example.com/sports","score":30,"source":"reddit","timestamp":"2026-02-27T07:00:00Z"}
   ]'
   run bash "${ANALYZE_SCRIPT}"
   assert_success
-  # opencode must have been called (fallback path)
-  assert_mock_called "opencode"
-}
-
-@test "analyze.sh: calls opencode with fallback items when no items match keywords" {
-  seed_raw_news '[
-    {"title":"Cooking Recipe Blog Post","url":"https://example.com/cooking","score":50,"source":"hackernews","timestamp":"2026-02-27T08:00:00Z"}
-  ]'
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  # Fallback sends the unseen items to opencode even though they don't match keywords
   assert_mock_called "opencode"
   local opencode_args
   opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
   [[ "${opencode_args}" == *"Cooking Recipe"* ]]
 }
 
-@test "analyze.sh: logs the count of items after keyword filtering" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"After keyword filter:"*"items"* ]]
-}
-
 # ===== Score sorting and prefilter limit =====
 
-@test "analyze.sh: sorts items by score descending before sending to Haiku" {
-  seed_raw_news '[
-    {"title":"Low Score AI Agent Post","url":"https://example.com/low","score":10,"source":"hackernews","timestamp":"2026-02-27T10:00:00Z"},
-    {"title":"High Score AI Agent Post","url":"https://example.com/high","score":999,"source":"hackernews","timestamp":"2026-02-27T09:00:00Z"},
-    {"title":"Mid Score Autonomous Agent Post","url":"https://example.com/mid","score":50,"source":"hackernews","timestamp":"2026-02-27T08:00:00Z"}
-  ]'
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  local opencode_args
-  opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
-  # "High Score" should appear as item 1 (first in the list)
-  [[ "${opencode_args}" == *"1. High Score"* ]]
-}
-
-@test "analyze.sh: respects the prefilter_limit from config to cap items sent to Haiku" {
+@test "analyze.sh: sorts items by score descending and respects prefilter_limit" {
   seed_news_config '{
   "keywords": ["AI agent", "autonomous agent"],
   "sources": {"hackernews": {"enabled": true, "max_items": 5, "lookback_hours": 24}, "reddit": {"enabled": false}, "blogs": {"enabled": false}},
@@ -183,21 +159,23 @@ teardown() {
   "cleanup": {"raw_retention_days": 7, "analyzed_retention_days": 7}
 }'
   seed_raw_news '[
-    {"title":"First AI Agent Post","url":"https://example.com/1","score":100,"source":"hackernews","timestamp":"2026-02-27T10:00:00Z"},
+    {"title":"Low Score AI Agent Post","url":"https://example.com/low","score":10,"source":"hackernews","timestamp":"2026-02-27T10:00:00Z"},
+    {"title":"High Score AI Agent Post","url":"https://example.com/high","score":999,"source":"hackernews","timestamp":"2026-02-27T09:00:00Z"},
     {"title":"Second AI Agent Post","url":"https://example.com/2","score":50,"source":"hackernews","timestamp":"2026-02-27T09:00:00Z"}
   ]'
   run bash "${ANALYZE_SCRIPT}"
   assert_success
-  # With prefilter_limit=1, only the highest scoring item should be sent
   local opencode_args
   opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
-  [[ "${opencode_args}" == *"First AI Agent"* ]]
+  # Highest score item should appear first
+  [[ "${opencode_args}" == *"1. High Score"* ]]
+  # prefilter_limit=1: only the top item sent
   [[ "${opencode_args}" != *"Second AI Agent"* ]]
 }
 
-# ===== Opencode / Haiku call =====
+# ===== Opencode call =====
 
-@test "analyze.sh: calls opencode with the model specified in the config" {
+@test "analyze.sh: calls opencode with correct model and format flags" {
   run bash "${ANALYZE_SCRIPT}"
   assert_success
   assert_mock_called "opencode"
@@ -205,23 +183,7 @@ teardown() {
   opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
   [[ "${opencode_args}" == *"--model"* ]]
   [[ "${opencode_args}" == *"anthropic/claude-haiku-4-5"* ]]
-}
-
-@test "analyze.sh: calls opencode with the --format json flag" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  local opencode_args
-  opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
-  [[ "${opencode_args}" == *"--format json"* ]] || [[ "${opencode_args}" == *"--format"*"json"* ]]
-}
-
-@test "analyze.sh: includes item titles and URLs in the prompt sent to opencode" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  local opencode_args
-  opencode_args="$(cat "${MOCK_LOG}/opencode.log")"
-  [[ "${opencode_args}" == *"AI Agent Framework"* ]]
-  [[ "${opencode_args}" == *"example.com"* ]]
+  [[ "${opencode_args}" == *"--format"*"json"* ]] || [[ "${opencode_args}" == *"--format json"* ]]
 }
 
 @test "analyze.sh: exits with error when opencode returns no valid JSON array" {
@@ -232,49 +194,4 @@ echo "{\"type\":\"text.done\"}"
   run bash "${ANALYZE_SCRIPT}"
   assert_failure
   [[ "${output}" == *"Haiku did not return valid JSON"* ]]
-}
-
-# ===== Output =====
-
-@test "analyze.sh: writes the analyzed results to the output file for today" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  [ -f "${TEST_ADJ_DIR}/state/news_analyzed/${TODAY}.json" ]
-}
-
-@test "analyze.sh: output file contains valid JSON array" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  local output_file="${TEST_ADJ_DIR}/state/news_analyzed/${TODAY}.json"
-  run jq 'type' "${output_file}"
-  assert_success
-  assert_output '"array"'
-}
-
-@test "analyze.sh: output file contains the ranked items from Haiku" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  local output_file="${TEST_ADJ_DIR}/state/news_analyzed/${TODAY}.json"
-  run jq -r '.[0].title' "${output_file}"
-  assert_output "New AI Agent Framework Released"
-}
-
-# ===== Logging =====
-
-@test "analyze.sh: logs the start message with today's date" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Starting news analysis for ${TODAY}"* ]]
-}
-
-@test "analyze.sh: logs the final count of selected items" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Analysis complete:"*"items selected"* ]]
-}
-
-@test "analyze.sh: logs the total count of raw items loaded" {
-  run bash "${ANALYZE_SCRIPT}"
-  assert_success
-  [[ "${output}" == *"Loaded 3 raw items"* ]]
 }

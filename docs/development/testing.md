@@ -20,7 +20,7 @@ Tests are organized into three tiers based on isolation requirements:
 
 ## CI Policy
 
-CI automation is **intentionally absent**. The 583-test bats suite spawns subprocesses heavily. GitHub Actions runners would consume disproportionate minutes for a single-maintainer project.
+CI automation is **intentionally absent**. The 518-test bats suite spawns subprocesses heavily. GitHub Actions runners would consume disproportionate minutes for a single-maintainer project.
 
 **Parallelism is required.** Running the full suite serially takes too long and will be killed by shell or tool timeouts before completing. GNU `parallel` must be installed:
 
@@ -35,7 +35,7 @@ apt install parallel    # Debian/Ubuntu
 tests/run
 ```
 
-All 583 tests must pass. Any failure blocks the release. This is enforced by discipline, not automation. See [Design Decisions](../architecture/design-decisions.md) for the rationale.
+All 518 tests must pass. Any failure blocks the release. This is enforced by discipline, not automation. See [Design Decisions](../architecture/design-decisions.md) for the rationale.
 
 ---
 
@@ -81,7 +81,7 @@ bats --tap tests/unit/
 
 **Why parallelism is mandatory for the full suite:**
 
-The suite has 583 tests. Running serially takes several minutes and will be killed by shell or agent timeout before completing. `tests/run` enforces this — it exits with an error if `parallel` is not installed rather than falling back to serial execution.
+The suite has 518 tests. Running serially takes several minutes and will be killed by shell or agent timeout before completing. `tests/run` enforces this — it exits with an error if `parallel` is not installed rather than falling back to serial execution.
 
 **Recommended workflow:**
 

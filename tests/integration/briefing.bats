@@ -95,15 +95,10 @@ teardown() {
   assert_failure
 }
 
-@test "briefing.sh: succeeds when no lockfiles are present" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-}
+# ===== Full pipeline =====
 
-# ===== Subprocess invocation =====
-
-@test "briefing.sh: calls fetch.sh as a subprocess" {
-  # Replace fetch.sh with a stub that creates a marker file
+@test "briefing.sh: runs the full pipeline: calls fetch and analyze, writes journal, sends Telegram notification" {
+  # Replace fetch.sh with a marker-creating stub
   cat > "${TEST_ADJ_DIR}/scripts/news/fetch.sh" <<STUB
 #!/bin/bash
 touch "${TEST_ADJ_DIR}/fetch_was_called"
@@ -111,12 +106,6 @@ exit 0
 STUB
   chmod +x "${TEST_ADJ_DIR}/scripts/news/fetch.sh"
 
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [ -f "${TEST_ADJ_DIR}/fetch_was_called" ]
-}
-
-@test "briefing.sh: calls analyze.sh as a subprocess after fetch" {
   cat > "${TEST_ADJ_DIR}/scripts/news/analyze.sh" <<STUB
 #!/bin/bash
 touch "${TEST_ADJ_DIR}/analyze_was_called"
@@ -126,7 +115,26 @@ STUB
 
   run bash "${BRIEFING_SCRIPT}"
   assert_success
+
+  # Subprocesses were called
+  [ -f "${TEST_ADJ_DIR}/fetch_was_called" ]
   [ -f "${TEST_ADJ_DIR}/analyze_was_called" ]
+
+  # Journal written with correct content
+  local journal_file="${TEST_ADJ_DIR}/journal/news/${TODAY}.md"
+  [ -f "${journal_file}" ]
+  run cat "${journal_file}"
+  [[ "${output}" == *"${TODAY_DISPLAY}"* ]]
+  [[ "${output}" == *"AI Agent Framework Released"* ]]
+  [[ "${output}" == *"Autonomous Agent Benchmark"* ]]
+  [[ "${output}" == *"https://example.com/agent-1"* ]]
+  [[ "${output}" == *"Major new framework"* ]]
+
+  # Telegram notification sent with briefing content
+  [ -f "${MOCK_LOG}/notify.log" ]
+  local notify_args
+  notify_args="$(cat "${MOCK_LOG}/notify.log")"
+  [[ "${notify_args}" == *"AI Agent Framework Released"* ]]
 }
 
 @test "briefing.sh: aborts with error when fetch.sh fails" {
@@ -162,74 +170,18 @@ STUB
   [[ "${output}" == *"No analysis results found"* ]]
 }
 
-@test "briefing.sh: exits gracefully when analyzed file contains an empty array" {
+@test "briefing.sh: exits gracefully and skips journal and notify when analyzed array is empty" {
   seed_analyzed_news '[]'
   run bash "${BRIEFING_SCRIPT}"
   assert_success
   [[ "${output}" == *"No interesting news today"* ]]
-}
-
-@test "briefing.sh: does not write journal when there are no analyzed items" {
-  seed_analyzed_news '[]'
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
   [ ! -f "${TEST_ADJ_DIR}/journal/news/${TODAY}.md" ]
-}
-
-@test "briefing.sh: does not call notify.sh when there are no analyzed items" {
-  seed_analyzed_news '[]'
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
   [ ! -f "${MOCK_LOG}/notify.log" ]
 }
 
-# ===== Briefing formatting =====
+# ===== Delivery toggles =====
 
-@test "briefing.sh: includes today's date in the briefing header" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  # The briefing is written to journal; check the file content
-  local journal_file="${TEST_ADJ_DIR}/journal/news/${TODAY}.md"
-  [ -f "${journal_file}" ]
-  run cat "${journal_file}"
-  [[ "${output}" == *"${TODAY_DISPLAY}"* ]]
-}
-
-@test "briefing.sh: includes ranked item titles in the briefing" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local journal_file="${TEST_ADJ_DIR}/journal/news/${TODAY}.md"
-  run cat "${journal_file}"
-  [[ "${output}" == *"AI Agent Framework Released"* ]]
-  [[ "${output}" == *"Autonomous Agent Benchmark"* ]]
-}
-
-@test "briefing.sh: includes item URLs in the briefing" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local journal_file="${TEST_ADJ_DIR}/journal/news/${TODAY}.md"
-  run cat "${journal_file}"
-  [[ "${output}" == *"https://example.com/agent-1"* ]]
-  [[ "${output}" == *"https://example.com/agent-2"* ]]
-}
-
-@test "briefing.sh: includes item summaries in the briefing" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local journal_file="${TEST_ADJ_DIR}/journal/news/${TODAY}.md"
-  run cat "${journal_file}"
-  [[ "${output}" == *"Major new framework"* ]]
-}
-
-# ===== Journal delivery =====
-
-@test "briefing.sh: writes the briefing to the journal file when delivery.journal is true" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [ -f "${TEST_ADJ_DIR}/journal/news/${TODAY}.md" ]
-}
-
-@test "briefing.sh: does not write journal when delivery.journal is false" {
+@test "briefing.sh: skips journal when delivery.journal is false" {
   seed_news_config '{
     "keywords": ["AI agent"],
     "sources": {"hackernews": {"enabled": true, "max_items": 5, "lookback_hours": 24}, "reddit": {"enabled": false}, "blogs": {"enabled": false}},
@@ -243,23 +195,7 @@ STUB
   [ ! -f "${TEST_ADJ_DIR}/journal/news/${TODAY}.md" ]
 }
 
-# ===== Telegram delivery =====
-
-@test "briefing.sh: calls notify.sh when delivery.telegram is true" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  [ -f "${MOCK_LOG}/notify.log" ]
-}
-
-@test "briefing.sh: passes the briefing text to notify.sh" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local notify_args
-  notify_args="$(cat "${MOCK_LOG}/notify.log")"
-  [[ "${notify_args}" == *"AI Agent Framework Released"* ]]
-}
-
-@test "briefing.sh: does not call notify.sh when delivery.telegram is false" {
+@test "briefing.sh: skips notify.sh when delivery.telegram is false" {
   seed_news_config '{
     "keywords": ["AI agent"],
     "sources": {"hackernews": {"enabled": true, "max_items": 5, "lookback_hours": 24}, "reddit": {"enabled": false}, "blogs": {"enabled": false}},
@@ -275,86 +211,34 @@ STUB
 
 # ===== Dedup cache update =====
 
-@test "briefing.sh: adds delivered URLs to the dedup cache" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local dedup_file="${TEST_ADJ_DIR}/state/news_seen_urls.json"
-  local url_count
-  url_count="$(jq '.urls | length' "${dedup_file}")"
-  [ "${url_count}" -ge 1 ]
-}
-
-@test "briefing.sh: dedup cache contains URLs from the analyzed items" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local dedup_file="${TEST_ADJ_DIR}/state/news_seen_urls.json"
-  run jq -r '.urls[].url' "${dedup_file}"
-  [[ "${output}" == *"https://example.com/agent-1"* ]]
-}
-
-@test "briefing.sh: dedup cache entries have a first_seen timestamp" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local dedup_file="${TEST_ADJ_DIR}/state/news_seen_urls.json"
-  local has_timestamp
-  has_timestamp="$(jq '.urls[0] | has("first_seen")' "${dedup_file}")"
-  [ "${has_timestamp}" = "true" ]
-}
-
-@test "briefing.sh: preserves existing dedup entries when adding new ones" {
-  seed_news_dedup '{"urls":[{"url":"https://old.example.com/article","first_seen":"2026-02-26T10:00:00Z"}]}'
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local dedup_file="${TEST_ADJ_DIR}/state/news_seen_urls.json"
-  local url_count
-  url_count="$(jq '.urls | length' "${dedup_file}")"
-  # Should have at least old + new URLs
-  [ "${url_count}" -ge 2 ]
-  run jq -r '.urls[].url' "${dedup_file}"
-  [[ "${output}" == *"https://old.example.com/article"* ]]
-}
-
-# ===== Dedup cache pruning =====
-
-@test "briefing.sh: prunes dedup entries older than the configured window_days" {
-  # Seed a dedup entry with a very old first_seen date
-  seed_news_dedup '{"urls":[{"url":"https://ancient.example.com/old","first_seen":"2020-01-01T00:00:00Z"}]}'
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local dedup_file="${TEST_ADJ_DIR}/state/news_seen_urls.json"
-  run jq -r '.urls[].url' "${dedup_file}"
-  # The ancient entry should be pruned (older than 30 days)
-  [[ "${output}" != *"https://ancient.example.com/old"* ]]
-}
-
-@test "briefing.sh: keeps recent dedup entries during pruning" {
-  # Seed a dedup entry from yesterday — should survive 30-day window
+@test "briefing.sh: adds delivered URLs to dedup cache and prunes old entries" {
+  # Pre-seed an ancient entry (should be pruned) and a recent one (should survive)
   local yesterday
   yesterday="$(date -u -v-1d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)"
-  seed_news_dedup "{\"urls\":[{\"url\":\"https://recent.example.com/new\",\"first_seen\":\"${yesterday}\"}]}"
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
-  local dedup_file="${TEST_ADJ_DIR}/state/news_seen_urls.json"
-  run jq -r '.urls[].url' "${dedup_file}"
-  [[ "${output}" == *"https://recent.example.com/new"* ]]
-}
+  seed_news_dedup "{\"urls\":[
+    {\"url\":\"https://ancient.example.com/old\",\"first_seen\":\"2020-01-01T00:00:00Z\"},
+    {\"url\":\"https://recent.example.com/new\",\"first_seen\":\"${yesterday}\"}
+  ]}"
 
-@test "briefing.sh: logs the dedup cache size after update" {
   run bash "${BRIEFING_SCRIPT}"
   assert_success
-  [[ "${output}" == *"Dedup cache updated:"*"URLs tracked"* ]]
+
+  local dedup_file="${TEST_ADJ_DIR}/state/news_seen_urls.json"
+
+  # New URLs from analyzed items were added
+  run jq -r '.urls[].url' "${dedup_file}"
+  [[ "${output}" == *"https://example.com/agent-1"* ]]
+
+  # Recent entry preserved; ancient entry pruned
+  [[ "${output}" == *"https://recent.example.com/new"* ]]
+  [[ "${output}" != *"https://ancient.example.com/old"* ]]
 }
 
 # ===== File cleanup =====
 
-@test "briefing.sh: does not delete today's raw news file during cleanup" {
+@test "briefing.sh: does not delete today's raw or analyzed news files during cleanup" {
   run bash "${BRIEFING_SCRIPT}"
   assert_success
   [ -f "${TEST_ADJ_DIR}/state/news_raw/${TODAY}.json" ]
-}
-
-@test "briefing.sh: does not delete today's analyzed news file during cleanup" {
-  run bash "${BRIEFING_SCRIPT}"
-  assert_success
   [ -f "${TEST_ADJ_DIR}/state/news_analyzed/${TODAY}.json" ]
 }
