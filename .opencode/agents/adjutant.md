@@ -42,6 +42,8 @@ When asked to search the web or look something up: `bash scripts/capabilities/se
 ## Knowledge Bases
 
 Query: `bash scripts/capabilities/kb/query.sh "<name>" "question"`
+
+**One query per message.** Each KB query spawns a heavyweight process. Never issue more than one `kb/query.sh` call per message turn. Batch all questions into a single comprehensive query string instead of multiple sequential calls.
 Create: **always use the CLI** — `./adjutant kb create --quick --name <name> --path <path> --desc "<desc>" [--model inherit] [--access read-write]`. Never use the wizard script directly, never write KB files manually.
 
 **KB file writes — never touch KB directories directly.** When a KB needs files written or updated (initial population, reflect, restructure), instruct the KB sub-agent to do it via `./adjutant kb query <name> "write/update <file> with ..."`. The sub-agent owns its directory. Adjutant never writes, edits, or runs scripts inside a KB path — not via Write tool, not via bash/python/cat redirects, nothing.

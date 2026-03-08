@@ -100,9 +100,11 @@ adj_log telegram "Listener started (offset=${OFFSET})"
 # Startup notification is sent by startup.sh — not here.
 # Notifying here would spam on every crash-restart.
 
-# Reaper counter: run opencode_reap every ~50 poll cycles (~8 minutes)
+# Reaper counter: run opencode_reap every ~6 poll cycles (~1 minute)
+# Interval reduced from 50 (~8 min) — runaway language-servers can consume
+# several GB RSS within a minute, so 8 minutes was far too slow to catch them.
 _REAP_COUNTER=0
-_REAP_INTERVAL=50
+_REAP_INTERVAL=6
 
 # --- Main poll loop ---
 while true; do

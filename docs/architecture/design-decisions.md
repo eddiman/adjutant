@@ -73,7 +73,7 @@ Sourcing a `.env` file executes its contents as shell code. A malformed or tampe
 
 ## CI is intentionally absent
 
-The 529-test bats suite spawns subprocesses heavily and takes 60–90 seconds locally. GitHub Actions runners would consume disproportionate minutes for what is a single-maintainer personal tool.
+The 518-test bats suite spawns subprocesses heavily and takes 60–90 seconds locally. GitHub Actions runners would consume disproportionate minutes for what is a single-maintainer personal tool.
 
 The pre-release gate is a clean local run:
 
@@ -81,7 +81,7 @@ The pre-release gate is a clean local run:
 bats tests/unit/ tests/integration/
 ```
 
-All 529 tests must pass before tagging a release. This is enforced by discipline, not automation. The tradeoff — no per-commit CI — is acceptable given the project's scale and audience.
+All 518 tests must pass before tagging a release. This is enforced by discipline, not automation. The tradeoff — no per-commit CI — is acceptable given the project's scale and audience.
 
 ---
 
@@ -135,3 +135,13 @@ This is called in `analyze.sh` before the Haiku analysis step. If the restart fa
 When a call is killed by timeout, the diff still runs — but the language servers may already have been reparented to the `opencode web` process (their grandparent) before cleanup. The old reaper only killed servers whose parent was PID 1 or gone, so these looked legitimate and were never reaped.
 
 The fix: `opencode_reap` now also kills any language server whose direct parent is the `opencode web` PID. A language server that has a *live* `opencode run` as its parent is fine — that run is still working. One directly under the web server means its run has already exited, so it's stranded.
+
+## Reaper kills language servers that exceed the RSS memory threshold
+
+A second failure mode: a language-server process that is a *live* child of the current healthy `opencode web` — not an orphan, not stranded — but whose V8 heap has entered a runaway growth loop. The previous reaper rules correctly left these alone (they looked legitimate), allowing them to grow to hundreds of MB or more over minutes.
+
+The fix: `opencode_reap` now checks the RSS (resident set size) of every language-server process. Any process exceeding `_OPENCODE_LANGSERVER_RSS_LIMIT_KB` (default 512 MB, overridable via `OPENCODE_LANGSERVER_RSS_LIMIT_KB`) is killed immediately, regardless of parentage.
+
+This is safe because bash-language-server and yaml-language-server are non-critical background helpers — they provide shell/YAML intelligence for the editor experience. Adjutant never calls them directly. `opencode web` will respawn a fresh language server on next need. Killing a runaway instance causes no interruption to Telegram I/O, heartbeat, or the news pipeline.
+
+The kill is logged: `adj_log "opencode" "Killed runaway language-server PID <pid> (RSS <n> KB > limit <m> KB)"` so incidents are visible in `state/adjutant.log`.

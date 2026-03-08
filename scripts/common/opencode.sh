@@ -137,15 +137,24 @@ opencode_run() {
   return ${_rc}
 }
 
-# --- opencode_reap: periodic cleanup of ALL orphaned language servers ---
+# --- opencode_reap: periodic cleanup of ALL orphaned or runaway language servers ---
 #
 # Kills any bash-language-server or yaml-language-server that is:
 #   a) parented to PID 1 or a gone process (classic orphan), OR
 #   b) parented directly to the opencode web server — meaning the transient
 #      opencode run that spawned it has already exited, leaving it stranded.
+#   c) exceeding the RSS memory threshold (_OPENCODE_LANGSERVER_RSS_LIMIT_KB),
+#      regardless of parentage — this kills V8 heap runaways even when they are
+#      children of the current healthy web process. The language server is
+#      non-critical and web will respawn it on next need.
+#
+# Default RSS limit: 512 MB (524288 KB). Override via env:
+#   OPENCODE_LANGSERVER_RSS_LIMIT_KB=524288
 #
 # Call from the listener loop every N cycles as a safety net.
 #
+_OPENCODE_LANGSERVER_RSS_LIMIT_KB="${OPENCODE_LANGSERVER_RSS_LIMIT_KB:-524288}"
+
 opencode_reap() {
   local _web_pid
   _web_pid="$(_opencode_web_pid)"
@@ -154,11 +163,23 @@ opencode_reap() {
   _pids="$(pgrep -f 'bash-language-server\|yaml-language-server' 2>/dev/null || true)"
   [ -z "${_pids}" ] && return 0
 
-  local _pid _ppid _killed=0
+  local _pid _ppid _rss _killed=0
   for _pid in ${_pids}; do
     _ppid="$(ps -o ppid= -p "${_pid}" 2>/dev/null | tr -d ' ')" || continue
 
-    # Orphaned: parent is gone or is PID 1
+    # Rule (c): RSS runaway — kill regardless of parentage.
+    # ps -o rss= returns KB on both macOS and Linux.
+    _rss="$(ps -o rss= -p "${_pid}" 2>/dev/null | tr -d ' ')"
+    if [[ "${_rss}" =~ ^[0-9]+$ ]] && [ "${_rss}" -gt "${_OPENCODE_LANGSERVER_RSS_LIMIT_KB}" ]; then
+      kill -TERM "${_pid}" 2>/dev/null || true
+      _killed=$((_killed + 1))
+      if type adj_log &>/dev/null; then
+        adj_log "opencode" "Killed runaway language-server PID ${_pid} (RSS ${_rss} KB > limit ${_OPENCODE_LANGSERVER_RSS_LIMIT_KB} KB)"
+      fi
+      continue
+    fi
+
+    # Rule (a): Orphaned — parent is gone or is PID 1.
     if [ "${_ppid}" = "1" ] || ! kill -0 "${_ppid}" 2>/dev/null; then
       kill -TERM "${_pid}" 2>/dev/null || true
       _killed=$((_killed + 1))
@@ -181,7 +202,7 @@ opencode_reap() {
       kill -0 "${_pid}" 2>/dev/null && kill -9 "${_pid}" 2>/dev/null || true
     done
     if type adj_log &>/dev/null; then
-      adj_log "opencode" "Reaped ${_killed} orphaned language-server process(es)"
+      adj_log "opencode" "Reaped ${_killed} language-server process(es) (orphan or RSS runaway)"
     fi
   fi
 }
@@ -209,7 +230,7 @@ opencode_health_check() {
   fi
 
   local _probe_timeout=5
-  local _api_probe_timeout=15
+  local _api_probe_timeout=8   # ping should be fast; 15 s was too generous given 120 s bash ceiling
   local _http_rc=0
 
   # Stage 1: HTTP ping — verify the web process is alive at all.
@@ -257,17 +278,17 @@ opencode_health_check() {
   bash "${_restart_sh}" >/dev/null 2>&1 &
   disown $!
 
-  # Wait up to 30s for the server to come back up (restart.sh stops + starts
+  # Wait up to 20s for the server to come back up (restart.sh stops + starts
   # both the Telegram listener and opencode web, so allow extra time).
   local _wait=0
-  while [ "${_wait}" -lt 30 ]; do
+  while [ "${_wait}" -lt 20 ]; do
     sleep 1
     _wait=$((_wait + 1))
     curl -sf --max-time "${_probe_timeout}" "http://localhost:${_OPENCODE_WEB_PORT}/" >/dev/null 2>&1 && return 0
   done
 
   if type adj_log &>/dev/null; then
-    adj_log "opencode" "opencode web did not recover within 30s after restart.sh"
+    adj_log "opencode" "opencode web did not recover within 20s after restart.sh"
   fi
   return 1
 }

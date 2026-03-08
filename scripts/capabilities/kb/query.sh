@@ -22,7 +22,9 @@ source "${SCRIPT_DIR}/../../common/opencode.sh"
 source "${SCRIPT_DIR}/manage.sh"
 
 # --- Configuration ---
-KB_QUERY_TIMEOUT=120  # seconds
+# Keep well under the 120 s bash tool ceiling: health check (~5-20 s) +
+# query timeout must not exceed ~110 s total. 80 s leaves ~30 s headroom.
+KB_QUERY_TIMEOUT=80  # seconds
 
 # --- Model Resolution ---
 # Resolves the model for a KB query.
@@ -167,6 +169,10 @@ kb_query() {
   local model
   model="$(_resolve_model "${kb_model}")"
 
+  if type adj_log &>/dev/null; then
+    adj_log "kb" "Query start: kb='${kb_path##*/}' model='${model}' timeout=${KB_QUERY_TIMEOUT}s"
+  fi
+
   # Build opencode args
   local args=(run --agent kb --dir "${kb_path}" --format json --model "${model}")
   args+=("${query}")
@@ -176,7 +182,12 @@ kb_query() {
   raw_file="$(mktemp)"
   err_file="$(mktemp)"
 
-  OPENCODE_TIMEOUT="${KB_QUERY_TIMEOUT}" opencode_run "${args[@]}" > "${raw_file}" 2>"${err_file}" || true
+  local _query_rc=0
+  OPENCODE_TIMEOUT="${KB_QUERY_TIMEOUT}" opencode_run "${args[@]}" > "${raw_file}" 2>"${err_file}" || _query_rc=$?
+
+  if [ "${_query_rc}" -ne 0 ] && type adj_log &>/dev/null; then
+    adj_log "kb" "Query exited non-zero rc=${_query_rc} (kb='${kb_path##*/}', may have timed out at ${KB_QUERY_TIMEOUT}s)"
+  fi
 
   # Parse output
   local reply
@@ -186,8 +197,15 @@ kb_query() {
   rm -f "${raw_file}" "${err_file}"
 
   if [ -z "${reply}" ]; then
+    if type adj_log &>/dev/null; then
+      adj_log "kb" "Query returned empty reply (kb='${kb_path##*/}', rc=${_query_rc})"
+    fi
     echo "The knowledge base did not return an answer. It may not contain relevant information for this query."
     return 0
+  fi
+
+  if type adj_log &>/dev/null; then
+    adj_log "kb" "Query complete: kb='${kb_path##*/}' reply_len=${#reply}"
   fi
 
   printf '%s' "${reply}"
