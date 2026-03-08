@@ -21,8 +21,8 @@ All runtime state lives under `~/.adjutant/state/`. These files are gitignored a
 | `pending_reflect` | Marker file indicating a `/reflect` confirmation is awaited. |
 | `last_heartbeat.json` | Timestamp and summary of the last `/pulse` or `/reflect` run. |
 | `usage_log.jsonl` | Rolling token usage log for session and weekly estimates. |
-| `opencode_web.pid` | PID of the running `opencode web --mdns` server, written by `startup.sh`. Read by `opencode.sh` to identify the web process for health checks and orphan reaping. |
-| `opencode_web.log` | stdout/stderr of the `opencode web` server. Rotated on restart. |
+| `opencode_web.pid` | PID of the running `opencode serve --mdns` server, written by `startup.sh`. Read by `opencode.sh` to identify the serve process for health checks and orphan reaping. |
+| `opencode_web.log` | stdout/stderr of the `opencode serve` server. Rotated on restart. |
 
 ---
 

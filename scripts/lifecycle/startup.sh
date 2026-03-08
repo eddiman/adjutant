@@ -10,6 +10,10 @@ source "${COMMON}/paths.sh"
 source "${COMMON}/lockfiles.sh"
 source "${COMMON}/logging.sh"
 
+# Port for opencode serve — must match _OPENCODE_WEB_PORT in scripts/common/opencode.sh
+# Override by exporting OPENCODE_WEB_PORT before calling startup.sh.
+_STARTUP_WEB_PORT="${OPENCODE_WEB_PORT:-4096}"
+
 TIMESTAMP=$(date "+%H:%M:%S %d.%m.%Y")
 LOGFILE="${ADJ_DIR}/journal/$(date +%Y-%m-%d).md"
 
@@ -96,37 +100,37 @@ fi
 # but stale processes may still be running from the previous session.
 _owned_web_pid=""
 [ -f "${ADJ_DIR}/state/opencode_web.pid" ] && _owned_web_pid="$(cat "${ADJ_DIR}/state/opencode_web.pid" 2>/dev/null | tr -d '[:space:]')"
-_running_web_pid="$(pgrep -f "opencode web" 2>/dev/null | head -1)"
+_running_web_pid="$(pgrep -f "opencode serve" 2>/dev/null | head -1)"
 
 if [ -n "${_running_web_pid}" ]; then
   if [ -n "${_owned_web_pid}" ] && [ "${_running_web_pid}" = "${_owned_web_pid}" ] && kill -0 "${_owned_web_pid}" 2>/dev/null; then
     echo "✓ OpenCode web server already running (PID ${_owned_web_pid})"
   else
     # Orphan — kill all instances and start fresh
-    echo "  Killing orphaned opencode web process(es)..."
-    pkill -TERM -f "opencode web" 2>/dev/null || true
+    echo "  Killing orphaned opencode serve process(es)..."
+    pkill -TERM -f "opencode serve" 2>/dev/null || true
     sleep 2
-    pkill -KILL -f "opencode web" 2>/dev/null || true
+    pkill -KILL -f "opencode serve" 2>/dev/null || true
     rm -f "${ADJ_DIR}/state/opencode_web.pid"
-    echo "  Starting OpenCode web server..."
-    nohup opencode web --mdns > "${ADJ_DIR}/state/opencode_web.log" 2>&1 &
+    echo "  Starting OpenCode server..."
+    nohup opencode serve --port "${_STARTUP_WEB_PORT}" --mdns > "${ADJ_DIR}/state/opencode_web.log" 2>&1 &
     echo $! > "${ADJ_DIR}/state/opencode_web.pid"
     sleep 2
-    if pgrep -f "opencode web" > /dev/null 2>&1; then
-      echo "✓ OpenCode web server started (PID $(cat "${ADJ_DIR}/state/opencode_web.pid"))"
+    if pgrep -f "opencode serve" > /dev/null 2>&1; then
+      echo "✓ OpenCode server started (PID $(cat "${ADJ_DIR}/state/opencode_web.pid"))"
     else
-      echo "⚠ OpenCode web server failed to start (check ${ADJ_DIR}/state/opencode_web.log)"
+      echo "⚠ OpenCode server failed to start (check ${ADJ_DIR}/state/opencode_web.log)"
     fi
   fi
 else
-  echo "  Starting OpenCode web server..."
-  nohup opencode web --mdns > "${ADJ_DIR}/state/opencode_web.log" 2>&1 &
+  echo "  Starting OpenCode server..."
+  nohup opencode serve --port "${_STARTUP_WEB_PORT}" --mdns > "${ADJ_DIR}/state/opencode_web.log" 2>&1 &
   echo $! > "${ADJ_DIR}/state/opencode_web.pid"
   sleep 2
-  if pgrep -f "opencode web" > /dev/null 2>&1; then
-    echo "✓ OpenCode web server started (PID $(cat "${ADJ_DIR}/state/opencode_web.pid"))"
+  if pgrep -f "opencode serve" > /dev/null 2>&1; then
+    echo "✓ OpenCode server started (PID $(cat "${ADJ_DIR}/state/opencode_web.pid"))"
   else
-    echo "⚠ OpenCode web server failed to start (check ${ADJ_DIR}/state/opencode_web.log)"
+    echo "⚠ OpenCode server failed to start (check ${ADJ_DIR}/state/opencode_web.log)"
   fi
 fi
 
@@ -144,7 +148,7 @@ if [ -n "${_sync_pid}" ]; then
   fi
 fi
 
-_sync_web_pid="$(pgrep -f "opencode web" 2>/dev/null | head -1)"
+_sync_web_pid="$(pgrep -f "opencode serve" 2>/dev/null | head -1)"
 if [ -n "${_sync_web_pid}" ] && [ ! -f "${ADJ_DIR}/state/opencode_web.pid" ]; then
   echo "${_sync_web_pid}" > "${ADJ_DIR}/state/opencode_web.pid"
 fi

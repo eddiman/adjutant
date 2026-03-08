@@ -14,7 +14,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 |---------|-------------|
 | `/status` | Shows whether Adjutant is RUNNING or PAUSED, plus the last heartbeat timestamp |
 | `/pulse` | Queries each registered KB for a quick status update — current state, blockers, and upcoming deadlines. No direct file access; all project knowledge flows through KB sub-agents. |
-| `/reflect` | Requests a deep reflection using the expensive model (Opus). Queries each KB in depth and encourages read-write KBs to update stale data. Adjutant will warn you of the cost and ask for `/confirm` before proceeding |
+| `/reflect` | Requests a deep reflection. Queries each KB in depth and encourages read-write KBs to update stale data. Adjutant will ask for `/confirm` before proceeding |
 | `/confirm` | Confirms a pending `/reflect`. If you don't send this, the reflection is cancelled |
 
 ### Control

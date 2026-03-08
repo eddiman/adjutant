@@ -7,6 +7,13 @@
 #   tests/run integration  # integration tests only
 #   tests/run <file.bats>  # single file
 #   tests/run --filter "pattern" [tier]
+#
+# IMPORTANT: The full suite MUST be run with parallelism. Running serially
+# causes the suite to exceed typical timeout limits (120–300 s) and will be
+# killed before all 583 tests complete. Install GNU parallel first:
+#
+#   brew install parallel   # macOS
+#   apt install parallel    # Debian/Ubuntu
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -14,13 +21,21 @@ UNIT_DIR="${SCRIPT_DIR}/unit"
 INT_DIR="${SCRIPT_DIR}/integration"
 
 # ---------------------------------------------------------------------------
-# Parallelism: use --jobs if GNU parallel or rush is available
+# Parallelism: GNU parallel is REQUIRED for the full suite.
+# Without it the suite takes too long and will be killed mid-run.
 # ---------------------------------------------------------------------------
 JOBS_FLAG=""
 if command -v parallel >/dev/null 2>&1; then
   JOBS_FLAG="--jobs 8"
-elif command -v rush >/dev/null 2>&1; then
-  JOBS_FLAG="--jobs 8"
+else
+  echo "ERROR: GNU parallel is not installed." >&2
+  echo "       The full suite cannot complete within timeout limits without it." >&2
+  echo "       Install it first:  brew install parallel  (macOS)" >&2
+  echo "                          apt install parallel   (Linux)" >&2
+  echo "" >&2
+  echo "       To run a single file without parallel:" >&2
+  echo "         bats tests/unit/lockfiles.bats" >&2
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -63,11 +78,7 @@ esac
 # ---------------------------------------------------------------------------
 # Run
 # ---------------------------------------------------------------------------
-if [[ -n "${JOBS_FLAG}" ]]; then
-  echo "Running with parallelism (${JOBS_FLAG})"
-else
-  echo "Running serially (install 'parallel' via brew for --jobs 8 speedup)"
-fi
+echo "Running with parallelism (${JOBS_FLAG})"
 
 # shellcheck disable=SC2086
 exec bats ${JOBS_FLAG} ${FILTER_FLAG} ${BATS_ARGS}

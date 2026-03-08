@@ -188,13 +188,23 @@ bats-core, two tiers:
 - **Unit** (`tests/unit/`) — pure logic, no external calls, `ADJUTANT_HOME` isolation per test
 - **Integration** (`tests/integration/`) — mock `curl`/`opencode`/`npx` via PATH injection
 
+**Parallelism is required.** The suite has 583 tests and cannot complete within typical timeout limits (~2 min) when run serially. GNU `parallel` must be installed before running `tests/run`.
+
 ```bash
+brew install parallel              # macOS (required — do this first)
 git submodule update --init --recursive
 brew install bats-core
-bats --jobs 4 tests/unit/ tests/integration/
+tests/run                          # full suite — always use this, not bare bats
 ```
 
-All 529 tests must pass before release. No CI — discipline-enforced.
+To run a single file without parallel (safe — it's only the full suite that times out):
+
+```bash
+bats tests/unit/lockfiles.bats
+bats tests/integration/commands.bats
+```
+
+All 583 tests must pass before release. No CI — discipline-enforced.
 
 Full guide: `docs/development/testing.md`
 

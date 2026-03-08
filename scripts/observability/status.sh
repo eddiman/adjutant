@@ -90,7 +90,22 @@ SCHEDULE_MANAGE="${ADJ_DIR}/scripts/capabilities/schedule/manage.sh"
 if source "${SCHEDULE_MANAGE}" 2>/dev/null; then
   JOB_COUNT="$(schedule_count 2>/dev/null || echo "0")"
   if [ "${JOB_COUNT}" -eq 0 ]; then
-    echo "No scheduled jobs configured."
+    # No registered jobs — still check crontab for legacy pulse/review entries
+    CRON_JOBS="$(crontab -l 2>/dev/null | grep -v '^#' | grep -v '^$' | grep -E "pulse\.md|review\.md" || true)"
+    if [ -z "${CRON_JOBS}" ]; then
+      echo "No scheduled jobs configured."
+    else
+      echo "Scheduled jobs:"
+      echo "${CRON_JOBS}" | while IFS= read -r line; do
+        if echo "${line}" | grep -q "pulse\.md"; then
+          echo "  Autonomous Pulse"
+        elif echo "${line}" | grep -q "review\.md"; then
+          echo "  Daily Review"
+        else
+          echo "  ${line}"
+        fi
+      done
+    fi
   else
     LIVE_CRONTAB="$(crontab -l 2>/dev/null || true)"
     active_jobs=""
@@ -129,18 +144,27 @@ if source "${SCHEDULE_MANAGE}" 2>/dev/null; then
 else
   CRON_JOBS="$(crontab -l 2>/dev/null | grep -v '^#' | grep -v '^$' | grep ".adjutant" || true)"
   if [ -z "${CRON_JOBS}" ]; then
-    echo "No scheduled jobs found."
+    echo "No scheduled jobs configured."
   else
-    echo "Crontab entries:"
+    echo "Scheduled jobs:"
     echo "${CRON_JOBS}" | while IFS= read -r line; do
-      echo "  ${line}"
+      if echo "${line}" | grep -q "pulse\.md"; then
+        echo "  Autonomous Pulse"
+      elif echo "${line}" | grep -q "review\.md"; then
+        echo "  Daily Review"
+      else
+        echo "  ${line}"
+      fi
     done
   fi
 fi
 
 echo ""
 
-# ── Last heartbeat ───────────────────────────────────────────────────────────
+# ── Autonomous activity ───────────────────────────────────────────────────────
+echo "Autonomous activity:"
+echo ""
+
 HEARTBEAT_FILE="${ADJ_DIR}/state/last_heartbeat.json"
 if [ -f "${HEARTBEAT_FILE}" ]; then
   HB_TYPE="$(grep -oE '"type"[[:space:]]*:[[:space:]]*"[^"]*"' "${HEARTBEAT_FILE}" | head -1 | sed 's/.*"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')"
@@ -148,18 +172,14 @@ if [ -f "${HEARTBEAT_FILE}" ]; then
   HB_TRIGGER="$(grep -oE '"trigger"[[:space:]]*:[[:space:]]*"[^"]*"' "${HEARTBEAT_FILE}" | head -1 | sed 's/.*"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')"
   HB_ACTION="$(grep -oE '"action"[[:space:]]*:[[:space:]]*"[^"]*"' "${HEARTBEAT_FILE}" | head -1 | sed 's/.*"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')"
   HB_PROJECT="$(grep -oE '"project"[[:space:]]*:[[:space:]]*"[^"]*"' "${HEARTBEAT_FILE}" | head -1 | sed 's/.*"[[:space:]]*:[[:space:]]*"\([^"]*\)"/\1/')"
-  HB_TS="$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "${HB_TS_RAW}" "+%a %d %b at %H:%M" 2>/dev/null \
-    || date -d "${HB_TS_RAW}" "+%a %d %b at %H:%M" 2>/dev/null \
-    || echo "${HB_TS_RAW}")"
 
-  last_cycle_line="Last cycle ran ${HB_TS}"
-  [ -n "${HB_TYPE}" ]    && last_cycle_line="${last_cycle_line} (${HB_TYPE})"
+  last_cycle_line="Last cycle: ${HB_TYPE} at ${HB_TS_RAW}"
   [ -n "${HB_PROJECT}" ] && last_cycle_line="${last_cycle_line} on ${HB_PROJECT}"
   [ -n "${HB_TRIGGER}" ] && last_cycle_line="${last_cycle_line}, triggered by ${HB_TRIGGER}"
   [ -n "${HB_ACTION}" ]  && last_cycle_line="${last_cycle_line}. ${HB_ACTION}"
-  echo "${last_cycle_line}."
+  echo "${last_cycle_line}"
 else
-  echo "No autonomous cycles have run yet."
+  echo "No autonomous cycles recorded yet."
 fi
 
 echo ""
@@ -171,11 +191,7 @@ NOTIFY_COUNT=0
 [ -f "${NOTIFY_COUNT_FILE}" ] && NOTIFY_COUNT="$(cat "${NOTIFY_COUNT_FILE}")"
 NOTIFY_MAX="$(grep -E '^\s*max_per_day:' "${ADJ_DIR}/adjutant.yaml" 2>/dev/null | head -1 | grep -oE '[0-9]+' || echo 3)"
 
-if [ "${NOTIFY_COUNT}" -eq 0 ]; then
-  echo "No notifications sent today (limit is ${NOTIFY_MAX})."
-else
-  echo "${NOTIFY_COUNT} of ${NOTIFY_MAX} notifications sent today."
-fi
+echo "Notifications today: ${NOTIFY_COUNT}/${NOTIFY_MAX}"
 
 echo ""
 
@@ -187,13 +203,10 @@ if [ -f "${ACTIONS_FILE}" ] && [ -s "${ACTIONS_FILE}" ]; then
     ACTION_TS_RAW="$(echo "${line}" | grep -o '"ts":"[^"]*"' | cut -d'"' -f4)"
     ACTION_TYPE="$(echo "${line}" | grep -o '"type":"[^"]*"' | cut -d'"' -f4)"
     ACTION_AGENT="$(echo "${line}" | grep -o '"agent":"[^"]*"' | cut -d'"' -f4)"
-    ACTION_TS="$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "${ACTION_TS_RAW}" "+%a %d %b at %H:%M" 2>/dev/null \
-      || date -d "${ACTION_TS_RAW}" "+%a %d %b at %H:%M" 2>/dev/null \
-      || echo "${ACTION_TS_RAW}")"
     if [ -n "${ACTION_AGENT}" ]; then
-      echo "  ${ACTION_TS} — ${ACTION_TYPE} (${ACTION_AGENT})"
+      echo "  ${ACTION_TS_RAW} — ${ACTION_TYPE} (${ACTION_AGENT})"
     else
-      echo "  ${ACTION_TS} — ${ACTION_TYPE}"
+      echo "  ${ACTION_TS_RAW} — ${ACTION_TYPE}"
     fi
   done
 fi

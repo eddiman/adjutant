@@ -35,9 +35,9 @@ if [ -f "${ADJ_DIR}/state/opencode_web.pid" ] && kill -0 $(cat "${ADJ_DIR}/state
   rm -f "${ADJ_DIR}/state/opencode_web.pid"
   echo "✓ OpenCode web server stopped"
 else
-  # Try to find and kill any running opencode web
-  if pgrep -f "opencode web" > /dev/null 2>&1; then
-    pkill -TERM -f "opencode web" 2>/dev/null || true
+  # Try to find and kill any running opencode serve
+  if pgrep -f "opencode serve" > /dev/null 2>&1; then
+    pkill -TERM -f "opencode serve" 2>/dev/null || true
     sleep 1
     echo "✓ OpenCode web server stopped"
   else

@@ -13,27 +13,35 @@ Tests are organized into three tiers based on isolation requirements:
 | Tier | Scope | Mocking | Status |
 |------|-------|---------|--------|
 | 1 | Unit tests (pure logic) | None — only `ADJUTANT_HOME` isolation | Complete (210 tests) |
-| 2 | Integration tests | Mock `curl`/`opencode` via PATH injection | Complete (319 tests) |
+| 2 | Integration tests | Mock `curl`/`opencode` via PATH injection | Complete (373 tests) |
 | 3 | System tests | Full process isolation | Planned |
 
 ---
 
 ## CI Policy
 
-CI automation is **intentionally absent**. The 529-test bats suite spawns subprocesses heavily and runs in 60–90 seconds locally. GitHub Actions runners would consume disproportionate minutes for a single-maintainer project.
+CI automation is **intentionally absent**. The 583-test bats suite spawns subprocesses heavily. GitHub Actions runners would consume disproportionate minutes for a single-maintainer project.
 
-**Pre-release gate**: before tagging a release, run the full suite locally and confirm it is clean:
+**Parallelism is required.** Running the full suite serially takes too long and will be killed by shell or tool timeouts before completing. GNU `parallel` must be installed:
 
 ```bash
-bats tests/unit/ tests/integration/
+brew install parallel   # macOS
+apt install parallel    # Debian/Ubuntu
 ```
 
-All 529 tests must pass. Any failure blocks the release. This is enforced by discipline, not automation. See [Design Decisions](../architecture/design-decisions.md) for the rationale.
+**Pre-release gate**: before tagging a release, run the full suite with `tests/run` and confirm it is clean:
+
+```bash
+tests/run
+```
+
+All 583 tests must pass. Any failure blocks the release. This is enforced by discipline, not automation. See [Design Decisions](../architecture/design-decisions.md) for the rationale.
 
 ---
 
 ## Prerequisites
 
+- `parallel` (GNU parallel) — `brew install parallel` on macOS — **required for full-suite runs**
 - `bats` (v1.13+) — `brew install bats-core` on macOS
 - Git submodules initialized — `git submodule update --init --recursive`
 
@@ -44,6 +52,7 @@ All 529 tests must pass. Any failure blocks the release. This is enforced by dis
 **First-time setup:**
 
 ```bash
+brew install parallel       # required — install before anything else
 brew install bats-core
 git submodule update --init --recursive
 ```
@@ -51,16 +60,16 @@ git submodule update --init --recursive
 **Common commands (from project root):**
 
 ```bash
-# Run all unit tests
-bats tests/unit/
+# Run full suite (always use tests/run — it enforces parallelism)
+tests/run
 
-# Run all integration tests
-bats tests/integration/
+# Run unit tests only
+tests/run unit
 
-# Run full suite (recommended: use --jobs for parallelism)
-bats --jobs 4 tests/unit/ tests/integration/
+# Run integration tests only
+tests/run integration
 
-# Run a single test file
+# Run a single test file (parallelism not needed for a single file)
 bats tests/unit/paths.bats
 
 # Filter by test name (regex)
@@ -70,20 +79,22 @@ bats --filter "load_env succeeds" tests/unit/env.bats
 bats --tap tests/unit/
 ```
 
+**Why parallelism is mandatory for the full suite:**
+
+The suite has 583 tests. Running serially takes several minutes and will be killed by shell or agent timeout before completing. `tests/run` enforces this — it exits with an error if `parallel` is not installed rather than falling back to serial execution.
+
 **Recommended workflow:**
 
 ```bash
-# During development — run only affected files
+# During development — run only affected files (no parallel needed)
 bats tests/unit/wizard.bats tests/integration/wizard.bats
 
 # Debug a specific test
 bats --filter "repair: healthy" tests/integration/wizard.bats
 
 # Full regression check
-bats --jobs 4 tests/unit/ tests/integration/
+tests/run
 ```
-
-Use `--jobs 4` (or higher) for full-suite runs. Each test uses its own isolated temp directory, so parallel execution is safe.
 
 ---
 

@@ -6,19 +6,19 @@
 #      that survive after the parent exits. Over days these accumulate and eat RAM.
 #   2. If `opencode run` hangs (e.g. post-sleep server degradation), callers block
 #      indefinitely with no timeout or error signal.
-#   3. After a sleep/wake cycle or overnight idle, the opencode web server can enter
+#   3. After a sleep/wake cycle or overnight idle, the opencode serve server can enter
 #      a degraded state OR its Anthropic auth token can expire silently. An HTTP ping
 #      alone cannot detect token expiry — a real API call is required.
 #
 # Solutions:
 #   1. Snapshot child PIDs before/after each call; kill any new stragglers.
-#      Reaper also kills language servers whose direct parent is opencode web
+#      Reaper also kills language servers whose direct parent is opencode serve
 #      (meaning their opencode run parent has already exited).
 #   2. opencode_run respects OPENCODE_TIMEOUT env var (seconds). The underlying
 #      process is wrapped with `timeout`; on expiry returns exit code 124 and
 #      cleans up children.
 #   3. opencode_health_check probes the server with a fast call; if it fails or
-#      times out it restarts opencode web and waits up to 15s for recovery.
+#      times out it restarts opencode serve and waits up to 15s for recovery.
 #
 # Usage:
 #   source "${ADJ_DIR}/scripts/common/opencode.sh"
@@ -41,10 +41,10 @@
 # Resolve opencode binary once
 _OPENCODE_BIN="${_OPENCODE_BIN:-$(command -v opencode 2>/dev/null || echo "")}"
 
-# PID file written by startup.sh for the opencode web server
+# PID file written by startup.sh for the opencode serve server
 _OPENCODE_WEB_PID_FILE="${ADJ_DIR:-${HOME}/.adjutant}/state/opencode_web.pid"
 
-# Port the opencode web server listens on
+# Port the opencode serve server listens on
 _OPENCODE_WEB_PORT="${OPENCODE_WEB_PORT:-4096}"
 
 # --- _adj_timeout: portable timeout wrapper (works without GNU coreutils) ---
@@ -83,7 +83,7 @@ _adj_timeout() {
   return "${_rc}"
 }
 
-# --- _opencode_web_pid: return PID of the running opencode web server, or empty ---
+# --- _opencode_web_pid: return PID of the running opencode serve server, or empty ---
 _opencode_web_pid() {
   [ -f "${_OPENCODE_WEB_PID_FILE}" ] || return 0
   local _pid
@@ -141,14 +141,19 @@ opencode_run() {
 #
 # Kills any bash-language-server or yaml-language-server that is:
 #   a) parented to PID 1 or a gone process (classic orphan), OR
-#   b) parented directly to the opencode web server — meaning the transient
+#   b) parented directly to ANY opencode serve process — meaning the transient
 #      opencode run that spawned it has already exited, leaving it stranded.
+#      This catches language servers under stale serve processes that are no
+#      longer in opencode_web.pid (e.g. from a previous session or double-start).
 #
 # Call from the listener loop every N cycles as a safety net.
 #
 opencode_reap() {
-  local _web_pid
-  _web_pid="$(_opencode_web_pid)"
+  # Collect ALL running opencode serve PIDs — not just the tracked one.
+  # This is the key fix: a language-server child of an unlisted/old serve process
+  # would never be reaped if we only checked the PID-file entry.
+  local _all_serve_pids
+  _all_serve_pids="$(pgrep -f 'opencode serve' 2>/dev/null || true)"
 
   local _pids
   _pids="$(pgrep -f 'bash-language-server\|yaml-language-server' 2>/dev/null || true)"
@@ -165,13 +170,17 @@ opencode_reap() {
       continue
     fi
 
-    # Stranded under web server: parent is opencode web itself.
-    # A live ephemeral opencode run would be the direct parent, not the web server.
-    # If the parent IS the web server, the run already exited and left this behind.
-    if [ -n "${_web_pid}" ] && [ "${_ppid}" = "${_web_pid}" ]; then
-      kill -TERM "${_pid}" 2>/dev/null || true
-      _killed=$((_killed + 1))
-    fi
+    # Stranded under any serve process: parent is opencode serve itself.
+    # A live ephemeral opencode run would be the direct parent, not the serve server.
+    # If the parent IS a serve process, the run already exited and left this behind.
+    local _serve_pid
+    for _serve_pid in ${_all_serve_pids}; do
+      if [ "${_ppid}" = "${_serve_pid}" ]; then
+        kill -TERM "${_pid}" 2>/dev/null || true
+        _killed=$((_killed + 1))
+        break
+      fi
+    done
   done
 
   # Give them a moment, then force-kill survivors
@@ -186,12 +195,12 @@ opencode_reap() {
   fi
 }
 
-# --- opencode_health_check: probe server; restart opencode web if degraded ---
+# --- opencode_health_check: probe server; restart opencode serve if degraded ---
 #
 # Two-stage probe:
-#   1. HTTP ping  — verify the web process is alive at all.
+#   1. HTTP ping  — verify the serve process is alive at all.
 #   2. Real API call — cheap single-token Haiku call to verify the Anthropic
-#      auth token is still valid. An HTTP 200 from the web server does NOT
+#      auth token is still valid. An HTTP 200 from the serve server does NOT
 #      guarantee this; "Token refresh failed: 400" only surfaces when an actual
 #      model call is attempted (as seen on 2026-03-06 when the 08:00 briefing
 #      failed despite the server being up).

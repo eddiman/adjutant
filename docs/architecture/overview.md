@@ -77,7 +77,7 @@ Shared library sourced by every other script. Load order matters: `paths.sh` mus
 | `env.sh` | Extracts credential values from `.env` using grep/cut/tr — never `source`s the file. Provides `get_credential KEY`, `has_credential KEY`, `require_telegram_credentials`. |
 | `lockfiles.sh` | Manages the `KILLED` and `PAUSED` state files. Provides check functions (`check_killed`, `check_paused`, `check_operational`), boolean queries (`is_killed`, `is_paused`), and state mutators. |
 | `logging.sh` | Appends structured log lines to `state/adjutant.log`. Format: `[YYYY-MM-DD HH:MM:SS] [COMPONENT] message`. |
-| `opencode.sh` | Wraps `opencode run` with timeout support (`OPENCODE_TIMEOUT` env var), before/after PID snapshots to kill orphaned language-server children, and a periodic reaper (`opencode_reap`) that also catches servers stranded under the web process. Provides `opencode_health_check` to probe and auto-restart a degraded `opencode web` server. |
+| `opencode.sh` | Wraps `opencode run` with timeout support (`OPENCODE_TIMEOUT` env var), before/after PID snapshots to kill orphaned language-server children, and a periodic reaper (`opencode_reap`) that also catches servers stranded under the serve process. Provides `opencode_health_check` to probe and auto-restart a degraded `opencode serve` server. |
 | `platform.sh` | OS and architecture detection. Used by setup and install scripts for platform-specific behaviour. |
 
 ---
