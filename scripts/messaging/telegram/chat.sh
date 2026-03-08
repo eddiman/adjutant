@@ -111,7 +111,7 @@ run_opencode() {
   [ -n "${session_id}" ] && args+=(--session "${session_id}")
   args+=("${MESSAGE}")
 
-  OPENCODE_TIMEOUT=180 opencode_run "${args[@]}" > "${raw_file}" 2>"${err_file}"
+  OPENCODE_TIMEOUT=240 opencode_run "${args[@]}" > "${raw_file}" 2>"${err_file}"
   return $?
 }
 
@@ -187,7 +187,7 @@ run_opencode "${EXISTING_SESSION}" "${RAW_FILE}" "${ERR_FILE}" || OPENCODE_RC=$?
 
 if [[ "${OPENCODE_RC}" -eq 124 ]]; then
   rm -f "${RAW_FILE}" "${SID_FILE}" "${ERR_FILE}" "${REPLY_FILE}"
-  echo "Request timed out after 180s — the AI server may be slow. Try again in a moment."
+  echo "Request timed out after 240s — the AI server may be slow. Try again in a moment."
   exit 0
 fi
 
