@@ -28,23 +28,12 @@ setup() {
   source "${PROJECT_ROOT}/scripts/common/lockfiles.sh"
   source "${PROJECT_ROOT}/scripts/messaging/telegram/send.sh"
 
-  # Create mock status.sh — outputs realistic status including heartbeat if present
+  # Create mock status.sh
   mkdir -p "${TEST_ADJ_DIR}/scripts/observability"
   cat > "${TEST_ADJ_DIR}/scripts/observability/status.sh" <<'MOCK'
 #!/bin/bash
 echo "Status: RUNNING"
-echo "No scheduled jobs configured."
-echo ""
-echo "Autonomous activity:"
-echo ""
-HB="${ADJ_DIR}/state/last_heartbeat.json"
-if [ -f "${HB}" ]; then
-  HB_TYPE="$(grep -o '"type":"[^"]*"' "${HB}" | cut -d'"' -f4)"
-  HB_TS="$(grep -o '"timestamp":"[^"]*"' "${HB}" | cut -d'"' -f4)"
-  echo "Last cycle: ${HB_TYPE} at ${HB_TS}"
-else
-  echo "No autonomous cycles recorded yet."
-fi
+echo "Cron jobs: none"
 MOCK
   chmod +x "${TEST_ADJ_DIR}/scripts/observability/status.sh"
 
@@ -123,7 +112,7 @@ _wait_for_curl() {
   cmd_status "100"
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
-  [[ "${full_log}" == *"Last cycle:"* ]]
+  [[ "${full_log}" == *"Last heartbeat"* ]]
 }
 
 @test "cmd_status: shows 'not recorded yet' when no heartbeat file exists" {
@@ -131,7 +120,7 @@ _wait_for_curl() {
   cmd_status "100"
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
-  [[ "${full_log}" == *"No autonomous cycles recorded yet."* ]]
+  [[ "${full_log}" == *"not recorded yet"* ]]
 }
 
 @test "cmd_status: sends graceful fallback when status.sh fails" {
@@ -279,7 +268,7 @@ WHICH_MOCK
   cmd_reflect_request "100"
   local full_log
   full_log="$(cat "${MOCK_LOG}/curl.log")"
-  [[ "${full_log}" == *"reflection"* ]]
+  [[ "${full_log}" == *"Opus"* ]]
   [[ "${full_log}" == *"confirm"* ]]
 }
 

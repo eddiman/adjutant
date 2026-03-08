@@ -112,15 +112,14 @@ ${summary}" "${message_id}"
   local _pulse_exit
   local _before_lsp _after_lsp _orphan_lsp
   _before_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
-  msg_typing start "pulse_${message_id}"
   result="$(_adj_timeout 240 "${opencode_bin}" run --dir "${ADJ_DIR}" --format json "$(cat "${pulse_prompt}")" 2>>"${ADJ_DIR}/state/adjutant.log" \
     | grep '"type":"text"' \
     | grep -o '"text":"[^"]*"' \
-    | sed 's/^"text":"//;s/"$//;s/\\n/\n/g' \
+    | sed 's/^"text":"//;s/"$//' \
     | tr -d '\000-\010\013-\037' \
+    | tr -d '\n' \
     | tail -c 3800)"
   _pulse_exit=$?
-  msg_typing stop "pulse_${message_id}"
   _after_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
   _orphan_lsp="$(comm -13 <(echo "${_before_lsp}") <(echo "${_after_lsp}") 2>/dev/null || true)"
   [ -n "${_orphan_lsp}" ] && { for _p in ${_orphan_lsp}; do kill "${_p}" 2>/dev/null || true; done; }
@@ -187,15 +186,14 @@ cmd_reflect_confirm() {
   local _reflect_exit
   local _before_lsp _after_lsp _orphan_lsp
   _before_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
-  msg_typing start "reflect_${message_id}"
   result="$(_adj_timeout 300 "${opencode_bin}" run --dir "${ADJ_DIR}" --format json "$(cat "${reflect_prompt}")" 2>>"${ADJ_DIR}/state/adjutant.log" \
     | grep '"type":"text"' \
     | grep -o '"text":"[^"]*"' \
-    | sed 's/^"text":"//;s/"$//;s/\\n/\n/g' \
+    | sed 's/^"text":"//;s/"$//' \
     | tr -d '\000-\010\013-\037' \
+    | tr -d '\n' \
     | tail -c 3800)"
   _reflect_exit=$?
-  msg_typing stop "reflect_${message_id}"
   _after_lsp="$(pgrep -f 'bash-language-server' 2>/dev/null | sort || true)"
   _orphan_lsp="$(comm -13 <(echo "${_before_lsp}") <(echo "${_after_lsp}") 2>/dev/null || true)"
   [ -n "${_orphan_lsp}" ] && { for _p in ${_orphan_lsp}; do kill "${_p}" 2>/dev/null || true; done; }
@@ -221,7 +219,7 @@ You can just talk to me naturally — ask about your projects, priorities, upcom
 Or use a command:
 /status — I'll tell you if I'm running or paused, show registered scheduled jobs, and when I last checked in.
 /pulse — I'll run a quick check across your projects and summarise what I find.
-/restart — Restart all services (listener, opencode serve).
+/restart — Restart all services (listener, opencode web).
 /reflect — I'll do a deeper Opus reflection (I'll ask you to confirm first).
 /screenshot <url> — Take a full-page screenshot of any website and send it here.
 /search <query> — Search the web via Brave Search and return top results.

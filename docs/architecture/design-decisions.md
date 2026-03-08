@@ -112,51 +112,13 @@ Exit code 124 (the standard `timeout` exit code) is checked at each call site an
 
 ---
 
-## opencode run invocation flags
-
-The correct flags for `opencode run` (as of the installed version) are:
-
-```bash
-opencode run --dir "${ADJ_DIR}" --format json "$(cat prompt.md)"
-```
-
-- The prompt is a **positional argument**, not a flag (`--print` and `--cwd` do not exist).
-- `--dir` sets the working directory so opencode loads `.opencode/agents/adjutant.md`. Without it, the agent runs as a generic instance with no tools, no identity, and no context.
-- `--format json` emits structured events on stdout. Text responses appear as lines containing `"type":"text"`. All other event types (tool calls, status) are interspersed but can be filtered with `grep '"type":"text"'`.
-
-Extracting the final text response:
-
-```bash
-opencode run --dir "${ADJ_DIR}" --format json "${PROMPT}" \
-  | grep '"type":"text"' \
-  | grep -o '"text":"[^"]*"' \
-  | sed 's/^"text":"//;s/"$//' \
-  | tr -d '\000-\010\013-\037' \
-  | tr -d '\n' \
-  | tail -c 3800
-```
-
-Notes:
-- `tr -d '\000-\010\013-\037'` strips non-printable control characters (except newline/tab) that appear in raw JSON output.
-- `tr -d '\n'` collapses all text events into a single line (opencode may emit the response as multiple streamed chunks).
-- `tail -c 3800` keeps the response within Telegram's 4096-byte message limit with headroom.
-- Errors should redirect to the log (`2>>"${ADJ_DIR}/state/adjutant.log"`), not `/dev/null` — swallowing stderr hides all diagnostic output when the call fails.
-
----
-
-## paste -sd '' is GNU-only
-
-`paste -sd ''` (collapse lines to a single string) does not work on macOS's BSD `paste`. Use `tr -d '\n'` instead. This affects any script that previously used `paste` to join multi-line command output into a single variable.
-
----
-
 ## Health check before critical opencode calls
 
 Timing out a hung call is necessary but not sufficient — the next retry will hang again unless the root cause (degraded web server) is fixed first.
 
 `opencode_health_check` probes the server with a `curl --max-time 5` GET to `http://localhost:4096/` before the main API call. If it fails:
 
-1. Kills the existing `opencode serve` process (identified via `state/opencode_web.pid`)
+1. Kills the existing `opencode web` process (identified via `state/opencode_web.pid`)
 2. Restarts it
 3. Waits up to 15s for the probe to succeed
 
@@ -166,20 +128,10 @@ This is called in `analyze.sh` before the Haiku analysis step. If the restart fa
 
 ---
 
-## Reaper catches language servers stranded under opencode serve
+## Reaper catches language servers stranded under opencode web
 
 `opencode_run` diffs bash/yaml-language-server PIDs before and after each call to kill any it spawned. This works when the call exits normally.
 
-When a call is killed by timeout, the diff still runs — but the language servers may already have been reparented to the `opencode serve` process (their grandparent) before cleanup. The old reaper only killed servers whose parent was PID 1 or gone, so these looked legitimate and were never reaped.
+When a call is killed by timeout, the diff still runs — but the language servers may already have been reparented to the `opencode web` process (their grandparent) before cleanup. The old reaper only killed servers whose parent was PID 1 or gone, so these looked legitimate and were never reaped.
 
-The first fix: `opencode_reap` also kills any language server whose direct parent is an `opencode serve` process. A language server with a *live* `opencode run` as its parent is fine. One directly under the serve process means its run has already exited, so it's stranded.
-
-## Reaper sweeps all serve processes, not just the tracked PID
-
-A second failure mode: two `opencode serve` processes running simultaneously. This happens after a restart if the old process wasn't fully cleaned up. `opencode_web.pid` points to the new one; the old one accumulates language-server children indefinitely because the reaper only checked against the tracked PID.
-
-The fix: `opencode_reap` collects all running `opencode serve` PIDs via `pgrep` on every sweep, not just the one in the PID file. Any language server parented to any of them is treated as stranded and reaped.
-
-Related: `startup.sh` now passes `--port "${OPENCODE_WEB_PORT:-4096}"` when launching `opencode serve`. Binding a fixed port ensures the health check always hits the correct process, and prevents a second instance from silently claiming a random port and evading detection.
-
-**Limitation**: if a language-server process enters uninterruptible state (`U` in `ps`), it cannot be killed by any userspace signal including `SIGKILL`. This is a kernel-level condition caused by a bug in bash-language-server / Node.js V8. The reaper will issue the signal but the process won't die until the kernel releases it (typically on next reboot). There is no userspace fix for this — it requires an upstream fix in bash-language-server.
+The fix: `opencode_reap` now also kills any language server whose direct parent is the `opencode web` PID. A language server that has a *live* `opencode run` as its parent is fine — that run is still working. One directly under the web server means its run has already exited, so it's stranded.

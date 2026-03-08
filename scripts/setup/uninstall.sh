@@ -59,9 +59,9 @@ _uninstall_stop_processes() {
 
   # ── OpenCode web server ──
   printf "  Stopping OpenCode...\n"
-  pkill -TERM -f "opencode serve" 2>/dev/null || true
+  pkill -TERM -f "opencode web" 2>/dev/null || true
   sleep 1
-  pkill -KILL -f "opencode serve" 2>/dev/null || true
+  pkill -KILL -f "opencode web" 2>/dev/null || true
   rm -f "${ADJ_DIR}/state/opencode_web.pid"
   wiz_ok "OpenCode stopped"
 

@@ -44,7 +44,7 @@ Every `opencode run` invocation spawns a `bash-language-server` child process (~
 `opencode.sh` provides two mechanisms to prevent this:
 
 - **`opencode_run`** — Before/after PID snapshot wrapper. Takes a snapshot of `bash-language-server` PIDs before calling `opencode run`, then kills any new ones that appeared after it exits. Used by `chat.sh`, `vision.sh`, `kb/query.sh`.
-- **`opencode_reap`** — Periodic sweeper called by `listener.sh` every ~50 poll cycles (~8 minutes). Kills any `bash-language-server` or `yaml-language-server` that is either orphaned (parent is PID 1 or gone) or stranded directly under *any* running `opencode serve` process (meaning its `opencode run` parent has already exited). Sweeps all serve processes, not just the one tracked in `opencode_web.pid`, so orphans from stale or double-started serve instances are also caught.
+- **`opencode_reap`** — Periodic sweeper that kills any `bash-language-server` whose parent PID is 1 (orphaned). Called by `listener.sh` every ~50 poll cycles (~8 minutes) as a safety net.
 
 For `commands.sh` (pulse/reflect), which uses `timeout` (which can't call bash functions), the PID snapshot logic is inlined directly around the `timeout` calls.
 
