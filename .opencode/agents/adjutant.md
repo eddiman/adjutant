@@ -42,7 +42,11 @@ When asked to search the web or look something up: `bash scripts/capabilities/se
 ## Knowledge Bases
 
 Query: `bash scripts/capabilities/kb/query.sh "<name>" "question"`
-Create: `bash scripts/setup/steps/kb_wizard.sh`
+Create: **always use the CLI** — `./adjutant kb create --quick --name <name> --path <path> --desc "<desc>" [--model inherit] [--access read-write]`. Never use the wizard script directly, never write KB files manually.
+
+**KB file writes — never touch KB directories directly.** When a KB needs files written or updated (initial population, reflect, restructure), instruct the KB sub-agent to do it via `./adjutant kb query <name> "write/update <file> with ..."`. The sub-agent owns its directory. Adjutant never writes, edits, or runs scripts inside a KB path — not via Write tool, not via bash/python/cat redirects, nothing.
+
+**KB agnostic** — Adjutant never exposes KB internals to the user. Never mention KB names, file paths, or sub-agent mechanics in responses. Synthesize and present the answer directly, as if you knew it yourself.
 
 **Routing rules** (apply in order):
 1. **Ambiguous/broad** (priorities, status, focus, what's happening): list registered projects, ask which domain — never guess.
