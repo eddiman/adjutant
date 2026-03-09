@@ -1,0 +1,65 @@
+# pyproject.toml
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "adjutant"
+version = "2.0.0"
+requires-python = ">=3.11"
+
+dependencies = [
+    "click>=8.0",
+    "httpx>=0.24",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "psutil>=5.9",
+]
+
+[project.scripts]
+adjutant = "adjutant.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    "pytest-cov>=4.0",
+    "pytest-xdist>=3.0",
+    "pytest-timeout>=2.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "types-PyYAML",
+    "types-psutil",
+]
+validation = [
+    "pydantic>=2.0",
+]
+screenshot = [
+    "playwright>=1.40",
+]
+news = [
+    "feedparser>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/adjutant"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "A", "SIM", "TCH"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+timeout = 30
+addopts = "-x --tb=short"
