@@ -25,6 +25,19 @@ screenshots/
 
 .DS_store
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # Temporary working directory
 tmp/
 
