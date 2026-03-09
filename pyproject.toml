@@ -12,6 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "click>=8.0",
     "httpx>=0.24",
+    "pydantic>=2.0",
     "pyyaml>=6.0",
     "rich>=13.0",
     "psutil>=5.9",
@@ -31,9 +32,6 @@ dev = [
     "mypy>=1.10",
     "types-PyYAML",
     "types-psutil",
-]
-validation = [
-    "pydantic>=2.0",
 ]
 screenshot = [
     "playwright>=1.40",
@@ -59,7 +57,12 @@ warn_return_any = true
 warn_unused_configs = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
+testpaths = ["tests/unit"]
 timeout = 30
 addopts = "-x --tb=short"
+markers = [
+    "unit: Unit tests (no external calls, fast)",
+    "integration: Integration tests (mocked external calls)",
+    "slow: Slow tests (skip with -m 'not slow')",
+    "bash: Tests that invoke bash scripts",
+]
