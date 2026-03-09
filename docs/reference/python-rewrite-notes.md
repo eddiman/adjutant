@@ -1,281 +1,190 @@
-# Python Rewrite Notes
+# Python Rewrite — Progress Notes
 
-**Started:** 2026-03-09  
-**Completed:** 2026-03-09
+**Branch:** `python-rewrite`  
+**Started:** 2026-03-08  
+**Last updated:** 2026-03-09  
 
-This document logs errors, strange occurrences, and decisions made during the Python rewrite.
-
----
-
-## Summary
-
-**All phases completed successfully:**
-- Phase 1: Python Test Framework ✅
-- Phase 2: NDJSON Parser Module ✅
-- Phase 3: Portfolio KB (Skipped - external repo) ⏭️
-- Phase 4: YAML Configuration Parser ✅
-- Phase 5: HTTP Client Module ✅
-- Phase 6: Bash Integration Layer ✅
-
-**Final Metrics:**
-- **97 tests in 1.76 seconds**
-- Original bats tests: ~2+ minutes for 518 tests
-- **Speedup: ~60x faster overall**
+This document is the single authoritative record of what has been migrated,
+what decisions were made, and what remains to do. The old plan documents
+(`python-rewrite-plan.md`, `python-rewrite-plan-complete.md`) are superseded
+by this file.
 
 ---
 
-## Phase 1: Python Test Framework
+## Strategy
 
-### Issues Found
+**Full rewrite (Option A).** Bash scripts are replaced one-to-one by Python
+equivalents under `src/adjutant/`. Once a Python module is written and tested,
+the bash original is deleted. No bridging layer.
 
-1. **Python 3.9 vs 3.11 type syntax**
-   - `pyproject.toml` specifies `requires-python = ">=3.11"` but system has Python 3.9.6
-   - Had to use `from __future__ import annotations` and `Optional[Dict]` instead of `dict | None`
-   - **Decision:** Keep Python 3.9 compatible for now, update to modern syntax when Python 3.11+ is available
+The migration follows a bottom-up order: shared library modules first, then
+leaf capability scripts, then orchestrators, then the live Telegram messaging
+core last.
 
-2. **paths.sh BASH_SOURCE resolution**
-   - `paths.sh` uses `BASH_SOURCE[1]` to find the sourcing script
-   - When testing from Python, needed to copy paths.sh to test directory instead of sourcing from project root
-   - This is documented in AGENTS.md as a known gotcha
+---
 
-3. **pytest-asyncio warning**
-   - `asyncio_mode = "auto"` in pyproject.toml caused warning since pytest-asyncio wasn't installed
-   - **Fix:** Removed the config option since we don't use async tests yet
+## Current state (as of 2026-03-09)
 
-### Files Created
+### Migrated and deleted ✅
+
+| Bash original | Python replacement | Tests |
+|---|---|---|
+| `scripts/common/paths.sh` | `src/adjutant/core/paths.py` | `test_paths.py` |
+| `scripts/common/env.sh` | `src/adjutant/core/env.py` | `test_env.py` |
+| `scripts/common/logging.sh` | `src/adjutant/core/logging.py` | `test_logging.py` |
+| `scripts/common/lockfiles.sh` | `src/adjutant/core/lockfiles.py` | `test_lockfiles.py` |
+| `scripts/common/platform.sh` | `src/adjutant/core/platform.py` | `test_platform.py` |
+| `scripts/common/opencode.sh` | `src/adjutant/core/opencode.py` | `test_opencode.py` |
+| `scripts/lifecycle/pulse_cron.sh` | `src/adjutant/lifecycle/cron.py` | `test_cron.py` |
+| `scripts/lifecycle/review_cron.sh` | `src/adjutant/lifecycle/cron.py` | `test_cron.py` |
+| `scripts/lifecycle/update.sh` | `src/adjutant/lifecycle/update.py` | `test_update.py` |
+| `scripts/messaging/telegram/reply.sh` | `src/adjutant/messaging/telegram/reply.py` | `test_reply.py` |
+| `scripts/messaging/telegram/notify.sh` | `src/adjutant/messaging/telegram/notify.py` | `test_notify.py` |
+| `scripts/capabilities/kb/run.sh` | `src/adjutant/capabilities/kb/run.py` | `test_kb_run.py` |
+| `scripts/capabilities/kb/query.sh` | `src/adjutant/capabilities/kb/query.py` | `test_kb_query.py` |
+| `scripts/observability/journal_rotate.sh` | `src/adjutant/observability/journal_rotate.py` | `test_journal_rotate.py` |
+| `scripts/setup/wizard.sh` + `helpers.sh` | `src/adjutant/setup/wizard.py` | `test_wizard.py` |
+| `scripts/setup/uninstall.sh` | `src/adjutant/setup/uninstall.py` | `test_uninstall.py` |
+| `scripts/setup/steps/schedule_wizard.sh` | `src/adjutant/setup/steps/schedule_wizard.py` | `test_schedule_wizard.py` |
+| `scripts/setup/steps/kb_wizard.sh` | `src/adjutant/setup/steps/kb_wizard.py` | `test_kb_wizard.py` |
+
+### Supporting Python modules (no bash original)
+
+| Module | Purpose |
+|---|---|
+| `src/adjutant/core/config.py` | Typed `AdjutantConfig` + dict API |
+| `src/adjutant/core/model.py` | `resolve_kb_model()` |
+| `src/adjutant/core/process.py` | Process management helpers |
+| `src/adjutant/lib/http.py` | `get_client()` singleton (httpx) |
+| `src/adjutant/lib/ndjson.py` | `parse_ndjson()` |
+| `src/adjutant/cli.py` | Click-based CLI entrypoint |
+
+### Test suite
+
+**456 tests, all passing** as of 2026-03-09.
 
 ```
-tests_py/
-├── __init__.py
-├── conftest.py              # Core fixtures (adj_dir, mock_bin, run_bash)
-├── fixtures/
-│   ├── __init__.py
-│   ├── mock_opencode.py     # NDJSON mock generator
-│   └── mock_curl.py         # Telegram API mock generator
-├── test_unit/
-│   ├── __init__.py
-│   ├── test_lockfiles.py    # 25 tests (ported from bats)
-│   ├── test_paths.py        # 7 tests
-│   └── test_env.py          # 16 tests
-└── test_integration/        # Ready for future use
+tests/unit/
+  test_config.py         test_cron.py           test_env.py
+  test_http.py           test_journal_rotate.py  test_kb_query.py
+  test_kb_run.py         test_kb_wizard.py       test_lockfiles.py
+  test_logging.py        test_model.py           test_ndjson.py
+  test_notify.py         test_opencode.py        test_paths.py
+  test_platform.py       test_process.py         test_reply.py
+  test_schedule_wizard.py  test_uninstall.py     test_update.py
+  test_wizard.py
 ```
 
-### Metrics
-
-- 48 tests in **1.6 seconds**
-- **Speedup: ~75x faster per test**
+Run with: `.venv/bin/pytest tests/unit/ -q`
 
 ---
 
-## Phase 2: NDJSON Parser Module
+## Remaining bash scripts (35 total)
 
-### Implementation
+### Observability (2)
+- `scripts/observability/status.sh` — formatted status report (state, jobs, heartbeat, notify count)
+- `scripts/observability/usage_estimate.sh` — JSONL usage log + session/weekly cap display
 
-Created `scripts_py/lib/ndjson_parser.py`:
-- `parse_ndjson()`: Iterator yielding `ParsedEvent` objects
-- `extract_text_from_stream()`: Concatenate all text events
-- `extract_session_id_from_stream()`: Get session ID
-- `check_model_error()`: Detect model not found errors
-- `parse_with_error_info()`: Full parse returning dict
+### Lifecycle (5)
+- `scripts/lifecycle/pause.sh` — write PAUSED lockfile
+- `scripts/lifecycle/resume.sh` — clear PAUSED lockfile
+- `scripts/lifecycle/restart.sh` — stop + start all services
+- `scripts/lifecycle/emergency_kill.sh` — nuclear shutdown, write KILLED, disable crontab
+- `scripts/lifecycle/startup.sh` — start listener + opencode web, recover from KILLED
 
-Also created `scripts_py/lib/ndjson_parser.sh` bash wrapper for gradual migration.
+### News pipeline (3)
+- `scripts/news/fetch.sh` — fetch from HN, Reddit, blogs → `state/news_raw/<date>.json`
+- `scripts/news/analyze.sh` — deduplicate + keyword filter + Haiku LLM ranking
+- `scripts/news/briefing.sh` — orchestrator: fetch → analyze → format → deliver → cleanup
 
-### Bash Pattern Replaced
+### Capabilities (7)
+- `scripts/capabilities/kb/manage.sh` — KB CRUD: create, register, scaffold, list, info, remove
+- `scripts/capabilities/schedule/manage.sh` — scheduled job CRUD from adjutant.yaml
+- `scripts/capabilities/schedule/install.sh` — crontab reconciler
+- `scripts/capabilities/schedule/notify_wrap.sh` — run job + send Telegram notification
+- `scripts/capabilities/screenshot/screenshot.sh` — Playwright screenshot → sendPhoto/sendDocument
+- `scripts/capabilities/vision/vision.sh` — opencode `--file` image analysis
+- `scripts/capabilities/search/search.sh` — Brave Search API → formatted results
 
-**Before (slow):**
-```bash
-while IFS= read -r line; do
-  line_type="$(printf '%s' "${line}" | jq -r '.type // empty')"
-  if [ "${line_type}" = "text" ]; then
-    part="$(printf '%s' "${line}" | jq -r '.part.text // empty')"
-    reply="${reply}${part}"
-  fi
-done < raw.ndjson
-```
+### Messaging core (8) — most complex
+- `scripts/messaging/adaptor.sh` — interface contract (no-op stubs)
+- `scripts/messaging/dispatch.sh` — command router + rate limiter + chat fallback
+- `scripts/messaging/telegram/listener.sh` — Telegram long-poll loop
+- `scripts/messaging/telegram/commands.sh` — all `/command` handlers
+- `scripts/messaging/telegram/chat.sh` — opencode session + conversation handler
+- `scripts/messaging/telegram/send.sh` — msg_send_text, msg_send_photo, msg_react, msg_typing
+- `scripts/messaging/telegram/photos.sh` — photo download + vision routing
+- `scripts/messaging/telegram/service.sh` — start/stop/restart/status for the listener
 
-**After (fast):**
-```bash
-reply=$(py_extract_text < raw.ndjson)
-```
-
-### Metrics
-
-- 25 tests in **0.08 seconds**
-- Bash pattern spawns 2-3 `jq` processes per line (1000 lines = 2000-3000 subprocesses)
-- Python: in-process, single pass
-- **Expected speedup: 100-1000x**
-
----
-
-## Phase 3: Portfolio KB Python Module
-
-### Issue: External Knowledge Base
-
-The portfolio_kb is stored externally at `/Volumes/Mandalor/JottaSync/AI_knowledge_bases/portfolio-kb`, not in this repo.
-The integration tests at `tests/integration/portfolio_*.bats` gracefully skip if it doesn't exist.
-
-**Decision:** Skip Phase 3 for now. The rewrite plan's portfolio_kb module would need to be implemented
-in that external repo, not here. The NDJSON parser and YAML parser (Phase 4) are higher priority.
-
----
-
-## Phase 4: YAML Configuration Parser
-
-### Implementation
-
-Created `scripts_py/lib/config.py`:
-- Full Pydantic-style config models (with fallback when pydantic not installed)
-- `AdjutantConfig.load()`: Load from YAML file
-- `get_config_value()`: Get nested value by key path
-- `load_config()`: Singleton loader with env resolution
-
-### Bash Pattern Replaced
-
-**Before (fragile):**
-```bash
-model=$(grep -E "^\s*cheap:" "${ADJ_DIR}/adjutant.yaml" | sed 's/.*:[[:space:]]*//' | tr -d '"')
-```
-
-**After (robust):**
-```bash
-model=$(py_get_config llm models cheap)
-```
-
-### Issues Found
-
-1. **Pydantic fallback complexity**
-   - Without pydantic installed, needed to implement a custom BaseModel fallback
-   - Used metaclass to handle `Field(default_factory=...)` pattern
-   - Required `_construct_nested()` function to recursively build nested configs
-   - **Decision:** Works without pydantic, but recommend installing it for validation
-
-2. **LSP errors with conditional imports**
-   - Static analysis flags errors for pydantic classes when pydantic isn't installed
-   - **Decision:** Ignore LSP errors, runtime behavior is correct
-
-### Metrics
-
-- 16 tests in **0.07 seconds**
+### Setup (10)
+- `scripts/setup/install.sh` — curl installer: prereq check + download + wizard
+- `scripts/setup/repair.sh` — health check + auto-fix for existing installations
+- `scripts/setup/helpers.sh` — (already replaced by `wizard.py` UI primitives — **delete only**)
+- `scripts/setup/steps/prerequisites.sh` — Step 1: dependency check
+- `scripts/setup/steps/install_path.sh` — Step 2: confirm/choose install directory
+- `scripts/setup/steps/identity.sh` — Step 3: LLM-generated soul.md + heart.md
+- `scripts/setup/steps/messaging.sh` — Step 4: Telegram bot token + chat ID
+- `scripts/setup/steps/features.sh` — Step 5: enable/disable news, screenshot, vision, search
+- `scripts/setup/steps/service.sh` — Step 6: launchd/systemd + crontab + PATH alias
+- `scripts/setup/steps/autonomy.sh` — Step 7: autonomous pulse/review enable + quiet hours
 
 ---
 
-## Phase 5: HTTP Client Module
+## Inconsistencies found
 
-### Implementation
+Documented in `docs/reference/inconsistencies.md`.
 
-Created `scripts_py/lib/http_client.py`:
-- `HttpClient`: Unified HTTP client with connection pooling
-- Uses `httpx` when available, falls back to `urllib.request`
-- `get_client()`: Singleton for connection reuse
-- `HttpClientError`: Custom error with status code
-
-### Features
-
-- Connection pooling (when httpx available)
-- Timeout handling
-- JSON and form data support
-- Context manager protocol
-- Graceful fallback to stdlib
-
-### Metrics
-
-- 8 tests in **0.06 seconds**
+| Date | Finding |
+|---|---|
+| 2026-03-09 | `reply.sh` clamps messages at 4000 chars; `notify.sh` at 4096. Both carried forward faithfully. |
+| 2026-03-09 | `wizard.sh` default YAML had stale `claude-sonnet-4-5`; Python wizard uses `claude-sonnet-4-6`. |
+| 2026-03-09 | `notify.sh` does not set `parse_mode`; `reply.sh` does. Faithfully preserved. |
 
 ---
 
-## Phase 6: Bash Integration Layer
+## Key decisions
 
-### Implementation
+**No pydantic fallback.** The early `scripts_py/lib/config.py` had a metaclass-based pydantic
+fallback for Python < 3.11 compatibility. The current `src/adjutant/core/config.py` requires
+pydantic ≥ 2.0 (declared in `pyproject.toml`). Python ≥ 3.11 is required.
 
-Created `scripts_py/lib/python_utils.sh`:
-- `py_extract_text`: NDJSON text extraction
-- `py_extract_session`: Session ID extraction
-- `py_check_model_error`: Model error detection
-- `py_parse_full`: Full parse with all fields
-- `py_get_config`: Config value lookup
-- `py_load_config`: Full config as JSON
+**Local imports for http client in `update.py`.** `get_client()` is imported inside
+`get_latest_version()` and `download_and_apply()` rather than at module level. Tests
+therefore patch `adjutant.lib.http.get_client`, not `adjutant.lifecycle.update.get_client`.
 
-### Usage
+**`kb_wizard.py` catches `TypeError` from missing `--name`.** When `--quick` is given
+without `--name`, `kb_quick_create()` receives a missing positional arg → `TypeError`.
+The `main()` except block now catches `TypeError` alongside `ValueError` and `RuntimeError`.
 
-```bash
-source "${ADJ_DIR}/scripts_py/lib/python_utils.sh"
+**`_kb_create_simple()` over bash `kb_create`.** `kb_wizard.py` cannot call `manage.sh`
+(bash). The pure-Python scaffold + registry-write path (`_kb_create_simple`) is used instead
+of a bridge call.
 
-# NDJSON parsing
-text=$(py_extract_text < raw.ndjson)
-
-# Config lookup
-model=$(py_get_config llm models cheap)
-```
+**Messaging core migrated last.** The Telegram listener is the live runtime — migrating it
+last minimises disruption risk. All other scripts can be migrated and tested independently.
 
 ---
 
-## Directory Structure Created
+## Migration order (remaining)
 
-```
-scripts_py/
-└── lib/
-    ├── __init__.py
-    ├── ndjson_parser.py     # Phase 2
-    ├── ndjson_parser.sh     # Phase 2 bash wrapper
-    ├── config.py            # Phase 4
-    ├── http_client.py       # Phase 5
-    └── python_utils.sh      # Phase 6 integration
-
-tests_py/
-├── __init__.py
-├── conftest.py              # Phase 1
-├── fixtures/
-│   ├── __init__.py
-│   ├── mock_opencode.py
-│   └── mock_curl.py
-└── test_unit/
-    ├── __init__.py
-    ├── test_lockfiles.py
-    ├── test_paths.py
-    ├── test_env.py
-    ├── test_ndjson_parser.py
-    ├── test_config.py
-    └── test_http_client.py
-```
+1. Observability: `status.py`, `usage_estimate.py`
+2. Lifecycle: `pause.py`, `resume.py`, `restart.py`, `emergency_kill.py`, `startup.py`
+3. Capabilities: `kb/manage.py`, `schedule/manage.py`, `schedule/install.py`,
+   `schedule/notify_wrap.py`, `screenshot/screenshot.py`, `vision/vision.py`,
+   `search/search.py`
+4. News: `fetch.py`, `analyze.py`, `briefing.py`
+5. Setup steps: `prerequisites.py`, `install_path.py`, `identity.py`, `messaging.py`,
+   `features.py`, `service.py`, `autonomy.py`; plus `install.py`, `repair.py`
+6. Messaging core: `send.py`, `photos.py`, `commands.py`, `dispatch.py`,
+   `chat.py`, `service.py` (listener service), `listener.py`
 
 ---
 
-## Consolidation (2026-03-09)
+## Git history
 
-`scripts_py/` was deleted. `src/adjutant/` is the single Python codebase.
-
-**What was merged before deletion:**
-
-- `scripts_py/lib/config.py` → full typed `AdjutantConfig` model hierarchy merged into
-  `src/adjutant/core/config.py`. The pydantic fallback `BaseModel` metaclass was dropped;
-  `pydantic>=2.0` is now a core dependency in `pyproject.toml`.
-- `scripts_py/lib/http_client.py` → ported as `src/adjutant/lib/http.py` (simplified to
-  use httpx directly, no urllib fallback needed since httpx is a declared dep).
-
-**What was dropped:**
-
-- `scripts_py/lib/ndjson_parser.py` — superseded by `src/adjutant/lib/ndjson.py`
-- `scripts_py/lib/ndjson_parser.sh` — bash bridge, not needed for full rewrite
-- `scripts_py/lib/python_utils.sh` — bash bridge, not needed for full rewrite
-
-**Tests migrated:**
-
-- `tests_py/test_unit/test_config.py` → merged into `tests/unit/test_config.py`
-- `tests_py/test_unit/test_http_client.py` → `tests/unit/test_http.py`
-- `tests_py/test_unit/test_ndjson_parser.py` → deleted (covered by `tests/unit/test_ndjson.py`)
-
-## Next Steps
-
-1. **Migrate remaining bats tests** to pytest under `tests/unit/` (470+ tests remaining)
-2. **Implement empty package stubs** in `src/adjutant/` (messaging, lifecycle, capabilities, etc.)
-3. **Create integration tests** for dispatch, commands, listener
-
----
-
-## Lessons Learned
-
-1. **Python 3.9 compatibility requires extra effort** - modern type syntax isn't available
-2. **Fallback implementations are complex** - pydantic fallback required metaclass magic
-3. **LSP errors don't mean runtime errors** - conditional imports confuse static analysis
-4. **Testing bash from Python works well** - subprocess isolation is clean
-5. **Singletons need careful management** - `reset_client()` pattern for testing
+| Commit | Description |
+|---|---|
+| `6958207` | Phase 1: foundation modules + tests |
+| `5cbb97e` | Migrate 5 bash leaf scripts to Python; drop `tests_py/` |
+| `305f7cf` | Add Python ignores to `.gitignore`; untrack `__pycache__` |
+| `34fdd01` | Migrate 7 more bash scripts; add 162 tests; update CLI; drop 18 bash scripts |
