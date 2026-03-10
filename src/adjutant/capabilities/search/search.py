@@ -162,5 +162,9 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if result.startswith("OK:") else 1
 
 
+# Alias used by commands.py
+run_search = web_search
+
+
 if __name__ == "__main__":
     sys.exit(main())
