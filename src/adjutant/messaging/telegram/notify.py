@@ -109,8 +109,7 @@ def send_notify(
     payload = {"chat_id": chat_id, "text": sanitized}
 
     client = get_client()
-    resp = client.post(url, json=payload)
-    resp.raise_for_status()
+    resp = client.post(url, json_data=payload)
 
     new_count = count + 1
     _write_count(state_dir, new_count, today)

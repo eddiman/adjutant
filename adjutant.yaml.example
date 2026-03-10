@@ -19,7 +19,7 @@ messaging:
   backend: "telegram"        # "telegram" or "none" (CLI-only mode)
   telegram:
     session_timeout_seconds: 7200      # 2h session window for conversational context
-    default_model: "anthropic/claude-haiku-4-5"
+    default_model: "opencode/kimi-k2.5"
     rate_limit:
       messages_per_minute: 10
       backoff_exponential: true
@@ -29,9 +29,10 @@ llm:
   models:
     # Named tiers — referenced by KB agents via kb.yaml model: cheap|medium|expensive
     # Changing a tier here propagates to all KBs that use it. No per-KB edits needed.
-    cheap: "anthropic/claude-haiku-4-5"      # retrieval, formatting, notifications, triage
-    medium: "anthropic/claude-sonnet-4-6"    # reasoning, analysis, signal generation, escalations
-    expensive: "anthropic/claude-opus-4-5"   # /reflect + /confirm only
+    # Multi-provider suite — see docs/reference/api-models.md for pricing & rationale
+    cheap: "opencode/kimi-k2.5"              # retrieval, formatting, notifications, triage ($0.60/$3.00 per 1M)
+    medium: "opencode/gemini-3-pro"          # reasoning, analysis, signal generation ($2.00/$12.00 per 1M)
+    expensive: "anthropic/claude-opus-4-5"   # /reflect + /confirm only ($5.00/$25.00 per 1M)
   caps:
     session_tokens: 44000              # per-session token budget
     session_window_hours: 5            # rolling window for session tracking

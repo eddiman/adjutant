@@ -64,9 +64,7 @@ def _send_notify(adj_dir: Path, text: str) -> None:
     try:
         from adjutant.messaging.telegram.notify import send_notify
 
-        import asyncio
-
-        asyncio.run(send_notify(text))
+        send_notify(text, adj_dir)
     except Exception:
         # Non-fatal — matches bash `|| true`
         pass
@@ -359,60 +357,17 @@ def emergency_kill(adj_dir: Optional[Path] = None) -> str:
 
 
 def _stop_telegram_service(adj_dir: Path) -> None:
-    """Best-effort stop of the Telegram listener service."""
-    _kill_pidfile(adj_dir / "state" / "telegram.pid", signal.SIGTERM)
-    time.sleep(1)
-    (adj_dir / "state" / "telegram.pid").unlink(missing_ok=True)
-    lock_dir = adj_dir / "state" / "listener.lock"
-    if lock_dir.exists():
-        shutil.rmtree(lock_dir, ignore_errors=True)
+    """Stop the Telegram listener, cleaning up all stale pid/lock files."""
+    from adjutant.messaging.telegram.service import listener_stop
+
+    listener_stop(adj_dir)
 
 
 def _start_telegram_service(adj_dir: Path) -> str:
     """Start the Telegram listener. Returns status line."""
-    # Check if already running via listener.lock/pid
-    lock_pid_file = adj_dir / "state" / "listener.lock" / "pid"
-    lock_pid = _read_pid(lock_pid_file)
-    if lock_pid and _pid_alive(lock_pid):
-        return f"Telegram listener already running (PID {lock_pid})"
+    from adjutant.messaging.telegram.service import listener_start
 
-    # Check telegram.pid
-    tg_pid = _read_pid(adj_dir / "state" / "telegram.pid")
-    if tg_pid and _pid_alive(tg_pid):
-        return f"Telegram listener already running (PID {tg_pid})"
-
-    # Check pgrep
-    existing = _pgrep_first("messaging/telegram/listener")
-    if existing:
-        return f"Telegram listener already running (PID {existing})"
-
-    # Not running — start it via the listener Python module
-    listener_cmd = [
-        sys.executable,
-        "-m",
-        "adjutant.messaging.telegram.listener",
-    ]
-    try:
-        proc = subprocess.Popen(
-            listener_cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-            env={**os.environ, "ADJ_DIR": str(adj_dir)},
-        )
-        # Write PID files
-        pid = proc.pid
-        tg_pid_file = adj_dir / "state" / "telegram.pid"
-        tg_pid_file.parent.mkdir(parents=True, exist_ok=True)
-        tg_pid_file.write_text(str(pid))
-
-        lock_dir = adj_dir / "state" / "listener.lock"
-        lock_dir.mkdir(parents=True, exist_ok=True)
-        (lock_dir / "pid").write_text(str(pid))
-
-        return f"Telegram listener started (PID {pid})"
-    except OSError as e:
-        return f"Telegram listener failed to start: {e}"
+    return listener_start(adj_dir)
 
 
 def _start_opencode_web(adj_dir: Path) -> str:

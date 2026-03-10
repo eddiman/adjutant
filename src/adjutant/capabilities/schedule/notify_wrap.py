@@ -41,12 +41,16 @@ def notify_wrap(
     """
     from adjutant.core.logging import adj_log
 
-    # Run the script, capturing combined stdout+stderr
+    # Run the script, capturing combined stdout+stderr.
+    # Use shell=True so that script_path can be a full command string
+    # (e.g. ".venv/bin/python -m adjutant news"), not just a bare file path.
     try:
         result = subprocess.run(
-            ["bash", script_path],
+            script_path,
             capture_output=True,
             text=True,
+            shell=True,
+            cwd=str(adj_dir),
         )
         script_rc = result.returncode
         output = result.stdout + result.stderr
@@ -69,8 +73,8 @@ def notify_wrap(
         from adjutant.messaging.telegram.notify import send_notify
 
         send_notify(message, adj_dir)
-    except Exception:
-        pass  # Non-fatal — matches bash `|| true`
+    except Exception as e:
+        adj_log("schedule", f"[{job_name}] notify failed: {e}")
 
     # Always exit 0
     return 0
@@ -81,11 +85,13 @@ def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
 
     if len(args) < 2:
-        sys.stderr.write("Usage: notify_wrap.py <job_name> <script_path>\n")
+        sys.stderr.write("Usage: notify_wrap.py <job_name> <script_path...>\n")
         return 1
 
     job_name = args[0]
-    script_path = args[1]
+    script_path = " ".join(
+        args[1:]
+    )  # join in case command has spaces (e.g. "python -m adjutant news")
 
     adj_dir_str = os.environ.get("ADJ_DIR", "").strip()
     if not adj_dir_str:

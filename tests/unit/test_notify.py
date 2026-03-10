@@ -171,7 +171,7 @@ class TestSendNotify:
         with patch("adjutant.messaging.telegram.notify.get_client", return_value=mock_client):
             send_notify("msg", adj_dir, env_path=env_path, today=d)
 
-        payload = mock_client.post.call_args[1]["json"]
+        payload = mock_client.post.call_args[1]["json_data"]
         assert "parse_mode" not in payload
 
     def test_count_persists_across_calls(self, tmp_path: Path) -> None:

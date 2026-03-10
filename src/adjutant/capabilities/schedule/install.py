@@ -45,7 +45,9 @@ def _resolve_command(entry: dict, adj_dir: Path) -> str:
     kb_operation = entry.get("kb_operation", "") or ""
 
     if kb_name and kb_operation:
-        return f"bash {adj_dir}/scripts/capabilities/kb/run.sh {kb_name} {kb_operation}"
+        venv_py = adj_dir / ".venv" / "bin" / "python"
+        python = str(venv_py) if venv_py.exists() else "python3"
+        return f"{python} -m adjutant kb run {kb_name} {kb_operation}"
 
     script = entry.get("script", "") or ""
     if script:
@@ -144,10 +146,12 @@ def install_one(adj_dir: Path, name: str) -> None:
     marker = _marker(name)
 
     if notify:
-        wrap_py = adj_dir / "scripts" / "capabilities" / "schedule" / "notify_wrap.py"
-        cron_line = f"{sched} python3 {wrap_py} {name} {script_path} >> {log_path} 2>&1  {marker}"
+        wrap_py = adj_dir / "src" / "adjutant" / "capabilities" / "schedule" / "notify_wrap.py"
+        venv_py = adj_dir / ".venv" / "bin" / "python"
+        python = str(venv_py) if venv_py.exists() else "python3"
+        cron_line = f"{sched} ADJ_DIR={adj_dir} {python} {wrap_py} {name} {script_path} >> {log_path} 2>&1  {marker}"
     else:
-        cron_line = f"{sched} {script_path} >> {log_path} 2>&1  {marker}"
+        cron_line = f"{sched} ADJ_DIR={adj_dir} {script_path} >> {log_path} 2>&1  {marker}"
 
     # Remove any existing entry for this job, then append new one
     existing = _read_crontab()
@@ -201,9 +205,12 @@ def run_now(adj_dir: Path, name: str) -> int:
     if not command:
         raise ValueError(f"Job '{name}' has no runnable script or KB operation configured.")
 
-    # If it's a bash kb/run.sh command, run via shell
-    if command.startswith("bash "):
-        result = subprocess.run(command, shell=True)
+    # If the command is a shell string (not a bare file path), run via shell
+    kb_name = (entry or {}).get("kb_name", "") or ""
+    kb_operation = (entry or {}).get("kb_operation", "") or ""
+    if kb_name and kb_operation:
+        env = {**os.environ, "ADJ_DIR": str(adj_dir)}
+        result = subprocess.run(command, shell=True, env=env)
         return result.returncode
 
     script_path = Path(command)

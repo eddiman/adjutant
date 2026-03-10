@@ -78,7 +78,7 @@ class TestResolveCommand:
     def test_kb_command(self, tmp_path: Path) -> None:
         entry = {"kb_name": "mydb", "kb_operation": "fetch"}
         result = _resolve_command(entry, tmp_path)
-        assert "run.sh" in result
+        assert "adjutant kb run" in result
         assert "mydb" in result
         assert "fetch" in result
 
