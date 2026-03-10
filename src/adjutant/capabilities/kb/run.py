@@ -11,10 +11,16 @@ The bash script:
 
 This module reproduces that logic in Python, reading the KB registry YAML
 directly (no bash subprocess needed).
+
+KB operations may emit structured JSON events on stderr (one per line):
+  {"type": "notification", "ts": "...", "message": "..."}
+
+These are captured and forwarded via Adjutant's notification system.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -133,6 +139,40 @@ def get_operation_script(adj_dir: Path, kb_name: str, operation: str) -> Path:
     return script_path
 
 
+def _forward_kb_events(stderr: str, adj_dir: Path, kb_name: str) -> None:
+    """Parse structured JSON events from KB stderr and forward notifications.
+
+    KB operations emit one JSON object per line on stderr. Lines that are not
+    valid JSON (e.g. warnings, debug output) are silently ignored.
+    """
+    if not stderr.strip():
+        return
+
+    from adjutant.core.logging import adj_log
+
+    for line in stderr.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+        if not isinstance(event, dict) or event.get("type") != "notification":
+            continue
+
+        message = event.get("message", "")
+        if not message:
+            continue
+
+        try:
+            from adjutant.messaging.telegram.notify import send_notify
+            send_notify(f"[{kb_name}] {message}", adj_dir)
+        except Exception as exc:
+            adj_log("kb", f"Failed to forward notification from {kb_name}: {exc}")
+
+
 def kb_run(
     adj_dir: Path,
     kb_name: str,
@@ -145,6 +185,9 @@ def kb_run(
       - Resolves the operation script
       - Runs it via bash, capturing combined stdout+stderr
       - Returns the output on success
+
+    Structured JSON events on stderr are parsed and forwarded as
+    notifications (see _forward_kb_events).
 
     Args:
         adj_dir: Adjutant root directory.
@@ -165,9 +208,12 @@ def kb_run(
     cmd = ["bash", str(script_path)] + (args or [])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-    combined = result.stdout + result.stderr
+
+    # Forward any structured events from stderr before raising errors
+    _forward_kb_events(result.stderr, adj_dir, kb_name)
 
     if result.returncode != 0:
+        combined = result.stdout + result.stderr
         raise KBRunError(combined.strip())
 
     return result.stdout
