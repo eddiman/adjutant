@@ -9,8 +9,11 @@ PAUSED
 # User-specific identity and configuration — copy from *.example to create
 adjutant.yaml
 identity/soul.md
+identity/soul.md.backup.*
 identity/heart.md
+identity/heart.md.backup.*
 identity/registry.md
+identity/registry.md.backup.*
 news_config.json
 
 # Knowledge bases — user data, not part of the framework
