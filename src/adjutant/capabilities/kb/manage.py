@@ -16,6 +16,7 @@ Scaffold template variables replaced by kb_scaffold():
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -262,6 +263,49 @@ def _render_template(template_path: Path, variables: dict[str, str]) -> str:
     return text
 
 
+def _write_kb_opencode_json(kb_path: Path, access: str) -> None:
+    """Generate opencode.json for a KB, tailored to its access level.
+
+    All KBs get:
+      - external_directory: deny  (sandbox)
+      - read/glob deny for .env and secrets
+      - bash: deny  (no shell execution)
+
+    Read-write KBs additionally get edit/write allowed (implicit by
+    omitting deny rules for those tools). Read-only KBs get edit denied.
+    """
+    permission: dict = {
+        "external_directory": "deny",
+        "read": {
+            "*": "allow",
+            "**/.env": "deny",
+            ".env": "deny",
+            "**/.env.*": "deny",
+            "**/*secret*": "deny",
+            "**/*credential*": "deny",
+        },
+        "glob": {
+            "*": "allow",
+            "**/.env": "deny",
+            ".env": "deny",
+        },
+        "bash": {
+            "*": "deny",
+        },
+    }
+
+    if access != "read-write":
+        permission["edit"] = {"*": "deny"}
+        permission["write"] = {"*": "deny"}
+
+    config = {
+        "$schema": "https://opencode.ai/config.json",
+        "permission": permission,
+    }
+
+    (kb_path / "opencode.json").write_text(json.dumps(config, indent=2) + "\n")
+
+
 def kb_scaffold(
     adj_dir: Path,
     name: str,
@@ -319,12 +363,8 @@ def kb_scaffold(
     if kb_yaml_tmpl.is_file():
         (kb_path / "kb.yaml").write_text(_render_template(kb_yaml_tmpl, variables))
 
-    # opencode.json — copied verbatim (no template variables)
-    oc_json_tmpl = templates / "opencode.json"
-    if oc_json_tmpl.is_file():
-        import shutil
-
-        shutil.copy2(oc_json_tmpl, kb_path / "opencode.json")
+    # opencode.json — generated dynamically based on access level
+    _write_kb_opencode_json(kb_path, access)
 
     # Agent definition
     agent_tmpl = templates / "agents" / "kb.md"

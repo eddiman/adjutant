@@ -498,6 +498,29 @@ def screenshot(ctx: click.Context, url: str, caption: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# search
+# ---------------------------------------------------------------------------
+
+
+@main.command()
+@click.argument("query")
+@click.option("--count", "-n", default=5, help="Number of results (1-10).")
+@click.pass_context
+def search(ctx: click.Context, query: str, count: int) -> None:
+    """Search the web via Brave Search API."""
+    adj_dir = ctx.obj.get("adj_dir")
+
+    from adjutant.capabilities.search.search import web_search
+
+    result = web_search(query, count=count, adj_dir=adj_dir)
+    if result.startswith("OK:"):
+        click.echo(result[3:])
+    else:
+        click.echo(result[6:] if result.startswith("ERROR:") else result, err=True)
+        raise SystemExit(1)
+
+
+# ---------------------------------------------------------------------------
 # news
 # ---------------------------------------------------------------------------
 

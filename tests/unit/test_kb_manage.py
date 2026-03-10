@@ -10,6 +10,7 @@ import pytest
 from adjutant.capabilities.kb.manage import (
     KBEntry,
     _load_registry,
+    _write_kb_opencode_json,
     _write_registry,
     kb_count,
     kb_exists,
@@ -360,6 +361,105 @@ class TestKbScaffold:
         kb_path = tmp_path / "kb1"
         kb_scaffold(tmp_path, "kb1", kb_path, "Test KB")
         assert (kb_path / "data").is_dir()
+
+    def test_generates_opencode_json_read_only(self, tmp_path: Path) -> None:
+        self._make_templates(tmp_path)
+        kb_path = tmp_path / "kb1"
+        kb_scaffold(tmp_path, "kb1", kb_path, "Test KB", access="read-only")
+        import json
+
+        config = json.loads((kb_path / "opencode.json").read_text())
+        perm = config["permission"]
+        assert perm["external_directory"] == "deny"
+        assert perm["bash"]["*"] == "deny"
+        assert perm["edit"]["*"] == "deny"
+        assert perm["write"]["*"] == "deny"
+        assert perm["read"][".env"] == "deny"
+
+    def test_generates_opencode_json_read_write(self, tmp_path: Path) -> None:
+        self._make_templates(tmp_path)
+        kb_path = tmp_path / "kb1"
+        kb_scaffold(tmp_path, "kb1", kb_path, "Test KB", access="read-write")
+        import json
+
+        config = json.loads((kb_path / "opencode.json").read_text())
+        perm = config["permission"]
+        assert perm["external_directory"] == "deny"
+        assert perm["bash"]["*"] == "deny"
+        assert "edit" not in perm  # not denied for read-write
+        assert "write" not in perm  # not denied for read-write
+        assert perm["read"][".env"] == "deny"
+
+
+# ---------------------------------------------------------------------------
+# _write_kb_opencode_json
+# ---------------------------------------------------------------------------
+
+
+class TestWriteKbOpencodeJson:
+    def test_read_only_denies_edit_write_bash(self, tmp_path: Path) -> None:
+        import json
+
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        _write_kb_opencode_json(kb_path, "read-only")
+        config = json.loads((kb_path / "opencode.json").read_text())
+        perm = config["permission"]
+        assert perm["edit"]["*"] == "deny"
+        assert perm["write"]["*"] == "deny"
+        assert perm["bash"]["*"] == "deny"
+
+    def test_read_write_allows_edit_write(self, tmp_path: Path) -> None:
+        import json
+
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        _write_kb_opencode_json(kb_path, "read-write")
+        config = json.loads((kb_path / "opencode.json").read_text())
+        perm = config["permission"]
+        assert "edit" not in perm
+        assert "write" not in perm
+        assert perm["bash"]["*"] == "deny"
+
+    def test_always_denies_env_reads(self, tmp_path: Path) -> None:
+        import json
+
+        for access in ["read-only", "read-write"]:
+            kb_path = tmp_path / f"kb-{access}"
+            kb_path.mkdir()
+            _write_kb_opencode_json(kb_path, access)
+            config = json.loads((kb_path / "opencode.json").read_text())
+            perm = config["permission"]
+            assert perm["read"][".env"] == "deny"
+            assert perm["read"]["**/.env"] == "deny"
+            assert perm["read"]["**/.env.*"] == "deny"
+            assert perm["read"]["**/*secret*"] == "deny"
+            assert perm["glob"][".env"] == "deny"
+
+    def test_always_denies_external_directory(self, tmp_path: Path) -> None:
+        import json
+
+        for access in ["read-only", "read-write"]:
+            kb_path = tmp_path / f"kb-{access}"
+            kb_path.mkdir()
+            _write_kb_opencode_json(kb_path, access)
+            config = json.loads((kb_path / "opencode.json").read_text())
+            assert config["permission"]["external_directory"] == "deny"
+
+    def test_output_is_valid_json(self, tmp_path: Path) -> None:
+        import json
+
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        _write_kb_opencode_json(kb_path, "read-only")
+        # Should not raise
+        json.loads((kb_path / "opencode.json").read_text())
+
+    def test_file_ends_with_newline(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        _write_kb_opencode_json(kb_path, "read-only")
+        assert (kb_path / "opencode.json").read_text().endswith("\n")
 
 
 # ---------------------------------------------------------------------------

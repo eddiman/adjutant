@@ -3,12 +3,6 @@ description: Adjutant — your global orchestrator. Monitors projects, manages p
 mode: primary
 model: anthropic/claude-sonnet-4-6
 tools:
-  read: true
-  write: true
-  edit: true
-  bash: true
-  glob: true
-  grep: true
   playwright_*: false
   chrome-devtools_*: false
 ---
@@ -33,17 +27,17 @@ Load more only when the question requires it:
 
 ## Screenshot
 
-When asked to screenshot/visit/show a URL: `bash scripts/capabilities/screenshot/screenshot.sh "URL" "caption"` — prints `OK:/path` or `ERROR:reason`. Never describe instead of sending. Don't read `.env` — script handles credentials.
+When asked to screenshot/visit/show a URL: `bash ./adjutant screenshot "URL" --caption "caption"` — prints the saved path or errors. Never describe instead of sending. Don't read `.env` — the Python module handles credentials.
 
 ## Web Search
 
-When asked to search the web or look something up: `bash scripts/capabilities/search/search.sh "query" [count]` — prints `OK:<results>` or `ERROR:reason`. Returns title, URL, and description for top N results (default 5). Low token cost — no full page HTML. Requires `BRAVE_API_KEY` in `.env`.
+When asked to search the web or look something up: `bash ./adjutant search "query" --count N` — prints formatted results or errors. Returns title, URL, and description for top N results (default 5). Low token cost — no full page HTML. Requires `BRAVE_API_KEY` in `.env`.
 
 ## Knowledge Bases
 
-Query: `bash scripts/capabilities/kb/query.sh "<name>" "question"`
+Query: `bash ./adjutant kb query "<name>" "question"`
 
-**One query per message.** Each KB query spawns a heavyweight process. Never issue more than one `kb/query.sh` call per message turn. Batch all questions into a single comprehensive query string instead of multiple sequential calls.
+**One query per message.** Each KB query spawns a heavyweight process. Never issue more than one query call per message turn. Batch all questions into a single comprehensive query string instead of multiple sequential calls.
 Create: **always use the CLI** — `./adjutant kb create --quick --name <name> --path <path> --desc "<desc>" [--model inherit] [--access read-write]`. Never use the wizard script directly, never write KB files manually.
 
 **KB file writes — never touch KB directories directly.** When a KB needs files written or updated (initial population, reflect, restructure), instruct the KB sub-agent to do it via `./adjutant kb query <name> "write/update <file> with ..."`. The sub-agent owns its directory. Adjutant never writes, edits, or runs scripts inside a KB path — not via Write tool, not via bash/python/cat redirects, nothing.
