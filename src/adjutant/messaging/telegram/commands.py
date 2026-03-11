@@ -12,12 +12,119 @@ rather than calling the Telegram API directly.
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
 from adjutant.core.logging import adj_log
+
+
+# ---------------------------------------------------------------------------
+# Model selection state
+# ---------------------------------------------------------------------------
+
+_PENDING_MODEL_FILE = "pending_model_matches.json"
+_PENDING_MODEL_TTL = 120  # seconds — auto-expire stale refinement prompts
+
+
+async def _fetch_available_models() -> list[str]:
+    """Return the list of available models from opencode, or [] on failure."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "opencode",
+            "models",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+        return [line for line in stdout.decode(errors="replace").splitlines() if line.strip()]
+    except Exception:
+        return []
+
+
+def _normalize(s: str) -> str:
+    """Normalize a model string for fuzzy comparison.
+
+    Replaces hyphens and dots with spaces so that "4.6", "4-6", and "4 6"
+    all compare equal.  Also lowercases.
+    """
+    return s.lower().replace("-", " ").replace(".", " ")
+
+
+def _fuzzy_match(query: str, models: list[str]) -> list[str]:
+    """Return models matching *query*.
+
+    Matching rules (applied in order — first non-empty result wins):
+      1. Exact match (case-sensitive)
+      2. Exact match (case-insensitive)
+      3. Token match: every space-separated token in the normalized *query*
+         must appear in the normalized model string.  Normalization replaces
+         hyphens and dots with spaces, so "opus 4.6" matches both
+         ``anthropic/claude-opus-4-6`` and ``github-copilot/claude-opus-4.6``.
+    """
+    # 1. Exact
+    if query in models:
+        return [query]
+
+    # 2. Case-insensitive exact
+    lower = query.lower()
+    exact_ci = [m for m in models if m.lower() == lower]
+    if exact_ci:
+        return exact_ci
+
+    # 3. Normalized token substring
+    norm_query = _normalize(query)
+    tokens = norm_query.split()
+    if not tokens:
+        return []
+    matches = [m for m in models if all(tok in _normalize(m) for tok in tokens)]
+    return matches
+
+
+def _save_pending_model(adj_dir: Path, matches: list[str], query: str) -> None:
+    state = adj_dir / "state" / _PENDING_MODEL_FILE
+    state.parent.mkdir(parents=True, exist_ok=True)
+    state.write_text(
+        json.dumps(
+            {
+                "matches": matches,
+                "original_query": query,
+                "timestamp": int(time.time()),
+            }
+        )
+    )
+
+
+def _load_pending_model(adj_dir: Path) -> dict | None:
+    state = adj_dir / "state" / _PENDING_MODEL_FILE
+    if not state.is_file():
+        return None
+    try:
+        data = json.loads(state.read_text())
+    except (json.JSONDecodeError, OSError):
+        _clear_pending_model(adj_dir)
+        return None
+    # Auto-expire
+    if int(time.time()) - data.get("timestamp", 0) > _PENDING_MODEL_TTL:
+        _clear_pending_model(adj_dir)
+        return None
+    return data
+
+
+def _clear_pending_model(adj_dir: Path) -> None:
+    state = adj_dir / "state" / _PENDING_MODEL_FILE
+    try:
+        state.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _format_match_list(matches: list[str]) -> str:
+    """Format a list of model names as a bulleted Telegram message."""
+    return "\n".join(f"  • {m}" for m in matches[:20])
 
 
 # ---------------------------------------------------------------------------
@@ -436,6 +543,24 @@ You can also send me a photo — I'll store it locally and tell you what I see.\
 # ---------------------------------------------------------------------------
 
 
+def _switch_model(adj_dir: Path, new_model: str) -> None:
+    """Write the new model and clear the chat session."""
+    model_file = adj_dir / "state" / "telegram_model.txt"
+    model_file.parent.mkdir(parents=True, exist_ok=True)
+    model_file.write_text(new_model)
+
+    # Clear the chat session — opencode hangs when resuming a session with a
+    # different model, so every model switch must start a fresh session.
+    session_file = adj_dir / "state" / "telegram_session.json"
+    try:
+        session_file.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    _clear_pending_model(adj_dir)
+    adj_log("telegram", f"Model switched to {new_model} (session cleared)")
+
+
 async def cmd_model(
     arg: str,
     message_id: int,
@@ -443,8 +568,19 @@ async def cmd_model(
     *,
     bot_token: str,
     chat_id: str,
+    refine: bool = False,
 ) -> None:
-    """Show or switch the current model."""
+    """Show, switch, or fuzzy-search models.
+
+    Behaviour:
+      /model             — show current model + full list
+      /model <exact>     — switch immediately
+      /model <partial>   — fuzzy-match; if 1 hit → switch, if N → ask to refine
+      (refinement msg)   — narrow previous multi-match down further
+
+    When *refine* is True the arg is treated as a follow-up to a previous
+    multi-match prompt (loaded from state/pending_model_matches.json).
+    """
     model_file = adj_dir / "state" / "telegram_model.txt"
 
     current_model = "anthropic/claude-haiku-4-5"
@@ -453,59 +589,151 @@ async def cmd_model(
         if raw:
             current_model = raw
 
-    if not arg:
-        # Show current + list
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                "opencode",
-                "models",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-            model_list_lines = stdout.decode(errors="replace").splitlines()[:30]
-            model_list = "\n".join(model_list_lines)
-        except Exception:
-            model_list = "(could not retrieve model list)"
+    # --- Refinement of a previous multi-match prompt ---
+    if refine:
+        pending = _load_pending_model(adj_dir)
+        if not pending:
+            # Expired or missing — treat as normal chat (caller handles this)
+            return
 
+        prev_matches: list[str] = pending.get("matches", [])
+        query = arg.strip()
+
+        # "cancel" / "nevermind" / "keep" → abort
+        if query.lower() in ("cancel", "nevermind", "never mind", "nvm", "keep", "no"):
+            _clear_pending_model(adj_dir)
+            _send(
+                f"No problem — keeping *{current_model}*.",
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
+
+        # Narrow previous matches with new tokens
+        narrowed = _fuzzy_match(query, prev_matches)
+
+        if len(narrowed) == 1:
+            _switch_model(adj_dir, narrowed[0])
+            _send(
+                f"Switched to *{narrowed[0]}*.",
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
+
+        if len(narrowed) == 0:
+            # Tokens didn't match any of the previous candidates — try full list
+            all_models = await _fetch_available_models()
+            full_search = _fuzzy_match(query, all_models)
+            if len(full_search) == 1:
+                _switch_model(adj_dir, full_search[0])
+                _send(
+                    f"Switched to *{full_search[0]}*.",
+                    message_id,
+                    bot_token=bot_token,
+                    chat_id=chat_id,
+                )
+                return
+            if len(full_search) > 1:
+                _save_pending_model(adj_dir, full_search, query)
+                _send(
+                    f'Still multiple matches for "{query}":\n'
+                    f"{_format_match_list(full_search)}\n\n"
+                    f'Reply with another keyword to narrow down, or "cancel".',
+                    message_id,
+                    bot_token=bot_token,
+                    chat_id=chat_id,
+                )
+                return
+            # Zero everywhere — give up
+            _clear_pending_model(adj_dir)
+            _send(
+                f'No models match "{query}". Run /model to see the full list.',
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
+
+        # Multiple narrowed matches — keep refining
+        _save_pending_model(adj_dir, narrowed, query)
         _send(
-            f"Current model: *{current_model}*\n\n"
-            f"Available models (first 30 — full list at `opencode models`):\n"
-            f"```\n{model_list}\n```\n\n"
-            f"Switch with: /model <name>",
+            f"Narrowed to {len(narrowed)} matches:\n"
+            f"{_format_match_list(narrowed)}\n\n"
+            f'Reply with another keyword to narrow down, or "cancel".',
             message_id,
             bot_token=bot_token,
             chat_id=chat_id,
         )
         return
 
-    # Validate the new model
-    new_model = arg.strip()
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "opencode",
-            "models",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        available = stdout.decode(errors="replace").splitlines()
-        if new_model not in available:
-            _send(
-                "I don't recognise that model. Run /model to see available options.",
-                message_id,
-                bot_token=bot_token,
-                chat_id=chat_id,
-            )
-            return
-    except Exception:
-        # If we can't verify, allow it (matches bash behaviour — opencode models may fail)
-        pass
+    # --- /model (no arg) — show current + list ---
+    if not arg:
+        available = await _fetch_available_models()
+        if available:
+            model_list = "\n".join(available[:30])
+        else:
+            model_list = "(could not retrieve model list)"
 
-    model_file.parent.mkdir(parents=True, exist_ok=True)
-    model_file.write_text(new_model)
-    _send(f"Switched to *{new_model}*.", message_id, bot_token=bot_token, chat_id=chat_id)
-    adj_log("telegram", f"Model switched to {new_model}")
+        _send(
+            f"Current model: *{current_model}*\n\n"
+            f"Available models (first 30):\n"
+            f"```\n{model_list}\n```\n\n"
+            f"Switch with: /model <name> (exact or partial, e.g. /model opus 4.6)",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return
+
+    # --- /model <query> — fuzzy search + switch ---
+    query = arg.strip()
+    available = await _fetch_available_models()
+
+    if not available:
+        # Can't verify — allow verbatim (matches original fallback behaviour)
+        _switch_model(adj_dir, query)
+        _send(
+            f"Switched to *{query}* (could not verify against model list).",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return
+
+    matches = _fuzzy_match(query, available)
+
+    if len(matches) == 1:
+        _switch_model(adj_dir, matches[0])
+        _send(
+            f"Switched to *{matches[0]}*.",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return
+
+    if len(matches) == 0:
+        _send(
+            f'No models match "{query}". Run /model to see the full list.',
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return
+
+    # Multiple matches — save state and ask to refine
+    _save_pending_model(adj_dir, matches, query)
+    _send(
+        f'Found {len(matches)} matches for "{query}":\n'
+        f"{_format_match_list(matches)}\n\n"
+        f'Reply with a keyword to narrow down (e.g. "anthropic"), or "cancel".',
+        message_id,
+        bot_token=bot_token,
+        chat_id=chat_id,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -46,11 +46,18 @@ def get_model(adj_dir: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
-def get_session_id(adj_dir: Path) -> str | None:
+def get_session_id(adj_dir: Path, *, model: str | None = None) -> str | None:
     """Return the current session ID if it exists and is within timeout.
 
+    Args:
+        adj_dir: Adjutant root directory.
+        model: If provided, the session is only returned when its stored model
+            matches. A model mismatch (e.g. switching from Sonnet to Opus)
+            invalidates the session because opencode may hang when resuming a
+            session with a different model.
+
     Returns:
-        session_id string if valid, None if expired or missing.
+        session_id string if valid, None if expired, missing, or model-mismatched.
     """
     session_file = adj_dir / "state" / _SESSION_FILE_NAME
     if not session_file.is_file():
@@ -67,6 +74,15 @@ def get_session_id(adj_dir: Path) -> str | None:
     if not session_id:
         return None
 
+    # Model mismatch → stale session (opencode hangs on cross-model resume)
+    if model is not None:
+        stored_model = data.get("model", "")
+        if stored_model and stored_model != model:
+            adj_log(
+                "telegram", f"Session model mismatch ({stored_model} → {model}), starting fresh"
+            )
+            return None
+
     # Truncate to int in case it was written as float by an older version
     try:
         age = int(time.time()) - int(float(last_epoch))
@@ -79,7 +95,7 @@ def get_session_id(adj_dir: Path) -> str | None:
     return None
 
 
-def save_session(session_id: str, adj_dir: Path) -> None:
+def save_session(session_id: str, adj_dir: Path, *, model: str = "") -> None:
     """Write a new session to state/telegram_session.json."""
     session_file = adj_dir / "state" / _SESSION_FILE_NAME
     session_file.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +107,7 @@ def save_session(session_id: str, adj_dir: Path) -> None:
         "session_id": session_id,
         "last_message_epoch": now_epoch,
         "last_message_at": now_human,
+        "model": model,
     }
     session_file.write_text(json.dumps(data))
 
@@ -139,7 +156,7 @@ async def run_chat(message: str, adj_dir: Path) -> str:
     from adjutant.lib.ndjson import parse_ndjson
 
     model = get_model(adj_dir)
-    existing_session = get_session_id(adj_dir)
+    existing_session = get_session_id(adj_dir, model=model)
 
     args = [
         "run",
@@ -186,7 +203,7 @@ async def run_chat(message: str, adj_dir: Path) -> str:
     new_sid = parsed.session_id
     if new_sid:
         if not existing_session:
-            save_session(new_sid, adj_dir)
+            save_session(new_sid, adj_dir, model=model)
         else:
             touch_session(adj_dir)
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import time
 from pathlib import Path
 
@@ -29,6 +30,20 @@ _INFLIGHT: dict[str, asyncio.Task[None]] = {}
 
 _RATE_LIMIT_WINDOW = 60  # seconds
 _PENDING_REFLECT_FILE_NAME = "pending_reflect"
+
+# Regex for natural-language model-switch intent.
+# Captures the hint after the intent verb, e.g.:
+#   "switch to opus 4.6" → "opus 4.6"
+#   "use sonnet"         → "sonnet"
+#   "try kimi"           → "kimi"
+#   "change model to glm-5" → "glm-5"
+_MODEL_SWITCH_RE = re.compile(
+    r"^(?:switch|change|use|try)"  # intent verb
+    r"(?:\s+(?:the\s+)?model)?"  # optional "model" / "the model"
+    r"\s+(?:to\s+)?"  # optional "to"
+    r"(.+)$",  # the hint (model name / partial)
+    re.IGNORECASE,
+)
 
 
 def _rate_limit_max() -> int:
@@ -119,6 +134,7 @@ async def dispatch_message(
         chat_id: Authorized chat ID.
     """
     from adjutant.messaging.telegram.commands import (
+        _load_pending_model,
         cmd_help,
         cmd_kb,
         cmd_kill,
@@ -170,6 +186,13 @@ async def dispatch_message(
             adj_log("messaging", "Reflect cancelled.")
         return
 
+    # Pending model refinement flow — user is narrowing down a multi-match
+    if _load_pending_model(adj_dir) is not None and not text.startswith("/"):
+        await cmd_model(
+            text, message_id, adj_dir, bot_token=bot_token, chat_id=chat_id, refine=True
+        )
+        return
+
     # Command dispatch
     if text == "/status":
         await cmd_status(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
@@ -216,6 +239,14 @@ async def dispatch_message(
             text[len("/schedule ") :], message_id, adj_dir, bot_token=bot_token, chat_id=chat_id
         )
     else:
+        # Natural language model-switch intent detection
+        m = _MODEL_SWITCH_RE.match(text.strip())
+        if m:
+            hint = m.group(1).strip()
+            adj_log("messaging", f'Model-switch intent detected: "{hint}"')
+            await cmd_model(hint, message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+            return
+
         # Natural language chat
         adj_log("messaging", f"Chat msg={message_id}: {text}")
         msg_id_str = str(message_id)

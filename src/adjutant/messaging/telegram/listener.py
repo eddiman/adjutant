@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import signal
 import sys
 import time
 from pathlib import Path
@@ -120,11 +119,10 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
 
     adj_log("telegram", f"Lock acquired (PID {os.getpid()})")
 
-    # Ignore SIGCHLD — don't let zombie children accumulate
-    try:
-        signal.signal(signal.SIGCHLD, signal.SIG_IGN)
-    except (AttributeError, OSError):
-        pass  # SIGCHLD not available on all platforms
+    # NOTE: Do NOT set SIGCHLD to SIG_IGN here.  SIG_IGN causes the kernel
+    # to auto-reap children before asyncio's _ThreadedChildWatcher can call
+    # waitpid(), resulting in returncode 255 for every subprocess.  asyncio
+    # already reaps children spawned via create_subprocess_exec.
 
     # --- State ---
     offset = _load_offset(adj_dir)
@@ -147,7 +145,7 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                 try:
                     from adjutant.core.opencode import opencode_reap
 
-                    opencode_reap()
+                    await opencode_reap()
                 except Exception as exc:
                     adj_log("telegram", f"opencode_reap error: {exc}")
 
