@@ -292,7 +292,7 @@ The `external_directory: deny` prevents the agent from accessing files outside t
 ## Where things live
 
 ```
-~/.adjutant/
+$ADJ_DIR/
 ├── adjutant.yaml        ← main config (gitignored)
 ├── .env                 ← credentials (gitignored)
 ├── opencode.json        ← workspace permissions

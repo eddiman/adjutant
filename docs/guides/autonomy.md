@@ -155,8 +155,8 @@ adjutant resume       # removes ADJ_DIR/PAUSED
 Or directly:
 
 ```bash
-touch "$HOME/.adjutant/PAUSED"   # pause
-rm "$HOME/.adjutant/PAUSED"      # resume
+touch "$ADJ_DIR/PAUSED"   # pause
+rm "$ADJ_DIR/PAUSED"      # resume
 ```
 
 When `PAUSED` exists, every autonomous prompt outputs a skip message and stops immediately. Nothing is written to `insights/`, `state/`, or `actions.jsonl`.

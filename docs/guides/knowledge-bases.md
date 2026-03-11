@@ -177,7 +177,7 @@ Default to `read-write` for active project KBs. The sub-agent won't write unless
 
 ## KB registration
 
-Register every KB in `~/.adjutant/knowledge_bases/registry.yaml`:
+Register every KB in `$ADJ_DIR/knowledge_bases/registry.yaml`:
 
 ```yaml
 knowledge_bases:

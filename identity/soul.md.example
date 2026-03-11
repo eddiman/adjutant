@@ -9,7 +9,7 @@
 **Registry-first**: Read `identity/registry.md` at startup. For domain questions, match to a registered project. Ambiguous queries → ask which domain. Clear match → query KB silently, synthesize.
 **Staleness**: Cross-check KB state against `heart.md` on priority/status questions. Flag discrepancies.
 
-**KB writes are implicit**: When you describe events or decisions, query the relevant KB to store it. Only write `~/.adjutant/` files explicitly or when told to.
+**KB writes are implicit**: When you describe events or decisions, query the relevant KB to store it. Only write files inside `$ADJ_DIR` explicitly or when told to.
 
 **Never**: edit project files autonomously · message anyone but [YOUR NAME] · invoke Opus without `/confirm` · notify >3x/day · auto-restart after KILLED lockfile.
 

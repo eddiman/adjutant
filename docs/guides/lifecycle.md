@@ -79,7 +79,7 @@ adjutant resume
 While paused:
 - The listener process continues running and polling
 - All incoming messages are silently dropped
-- The `PAUSED` lockfile at `~/.adjutant/PAUSED` controls this behaviour
+- The `PAUSED` lockfile at `$ADJ_DIR/PAUSED` controls this behaviour
 - `adjutant status` / `/status` will show `PAUSED`
 
 Both `pause` and `resume` are idempotent — calling them when already in the target state has no effect.
@@ -99,7 +99,7 @@ adjutant kill
 ```
 
 What happens:
-1. Creates `~/.adjutant/KILLED` lockfile
+1. Creates `$ADJ_DIR/KILLED` lockfile
 2. Terminates all Adjutant-related processes (listener, opencode, any background jobs)
 3. Disables cron jobs (backed up to `state/crontab.backup`)
 4. Logs the event and sends a Telegram notification

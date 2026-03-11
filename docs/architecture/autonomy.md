@@ -172,6 +172,6 @@ Each line in `state/actions.jsonl` is a self-contained JSON object:
 
 ```bash
 # Keep only the last 1000 entries
-tail -1000 ~/.adjutant/state/actions.jsonl > /tmp/actions_trimmed.jsonl
-mv /tmp/actions_trimmed.jsonl ~/.adjutant/state/actions.jsonl
+tail -1000 "$ADJ_DIR/state/actions.jsonl" > /tmp/actions_trimmed.jsonl
+mv /tmp/actions_trimmed.jsonl "$ADJ_DIR/state/actions.jsonl"
 ```

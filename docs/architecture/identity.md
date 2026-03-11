@@ -66,7 +66,7 @@ The active model for Telegram chat is stored in `state/telegram_model.txt` and c
 
 ## Security Model
 
-Adjutant is sandboxed to `~/.adjutant/`. External directory access is denied at the OpenCode permission level — configured in `opencode.json`, not in the agent prompt. This prevents:
+Adjutant is sandboxed to its install directory (`$ADJ_DIR`). External directory access is denied at the OpenCode permission level — configured in `opencode.json`, not in the agent prompt. This prevents:
 - Accidental writes to user projects outside the adjutant directory
 - Prompt injection risk from external files being read directly by the agent
 

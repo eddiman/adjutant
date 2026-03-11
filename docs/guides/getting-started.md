@@ -25,23 +25,23 @@ opencode --version
 
 ## Step 1 — Install
 
-Clone the repository and install with pip:
+Clone the repository to any location you like — Adjutant can live anywhere:
 
 ```bash
-git clone https://github.com/eddiman/adjutant.git ~/.adjutant
-cd ~/.adjutant
+git clone https://github.com/eddiman/adjutant.git /path/to/adjutant
+cd /path/to/adjutant
 python3 -m venv .venv
 .venv/bin/pip install -e .
 ```
 
-This installs the `adjutant` CLI entry point into `.venv/bin/adjutant`. Add it to your shell profile:
+This installs the `adjutant` CLI entry point into `.venv/bin/adjutant`. Add it to your shell profile (adjust the path to match where you cloned):
 
 ```bash
-echo 'alias adjutant="~/.adjutant/.venv/bin/adjutant"' >> ~/.zshrc
+echo 'alias adjutant="/path/to/adjutant/.venv/bin/adjutant"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-Adjust the path if you cloned to a different location.
+The setup wizard will ask for the install path and write it to `adjutant.yaml`. Adjutant resolves its own location from that file — no hardcoded paths required.
 
 ---
 
@@ -133,7 +133,7 @@ cat > ~/Library/LaunchAgents/adjutant.telegram.plist << 'EOF'
     <string>adjutant.telegram</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/YOUR_USERNAME/.adjutant/.venv/bin/python</string>
+        <string>/path/to/adjutant/.venv/bin/python</string>
         <string>-m</string>
         <string>adjutant</string>
         <string>start</string>
@@ -141,14 +141,14 @@ cat > ~/Library/LaunchAgents/adjutant.telegram.plist << 'EOF'
     <key>EnvironmentVariables</key>
     <dict>
         <key>ADJ_DIR</key>
-        <string>/Users/YOUR_USERNAME/.adjutant</string>
+        <string>/path/to/adjutant</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/YOUR_USERNAME/.adjutant/state/listener.stdout.log</string>
+    <string>/path/to/adjutant/state/listener.stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/YOUR_USERNAME/.adjutant/state/listener.stderr.log</string>
+    <string>/path/to/adjutant/state/listener.stderr.log</string>
 </dict>
 </plist>
 EOF
@@ -156,7 +156,7 @@ EOF
 launchctl load ~/Library/LaunchAgents/adjutant.telegram.plist
 ```
 
-Replace `YOUR_USERNAME` with your macOS username.
+Replace `/path/to/adjutant` with your actual install path.
 
 ---
 
