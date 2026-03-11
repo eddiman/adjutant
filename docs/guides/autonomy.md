@@ -31,12 +31,12 @@ Run `adjutant setup`. Step 7 "Autonomy Configuration" asks:
 2. Maximum notifications per day? [3]
 3. Enable quiet hours? [y/N]
 
-If you answer yes to enabling, the wizard writes `autonomy.enabled: true` to `adjutant.yaml` and enables the `autonomous_pulse` and `autonomous_review` schedule entries (installing their crontab entries). The default schedules are weekdays 9am/5pm for pulse and weekdays 8pm for review.
+If you answer yes to enabling, the wizard writes `heartbeat.enabled: true` to `adjutant.yaml` and enables the `autonomous_pulse` and `autonomous_review` schedule entries (installing their crontab entries). The default schedules are weekdays 9am/5pm for pulse and weekdays 8pm for review.
 
 ### Manually in `adjutant.yaml`
 
 ```yaml
-autonomy:
+heartbeat:
   enabled: true
 
 notifications:

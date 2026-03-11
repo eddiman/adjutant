@@ -491,8 +491,10 @@ async def cmd_reflect_confirm(
         )
         return
 
+    from adjutant.core.model import TIER_DEFAULTS
+
     reflect_prompt = adj_dir / "prompts" / "review.md"
-    model = _get_model(adj_dir)
+    model = TIER_DEFAULTS["medium"]
     result = await _run_opencode_prompt(reflect_prompt, 300.0, adj_dir, model)
     if not result:
         result = "The reflection completed but returned no output."
@@ -522,7 +524,7 @@ Or use a command:
 /status — I'll tell you if I'm running or paused, show registered scheduled jobs, and when I last checked in.
 /pulse — I'll run a quick check across your projects and summarise what I find.
 /restart — Restart all services (listener, opencode web).
-/reflect — I'll do a deeper Opus reflection (I'll ask you to confirm first).
+/reflect — I'll run a deep review using Sonnet (I'll ask you to confirm first).
 /screenshot <url> — Take a full-page screenshot of any website and send it here.
 /search <query> — Search the web via Brave Search and return top results.
 /kb — List knowledge bases or query one (/kb query <name> <question>).

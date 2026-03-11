@@ -36,7 +36,7 @@ Three jobs are pre-declared in `adjutant.yaml.example`. They are all disabled by
 
 Each job's `script` field in `adjutant.yaml` should point to the virtualenv Python binary and the appropriate CLI command (e.g. `.venv/bin/python -m adjutant pulse`). The setup wizard writes these correctly when you enable the relevant features.
 
-`news_briefing` is enabled when `features.news.enabled: true` (via the setup wizard or manually). `autonomous_pulse` and `autonomous_review` are enabled when `autonomy.enabled: true`.
+`news_briefing` is enabled when `features.news.enabled: true` (via the setup wizard or manually). `autonomous_pulse` and `autonomous_review` are enabled when `heartbeat.enabled: true`.
 
 ---
 

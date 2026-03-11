@@ -12,11 +12,11 @@ Adjutant uses three model tiers defined in `adjutant.yaml` under `llm.models`:
 |------|---------|--------|
 | `cheap` | Retrieval, formatting, notifications, triage, Telegram default | Highest |
 | `medium` | Reasoning, analysis, signal generation, escalations | Medium |
-| `expensive` | `/reflect` + `/confirm` only | Lowest |
+| `expensive` | `/confirm` only | Lowest |
 
 ### How tiers resolve
 
-- **KB sub-agents** (`scripts/capabilities/kb/query.sh`) — `_resolve_model()` maps tier names from each KB's `kb.yaml` to the `adjutant.yaml` model strings. This is the only place tier names are resolved.
+- **KB sub-agents** (`capabilities/kb/query.py`) — `_resolve_model()` maps tier names from each KB's `kb.yaml` to the `adjutant.yaml` model strings. This is the only place tier names are resolved.
 - **Telegram chat** — uses `state/telegram_model.txt` (set by `/model` command), falling back to `messaging.telegram.default_model`.
 - **Health check** (`opencode.sh`) — hardcoded to `anthropic/claude-haiku-4-5`.
 - **OpenCode TUI** — `.opencode/agents/adjutant.md` frontmatter `model:` field is the default, but always overridden at runtime by `--model` flag.
@@ -74,7 +74,7 @@ Via OpenCode 1.2.24:
 |------|-------|----------|----------|-----------|-----------|
 | `cheap` | Kimi K2.5 | `opencode/kimi-k2.5` | $0.60 | $3.00 | 40% cheaper than Haiku; strong reasoning; highest-volume tier = biggest savings |
 | `medium` | Gemini 3 Pro | `opencode/gemini-3-pro` | $2.00 | $12.00 | 33% cheaper input than Sonnet; competitive analysis quality |
-| `expensive` | Claude Opus 4.5 | `anthropic/claude-opus-4-5` | $5.00 | $25.00 | Low volume; reliability anchor for /reflect + /confirm |
+| `expensive` | Claude Opus 4.5 | `anthropic/claude-opus-4-5` | $5.00 | $25.00 | Low volume; reliability anchor for /confirm |
 
 ### Other model assignments
 
@@ -116,7 +116,7 @@ The cheap tier dominates token volume, so the 40% reduction there drives most of
 | `adjutant.yaml` | No (gitignored) | `llm.models.cheap`, `llm.models.medium`, `llm.models.expensive`, `messaging.telegram.default_model` |
 | `adjutant.yaml.example` | Yes | Same fields — template with comments |
 | `.opencode/agents/adjutant.md` | Yes | `model:` frontmatter — TUI default only |
-| `scripts/common/opencode.sh` | Yes | Health check model — hardcoded |
+| `src/adjutant/core/opencode.py` | Yes | Health check model — hardcoded |
 
 ---
 

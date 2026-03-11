@@ -1,16 +1,16 @@
-"""Step 7: Autonomy Configuration.
+"""Step 7: Heartbeat Configuration.
 
 Replaces: scripts/setup/steps/autonomy.sh
 
-Guides the user through enabling autonomous pulse checks and daily reviews:
-  - Enable/disable the autonomous cycle
+Guides the user through enabling the heartbeat pipeline (pulse + review):
+  - Enable/disable the heartbeat cycle
   - Set notification budget (max_per_day)
   - Configure quiet hours
   - Enable pulse/review scheduled jobs via the schedule registry
 
 Module-level state:
-  WIZARD_AUTONOMY_ENABLED     — bool
-  WIZARD_AUTONOMY_MAX_PER_DAY — int
+  WIZARD_HEARTBEAT_ENABLED     — bool
+  WIZARD_HEARTBEAT_MAX_PER_DAY — int
 """
 
 from __future__ import annotations
@@ -30,17 +30,17 @@ from adjutant.setup.wizard import (
     wiz_warn,
 )
 
-WIZARD_AUTONOMY_ENABLED: bool = False
-WIZARD_AUTONOMY_MAX_PER_DAY: int = 3
+WIZARD_HEARTBEAT_ENABLED: bool = False
+WIZARD_HEARTBEAT_MAX_PER_DAY: int = 3
 
 
 def _update_config(adj_dir: Path, *, dry_run: bool = False) -> None:
-    """Write autonomy.enabled and notifications.max_per_day to adjutant.yaml."""
+    """Write heartbeat.enabled and notifications.max_per_day to adjutant.yaml."""
     config_path = adj_dir / "adjutant.yaml"
     if not config_path.is_file():
         return
     if dry_run:
-        wiz_ok("[DRY RUN] Would write autonomy config to adjutant.yaml")
+        wiz_ok("[DRY RUN] Would write heartbeat config to adjutant.yaml")
         return
     try:
         import yaml
@@ -50,19 +50,19 @@ def _update_config(adj_dir: Path, *, dry_run: bool = False) -> None:
         if not isinstance(data, dict):
             return
 
-        # autonomy.enabled
-        autonomy = data.setdefault("autonomy", {})
-        if not isinstance(autonomy, dict):
-            data["autonomy"] = {"enabled": WIZARD_AUTONOMY_ENABLED}
+        # heartbeat.enabled
+        heartbeat = data.setdefault("heartbeat", {})
+        if not isinstance(heartbeat, dict):
+            data["heartbeat"] = {"enabled": WIZARD_HEARTBEAT_ENABLED}
         else:
-            autonomy["enabled"] = WIZARD_AUTONOMY_ENABLED
+            heartbeat["enabled"] = WIZARD_HEARTBEAT_ENABLED
 
         # notifications.max_per_day
         notifications = data.setdefault("notifications", {})
         if not isinstance(notifications, dict):
-            data["notifications"] = {"max_per_day": WIZARD_AUTONOMY_MAX_PER_DAY}
+            data["notifications"] = {"max_per_day": WIZARD_HEARTBEAT_MAX_PER_DAY}
         else:
-            notifications["max_per_day"] = WIZARD_AUTONOMY_MAX_PER_DAY
+            notifications["max_per_day"] = WIZARD_HEARTBEAT_MAX_PER_DAY
 
         with open(config_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
@@ -150,18 +150,18 @@ def _enable_schedules(adj_dir: Path, *, dry_run: bool = False) -> None:
 
 
 def step_autonomy(adj_dir: Path, *, dry_run: bool = False) -> bool:
-    """Run Step 7: Autonomy Configuration.
+    """Run Step 7: Heartbeat Configuration.
 
     Returns:
         True always.
     """
-    global WIZARD_AUTONOMY_ENABLED, WIZARD_AUTONOMY_MAX_PER_DAY
+    global WIZARD_HEARTBEAT_ENABLED, WIZARD_HEARTBEAT_MAX_PER_DAY
 
-    wiz_step(7, 7, "Autonomy Configuration")
+    wiz_step(7, 7, "Heartbeat Configuration")
     print("", file=sys.stderr)
 
     print(
-        "  Autonomy mode lets Adjutant query your knowledge bases on a schedule,",
+        "  The heartbeat pipeline lets Adjutant query your knowledge bases on a schedule,",
         file=sys.stderr,
     )
     print(
@@ -187,18 +187,18 @@ def step_autonomy(adj_dir: Path, *, dry_run: bool = False) -> bool:
     )
     print("", file=sys.stderr)
 
-    if not wiz_confirm("Enable autonomous pulse checks?", "N"):
-        WIZARD_AUTONOMY_ENABLED = False
+    if not wiz_confirm("Enable the heartbeat pipeline (pulse + review)?", "N"):
+        WIZARD_HEARTBEAT_ENABLED = False
         wiz_info(
-            "Autonomy disabled — enable later by setting autonomy.enabled: true in adjutant.yaml"
+            "Heartbeat disabled — enable later by setting heartbeat.enabled: true in adjutant.yaml"
         )
         wiz_info("Then run: adjutant schedule enable autonomous_pulse")
         _update_config(adj_dir, dry_run=dry_run)
         print("", file=sys.stderr)
         return True
 
-    WIZARD_AUTONOMY_ENABLED = True
-    wiz_ok("Autonomy enabled")
+    WIZARD_HEARTBEAT_ENABLED = True
+    wiz_ok("Heartbeat pipeline enabled")
     print("", file=sys.stderr)
 
     # Notification budget
@@ -208,10 +208,10 @@ def step_autonomy(adj_dir: Path, *, dry_run: bool = False) -> bool:
     )
     budget_input = wiz_input("Maximum notifications per day", "3")
     try:
-        WIZARD_AUTONOMY_MAX_PER_DAY = int(budget_input or "3")
+        WIZARD_HEARTBEAT_MAX_PER_DAY = int(budget_input or "3")
     except ValueError:
-        WIZARD_AUTONOMY_MAX_PER_DAY = 3
-    wiz_ok(f"Max notifications per day: {WIZARD_AUTONOMY_MAX_PER_DAY}")
+        WIZARD_HEARTBEAT_MAX_PER_DAY = 3
+    wiz_ok(f"Max notifications per day: {WIZARD_HEARTBEAT_MAX_PER_DAY}")
     print("", file=sys.stderr)
 
     # Quiet hours

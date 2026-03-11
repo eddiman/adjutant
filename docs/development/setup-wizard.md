@@ -17,7 +17,7 @@ src/adjutant/setup/
     ├── messaging.py       # Step 3/4: Telegram token + chat ID, .env write
     ├── features.py        # Step 5: news_config.json
     ├── service.py         # Step 6: chmod, rc-file alias, launchd/systemd/cron
-    ├── autonomy.py        # Step 7: autonomy.enabled, schedule entries
+    ├── autonomy.py        # Step 7: heartbeat.enabled, schedule entries
     ├── kb_wizard.py       # KB creation sub-wizard (called from wizard.py)
     └── schedule_wizard.py # Schedule add sub-wizard
 ```

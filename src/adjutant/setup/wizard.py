@@ -5,7 +5,7 @@ Replaces:
   - scripts/setup/wizard.sh  (main setup flow)
 
 The wizard is intentionally thin: it delegates to step modules (prerequisites,
-install_path, identity, messaging, features, service, autonomy) that live in
+install_path, identity, messaging, features, service, heartbeat) that live in
 setup/steps/. This module owns only the orchestration and the shared UI layer.
 
 Note: All UI output goes to sys.stderr (matching bash's /dev/tty writes) so
@@ -281,7 +281,7 @@ def _show_completion(adj_dir: Path, *, news_enabled: bool = False) -> None:
     if news_enabled:
         rows.append(("News briefing (Haiku)", "1/day", "~$1.50"))
     rows += [
-        ("Deep reflect (Opus)", "1/week", "~$1.20"),
+        ("Deep reflect (Sonnet)", "1/week", "~$0.60"),
         ("--------------------------", "-----------", "--------"),
     ]
     total = "~$6.30" if news_enabled else "~$4.80"

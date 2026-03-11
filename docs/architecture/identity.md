@@ -35,18 +35,13 @@ This file is tracked in the repo (it contains no personal data). The identity fi
 
 ## OpenCode Integration
 
-Natural language processing and long-running agent tasks use OpenCode. All AI calls go through `opencode_run` (defined in `scripts/common/opencode.sh`) rather than calling `opencode` directly.
+Natural language processing and long-running agent tasks use OpenCode. All AI calls go through `opencode_run()` (defined in `core/opencode.py`) rather than calling `opencode` directly.
 
 ### Why wrap `opencode`?
 
 Every `opencode run` invocation spawns a `bash-language-server` child process (~400MB RSS). When `opencode` exits, this child survives as an orphan (reparented to PID 1). Without intervention, these accumulate over time.
 
-`opencode.sh` provides two mechanisms to prevent this:
-
-- **`opencode_run`** — Before/after PID snapshot wrapper. Takes a snapshot of `bash-language-server` PIDs before calling `opencode run`, then kills any new ones that appeared after it exits. Used by `chat.sh`, `vision.sh`, `kb/query.sh`.
-- **`opencode_reap`** — Periodic sweeper that kills any `bash-language-server` whose parent PID is 1 (orphaned). Called by `listener.sh` every ~50 poll cycles (~8 minutes) as a safety net.
-
-For `commands.sh` (pulse/reflect), which uses `timeout` (which can't call bash functions), the PID snapshot logic is inlined directly around the `timeout` calls.
+`core/opencode.py` provides process management to prevent this — it takes a snapshot of `bash-language-server` PIDs before calling `opencode run`, then kills any new ones that appeared after it exits.
 
 ---
 
@@ -58,7 +53,7 @@ Three model tiers are configured in `adjutant.yaml`:
 |------|---------|
 | `cheap` | Fast classification, simple replies |
 | `medium` | Standard chat (default) |
-| `expensive` | Complex reasoning, reflection tasks (`/reflect`) |
+| `expensive` | Complex reasoning (`/confirm` only) |
 
 The active model for Telegram chat is stored in `state/telegram_model.txt` and can be switched at runtime via `/model <model-name>`.
 
@@ -78,8 +73,8 @@ All external knowledge enters through KB sub-agents, which are sandboxed to thei
 
 The agent operates on-demand — there are no scheduled background jobs by default. Proactive behaviour is triggered by Telegram commands:
 
-- `/pulse` — queries every registered KB via `query.sh` for a brief status update (current state, blockers, upcoming deadlines). No direct access to external directories; all project knowledge flows through KB sub-agents.
-- `/reflect` — queries every registered KB in depth and, for read-write KBs, encourages the sub-agent to update stale data files. Uses Opus; gated behind `/confirm` due to cost.
+- `/pulse` — queries every registered KB via `kb_query()` for a brief status update (current state, blockers, upcoming deadlines). No direct access to external directories; all project knowledge flows through KB sub-agents.
+- `/reflect` — queries every registered KB in depth and, for read-write KBs, encourages the sub-agent to update stale data files. Uses the medium tier (Sonnet); gated behind `/confirm` as a safety check.
 
 When to expect notifications:
 - A KB reports an active blocker, approaching deadline, or material status change → escalated to `insights/pending/` during pulse → processed and sent during reflect

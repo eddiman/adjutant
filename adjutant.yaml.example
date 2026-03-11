@@ -52,8 +52,8 @@ features:
   usage_tracking:
     enabled: false
 
-autonomy:
-  enabled: false                     # set to true, then enable autonomous_pulse / autonomous_review in schedules:
+heartbeat:
+  enabled: false                     # enables the pulse→escalation→review pipeline; then enable schedule entries below
 
 # Scheduled jobs — managed by `adjutant schedule` commands.
 # Each entry is installed as a crontab line: <schedule> <script> >> <log> 2>&1
@@ -76,14 +76,14 @@ schedules:
     schedule: "0 9,17 * * 1-5"
     script: ".venv/bin/python -m adjutant pulse"
     log: "state/pulse.log"
-    enabled: false                     # set to true when autonomy.enabled is true
+    enabled: false                     # set to true when heartbeat.enabled is true
 
   - name: "autonomous_review"
     description: "End-of-day synthesis and review"
     schedule: "0 20 * * 1-5"
     script: ".venv/bin/python -m adjutant review"
     log: "state/review.log"
-    enabled: false                     # set to true when autonomy.enabled is true
+    enabled: false                     # set to true when heartbeat.enabled is true
 
   # KB job example — use kb_name + kb_operation instead of a hardcoded script path.
   # Adjutant resolves the operation via cli_module in kb.yaml, or falls back to scripts/<op>.sh.

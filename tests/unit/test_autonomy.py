@@ -23,20 +23,20 @@ def _make_config(tmp_path: Path) -> Path:
 
 
 class TestUpdateConfig:
-    def test_writes_autonomy_enabled(self, tmp_path: Path) -> None:
+    def test_writes_heartbeat_enabled(self, tmp_path: Path) -> None:
         _make_config(tmp_path)
-        autonomy_mod.WIZARD_AUTONOMY_ENABLED = True
-        autonomy_mod.WIZARD_AUTONOMY_MAX_PER_DAY = 5
+        autonomy_mod.WIZARD_HEARTBEAT_ENABLED = True
+        autonomy_mod.WIZARD_HEARTBEAT_MAX_PER_DAY = 5
         _update_config(tmp_path)
         with open(tmp_path / "adjutant.yaml") as f:
             data = yaml.safe_load(f)
-        assert data["autonomy"]["enabled"] is True
+        assert data["heartbeat"]["enabled"] is True
         assert data["notifications"]["max_per_day"] == 5
 
     def test_dry_run_does_not_write(self, tmp_path: Path) -> None:
         _make_config(tmp_path)
         original = (tmp_path / "adjutant.yaml").read_text()
-        autonomy_mod.WIZARD_AUTONOMY_ENABLED = True
+        autonomy_mod.WIZARD_HEARTBEAT_ENABLED = True
         _update_config(tmp_path, dry_run=True)
         assert (tmp_path / "adjutant.yaml").read_text() == original
 
@@ -69,7 +69,7 @@ class TestStepAutonomy:
         with patch("builtins.input", return_value="n"):
             result = step_autonomy(tmp_path)
         assert result is True
-        assert autonomy_mod.WIZARD_AUTONOMY_ENABLED is False
+        assert autonomy_mod.WIZARD_HEARTBEAT_ENABLED is False
 
     def test_enables_autonomy(self, tmp_path: Path, capsys) -> None:
         _make_config(tmp_path)
@@ -82,7 +82,7 @@ class TestStepAutonomy:
             ):
                 result = step_autonomy(tmp_path)
         assert result is True
-        assert autonomy_mod.WIZARD_AUTONOMY_ENABLED is True
+        assert autonomy_mod.WIZARD_HEARTBEAT_ENABLED is True
 
     def test_sets_notification_budget(self, tmp_path: Path, capsys) -> None:
         _make_config(tmp_path)
@@ -90,7 +90,7 @@ class TestStepAutonomy:
         with patch("builtins.input", side_effect=lambda: next(responses)):
             with patch("adjutant.setup.steps.autonomy._enable_schedules"):
                 step_autonomy(tmp_path)
-        assert autonomy_mod.WIZARD_AUTONOMY_MAX_PER_DAY == 7
+        assert autonomy_mod.WIZARD_HEARTBEAT_MAX_PER_DAY == 7
 
     def test_invalid_budget_defaults_to_three(self, tmp_path: Path, capsys) -> None:
         _make_config(tmp_path)
@@ -98,7 +98,7 @@ class TestStepAutonomy:
         with patch("builtins.input", side_effect=lambda: next(responses)):
             with patch("adjutant.setup.steps.autonomy._enable_schedules"):
                 step_autonomy(tmp_path)
-        assert autonomy_mod.WIZARD_AUTONOMY_MAX_PER_DAY == 3
+        assert autonomy_mod.WIZARD_HEARTBEAT_MAX_PER_DAY == 3
 
     def test_sets_quiet_hours(self, tmp_path: Path, capsys) -> None:
         _make_config(tmp_path)

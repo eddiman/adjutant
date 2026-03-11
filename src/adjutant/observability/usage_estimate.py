@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         print("  Pulse check:       3000 input,  500 output")
         print("  Escalation:        5800 input,  600 output")
         print("  Daily review:     10000 input, 1000 output")
-        print("  /reflect (Opus):  15000 input, 2000 output")
+        print("  /reflect (Sonnet): 10000 input, 1000 output")
         print("  Conversation (5m): 8000 input, 1500 output")
         return 1
 

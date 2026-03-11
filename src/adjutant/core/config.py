@@ -84,7 +84,7 @@ class FeaturesConfig(BaseModel):
     usage_tracking: FeatureConfig = Field(default_factory=FeatureConfig)
 
 
-class AutonomyConfig(BaseModel):
+class HeartbeatConfig(BaseModel):
     enabled: bool = False
 
 
@@ -147,7 +147,7 @@ class AdjutantConfig(BaseModel):
     messaging: MessagingConfig = Field(default_factory=MessagingConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
-    autonomy: AutonomyConfig = Field(default_factory=AutonomyConfig)
+    heartbeat: HeartbeatConfig = Field(default_factory=HeartbeatConfig)
     schedules: List[ScheduleConfig] = Field(default_factory=list)
     platform: PlatformConfig = Field(default_factory=PlatformConfig)
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)

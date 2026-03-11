@@ -81,7 +81,7 @@ The wizard walks through seven steps:
 4. **Messaging** — prompts for your Telegram bot token and chat ID, writes them to `.env`
 5. **Features** — optional news briefing and search configuration
 6. **Service** — installs the shell alias and optionally sets up auto-start on boot
-7. **Autonomy** — optional autonomous pulse/review scheduling
+7. **Heartbeat** — optional autonomous pulse/review scheduling
 
 At the end, the wizard shows a completion banner. If something needs fixing later, re-run the wizard in repair mode:
 
@@ -103,7 +103,7 @@ The Telegram listener starts in the background. Verify it's running:
 adjutant status
 ```
 
-You should see `Status: OPERATIONAL` and the listener's PID.
+You should see `Adjutant is up and running.` and the listener's PID.
 
 ---
 

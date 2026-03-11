@@ -39,7 +39,7 @@ messaging:
   models:
     cheap: "anthropic/claude-haiku-4-5"     # routine chat and triage
     medium: "anthropic/claude-sonnet-4-6"   # escalations
-    expensive: "anthropic/claude-opus-4-5"  # /reflect + /confirm only
+    expensive: "anthropic/claude-opus-4-5"  # /confirm only
   caps:
     session_tokens: 44000             # per-session token budget
     session_window_hours: 5           # rolling window for session tracking
@@ -58,7 +58,7 @@ features:
   usage_tracking:
     enabled: false
 
-autonomy:
+heartbeat:
   enabled: false                    # set to true, then enable autonomous_pulse/review in schedules:
 
 # Scheduled jobs — managed by `adjutant schedule` commands
@@ -116,11 +116,11 @@ debug:
 
 **`messaging.telegram.session_timeout_seconds`** — Adjutant maintains conversational context within a session window. After this much inactivity, the next message starts a fresh context. Default is 2 hours (7200s).
 
-**`llm.models`** — Three tiers. Adjutant uses `cheap` by default for chat and triage, escalates to `medium` for reasoning and analysis, and only uses `expensive` for `/reflect` (requires explicit `/confirm`). Default tiers: `cheap` = claude-haiku-4-5, `medium` = claude-sonnet-4-6, `expensive` = claude-opus-4-5. You can change these to any model supported by your OpenCode setup.
+**`llm.models`** — Three tiers. Adjutant uses `cheap` by default for chat and triage, escalates to `medium` for reasoning, analysis, and `/reflect`, and only uses `expensive` for `/confirm`. Default tiers: `cheap` = claude-haiku-4-5, `medium` = claude-sonnet-4-6, `expensive` = claude-opus-4-5. You can change these to any model supported by your OpenCode setup.
 
 **`llm.caps`** — Token budget guardrails. These generate usage warnings but do not hard-block requests.
 
-**`autonomy.enabled`** — Master switch for autonomous pulse and review jobs. Set to `true` to enable, then also enable the corresponding `schedules:` entries: `adjutant schedule enable autonomous_pulse`.
+**`heartbeat.enabled`** — Master switch for autonomous pulse and review jobs. Set to `true` to enable, then also enable the corresponding `schedules:` entries: `adjutant schedule enable autonomous_pulse`.
 
 **`schedules:`** — Registry of all scheduled jobs. Each entry maps to one crontab line. `enabled: true` installs the entry; `enabled: false` tracks it in the registry but removes it from crontab. Manage with `adjutant schedule` commands or edit this file and run `adjutant schedule sync`. See [Schedules](schedules.md) for the full guide.
 
@@ -192,7 +192,7 @@ Example:
 **Values**: Protect focus time. No surprises. Accuracy over speed — don't guess, cite sources.
 
 **Never**: edit project files autonomously · message anyone but [YOUR NAME] ·
-invoke Opus without /confirm · notify more than 3x/day.
+notify more than 3x/day · auto-restart after KILLED lockfile.
 ```
 
 **When to edit:** Rarely. Only when the fundamental character of the agent needs to change — not when your priorities shift. For priority changes, edit `heart.md`.

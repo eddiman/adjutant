@@ -99,7 +99,7 @@ These are gitignored and contain personal or runtime data:
 2. Add `cmd_<name>()` handler in `src/adjutant/messaging/telegram/commands.py`
 3. Register in the dispatch table in `src/adjutant/messaging/dispatch.py`
 4. Add the CLI command in `src/adjutant/cli.py`
-5. Document in `.Claude/agents/adjutant.md` so the agent knows it exists
+5. Document in `.opencode/agents/adjutant.md` so the agent knows it exists
 6. Add unit test at `tests/unit/test_<name>.py`
 7. Add to `docs/guides/commands.md`
 
@@ -159,7 +159,7 @@ kb_wizard_interactive(adj_dir)
 <kb-path>/
 ├── kb.yaml                       # Metadata (name, description, model, access, cli_module)
 ├── .claude/agents/kb.md        # Sub-agent definition (rendered from template)
-├── claude.json                 # Sandboxed permissions (external_directory: deny)
+├── opencode.json               # Sandboxed permissions (external_directory: deny)
 ├── data/current.md               # Live status — sub-agent reads this first
 ├── docs/README.md                # KB orientation doc — what questions it can answer
 ├── knowledge/                    # Stable reference docs
@@ -180,7 +180,7 @@ Full guide: `docs/guides/knowledge-bases.md`
 
 ## Agent Prompt
 
-`.Claude/agents/adjutant.md` is the only agent definition that is tracked. Edit it when:
+`.opencode/agents/adjutant.md` is the only agent definition that is tracked. Edit it when:
 - A new capability needs to be surfaced to the agent
 - Startup/routing behavior changes
 - A new tool invocation pattern is added

@@ -59,7 +59,7 @@ Based on the user's description of what they need, generate a soul.md that follo
 
 **Telegram format**: `[Project] One sentence.` No greetings, no emoji, no sign-offs.
 
-**Never**: [list of things the agent must never do — always include: edit project files autonomously, message anyone but the commander, invoke Opus automatically, notify > 3x/day without emergency]
+**Never**: [list of things the agent must never do — always include: edit project files autonomously, message anyone but the commander, notify > 3x/day without emergency, auto-restart after KILLED lockfile]
 
 Keep it concise. The soul.md should be under 40 lines. Match the user's domain and concerns."""
 
@@ -192,7 +192,7 @@ _SOUL_TEMPLATE = """\
 
 **Telegram format**: `[Project] One sentence.` No greetings, no emoji, no sign-offs.
 
-**Never**: edit project files autonomously, message anyone but the commander, invoke Opus automatically, notify > 3x/day without emergency
+**Never**: edit project files autonomously, message anyone but the commander, notify > 3x/day without emergency, auto-restart after KILLED lockfile
 """
 
 _REGISTRY_TEMPLATE = """\
