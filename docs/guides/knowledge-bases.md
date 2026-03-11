@@ -171,7 +171,7 @@ Set in `kb.yaml`:
 - `read-only` — Adjutant can query but not write. Use for reference KBs.
 - `read-write` — Adjutant can update files and run scripts. Use for operational KBs where you want it to record decisions, update `current.md`, or run data-fetch scripts during `/reflect`.
 
-Default to `read-write` for active project KBs. The sub-agent won't write unless explicitly told to. Read-write KBs have `edit` and `write` tools permitted in their `claude.json` workspace config, while `read-only` KBs have those tools denied — restricting the sub-agent to read operations only.
+Default to `read-write` for active project KBs. The sub-agent won't write unless explicitly told to. Read-write KBs have `edit` and `write` tools permitted in their `opencode.json` workspace config, while `read-only` KBs have those tools denied — restricting the sub-agent to read operations only.
 
 ---
 

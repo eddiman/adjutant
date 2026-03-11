@@ -100,7 +100,7 @@ The fix: `core/claude.py` wraps subprocess calls with a configurable timeout. Ca
 
 ## KB sub-agents are sandboxed
 
-Every KB has a `claude.json` that sets `external_directory: deny`. This means a KB sub-agent cannot read or write files outside its own workspace. A compromised or misbehaving KB cannot:
+Every KB has an `opencode.json` that sets `external_directory: deny`. This means a KB sub-agent cannot read or write files outside its own workspace. A compromised or misbehaving KB cannot:
 
 - Read your identity files or other KBs
 - Write to `state/` or `journal/`
