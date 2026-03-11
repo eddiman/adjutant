@@ -40,12 +40,12 @@ For safety-sensitive or operational KBs, read-write access does not imply blanke
 
 ```
 kb.yaml              — metadata (name, description, model, access)
-README.md            — what this KB is about, what questions it can answer
+docs/README.md       — what this KB is about, what questions it can answer
 ```
 
-`kb.yaml` is what Adjutant reads to register and query the KB. `README.md` is what the sub-agent reads first to orient itself.
+`kb.yaml` is what Adjutant reads to register and query the KB. `docs/README.md` is what the sub-agent reads first to orient itself — it is placed under `docs/` in the scaffold so the KB root stays clean.
 
-For automation-heavy KBs, `README.md` and `data/current.md` should point clearly at any canonical structured state files. Adjutant does not need to understand those files directly, but the KB agent should be able to use them for precision.
+For automation-heavy KBs, `docs/README.md` and `data/current.md` should point clearly at any canonical structured state files. Adjutant does not need to understand those files directly, but the KB agent should be able to use them for precision.
 
 ---
 
@@ -171,13 +171,13 @@ Set in `kb.yaml`:
 - `read-only` — Adjutant can query but not write. Use for reference KBs.
 - `read-write` — Adjutant can update files and run scripts. Use for operational KBs where you want it to record decisions, update `current.md`, or run data-fetch scripts during `/reflect`.
 
-Default to `read-write` for active project KBs. The sub-agent won't write unless explicitly told to. Read-write KBs also get `bash: true` in their agent definition, enabling script execution scoped to the KB directory.
+Default to `read-write` for active project KBs. The sub-agent won't write unless explicitly told to. Read-write KBs have `edit` and `write` tools permitted in their `opencode.json` workspace config, while `read-only` KBs have those tools denied — restricting the sub-agent to read operations only.
 
 ---
 
 ## KB registration
 
-Register every KB in `~/.adjutant/knowledge_bases/registry.yaml`:
+Register every KB in `$ADJ_DIR/knowledge_bases/registry.yaml`:
 
 ```yaml
 knowledge_bases:
@@ -198,7 +198,7 @@ You can also register a KB from the command line or via the setup wizard:
 adjutant kb create
 
 # One-liner (quick create)
-adjutant kb create --quick --name my-kb --path /path/to/kb --description "..."
+adjutant kb create --quick --name my-kb --path /path/to/kb --desc "..."
 
 # List registered KBs
 adjutant kb list
@@ -215,9 +215,27 @@ adjutant kb remove my-kb
 
 ---
 
-## KB-local operations (`scripts/`)
+## KB-local operations
 
-`adjutant kb run <name> <op>` executes a script inside the KB by convention:
+`adjutant kb run <name> <op>` executes an operation inside the KB. There are two resolution paths:
+
+**1. Python CLI module (preferred for Python KBs)**
+
+If `kb.yaml` declares a `cli_module` field, Adjutant invokes it directly via the Python entry point:
+
+```yaml
+# kb.yaml
+cli_module: "src.cli"
+```
+
+This causes `adjutant kb run <name> <op>` to run:
+```
+python -m <cli_module> <op>
+```
+
+**2. Shell script fallback**
+
+Without `cli_module`, Adjutant looks for a script at:
 
 ```
 <kb-path>/scripts/<op>.sh
@@ -225,29 +243,29 @@ adjutant kb remove my-kb
 
 `<op>` is the operation name — lowercase letters, digits, hyphens, and underscores. The script must exist and be executable, otherwise the command fails with a clear error.
 
-For portfolio-kb, the valid operations are `fetch`, `news`, `analyze`, `reconcile`, `trade`. Running one manually:
+Running KB operations manually:
 
 ```bash
-adjutant kb run portfolio-kb fetch
-adjutant kb run portfolio-kb analyze
-adjutant kb run portfolio-kb reconcile
+adjutant kb run my-kb fetch
+adjutant kb run my-kb analyze
+adjutant kb run my-kb reconcile
 ```
 
-The same convention is used when scheduling a KB job without a hardcoded path:
+The same mechanism is used when scheduling a KB job without a hardcoded path:
 
 ```yaml
 schedules:
-  - name: "portfolio_fetch"
+  - name: "my_kb_fetch"
     schedule: "0 9,12,15 * * 1-5"
-    kb_name: "portfolio-kb"
+    kb_name: "my-kb"
     kb_operation: "fetch"
-    log: "/path/to/portfolio-kb/state/fetch.log"
+    log: "/path/to/my-kb/state/fetch.log"
     enabled: true
 ```
 
-Adjutant resolves `kb_operation: fetch` to `<kb-path>/scripts/fetch.sh` at install and run time — no absolute paths needed in the config.
+Adjutant resolves `kb_operation: fetch` via the `cli_module` or script convention at install and run time — no absolute paths needed in the config.
 
-**Script contract:** the operation script must output `OK:<result>` on success (exit 0) or `ERROR:<reason>` on failure (exit non-zero), matching the standard Adjutant entry script contract.
+**Script contract (shell path):** exit 0 on success, non-zero on failure. Stdout is captured by `/schedule run <name>` and shown in Telegram.
 
 ---
 
@@ -275,7 +293,7 @@ Add subdirectories and `history/` as volume grows.
 - **Don't leave stale data in `data/`.** Old completed items should move to `history/`. Stale data confuses answers.
 - **Don't use vague filenames.** `notes.md`, `stuff.md`, `temp.md` — the agent can't know what's in them without reading them.
 - **Don't mix live data with reference.** Events calendar in `data/`, event format guide in `knowledge/`. Keep the layers clean.
-- **Don't put operational data inside `.opencode/`.** That directory is for agent/command definitions, not content.
+- **Don't put operational data inside `.claude/`.** That directory is for agent/command definitions, not content.
 
 ---
 

@@ -4,43 +4,35 @@ How Adjutant receives messages, routes them, and sends responses.
 
 ---
 
-## Adaptor Interface — `scripts/messaging/adaptor.sh`
+## Adaptor Interface — `src/adjutant/messaging/adaptor.py`
 
-Adjutant is backend-agnostic. Any messaging platform can be supported by implementing eight functions defined in `adaptor.sh`. This file ships no-op or error-returning defaults; a concrete adaptor overrides them by sourcing its own implementation after this file.
+Adjutant is backend-agnostic. Any messaging platform can be supported by implementing the functions defined in `adaptor.py`. This module provides the shared interface that all backends implement.
 
-**Required functions** (return 1 if not implemented):
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `msg_send_text` | `TEXT [REPLY_TO_ID]` | Send a text message |
-| `msg_send_photo` | `FILE_PATH [CAPTION]` | Send an image |
-| `msg_start_listener` | — | Start the polling/listening loop |
-| `msg_stop_listener` | — | Stop the listener gracefully |
-
-**Optional functions** (no-op defaults — return 0 silently):
+**Send functions** (implemented per backend):
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `msg_react` | `MSG_ID [EMOJI]` | Add a reaction to a message |
-| `msg_typing` | `start\|stop [SUFFIX]` | Show/hide typing indicator |
-| `msg_authorize` | `SENDER_ID` | Validate sender; return 0 to allow, 1 to reject |
-| `msg_get_user_id` | — | Return the authenticated user ID |
+| `msg_send_text` | `text, reply_to_id` | Send a text message |
+| `msg_send_photo` | `file_path, caption` | Send an image |
+| `msg_react` | `msg_id, emoji` | Add a reaction to a message |
+| `msg_typing_start` | `suffix` | Show typing indicator |
+| `msg_typing_stop` | `suffix` | Hide typing indicator |
 
-All dispatch logic calls these functions exclusively. The dispatcher never calls Telegram-specific API endpoints or variables.
+All dispatch logic calls these functions. The dispatcher never calls Telegram-specific API endpoints or variables directly.
 
 ---
 
-## Backend-Agnostic Dispatcher — `scripts/messaging/dispatch.sh`
+## Backend-Agnostic Dispatcher — `src/adjutant/messaging/dispatch.py`
 
-`dispatch.sh` is called by every adaptor's listener with a normalized message. It handles all shared concerns:
+`dispatch.py` is called by every adaptor's listener with a normalized message. It handles all shared concerns:
 
 ### 1. Authorization
 
-Calls `msg_authorize SENDER_ID`. If it returns 1, the message is dropped silently.
+Checks `TELEGRAM_CHAT_ID` against the configured allowed chat ID. If it doesn't match, the message is dropped silently.
 
 ### 2. Rate Limiting
 
-Sliding-window counter stored in `state/rate_limit_window`. Default: 10 messages per 60 seconds. Configurable via `ADJUTANT_RATE_LIMIT_MAX` in `adjutant.yaml`. When the limit is exceeded, the sender receives a "slow down" message.
+Rolling 60-second window counter stored in `state/rate_limit_window`. Default: 10 messages per 60 seconds. Configurable via the `ADJUTANT_RATE_LIMIT_MAX` environment variable. When the limit is exceeded, the sender receives a "slow down" message.
 
 ### 3. Pending State
 
@@ -50,11 +42,15 @@ Checks `state/pending_reflect` for multi-turn confirmation flows. If a `/reflect
 
 ### 4. Command Routing
 
-`case` on slash-command prefix. Each `/command` maps to a `cmd_*` function defined in the backend's `commands.sh`. Unknown commands fall through to the natural language path.
+`if/elif` chain on slash-command prefix. Each `/command` maps to an `async` `cmd_*` function defined in `messaging/telegram/commands.py`. Unknown commands fall through to the natural language path.
 
-### 5. Natural Language
+### 5. Natural Language Model-Switch Detection
 
-All non-command text is forwarded to `chat.sh` in a **background subshell**. If a new message arrives before the previous response is complete, the in-flight job is killed (via a tracked PID file) before the new one starts. This prevents pileups and ensures the user's latest message always gets a response.
+Before falling through to chat, the dispatcher checks whether the message matches a natural-language model-switch pattern (e.g. "switch to opus", "use kimi", "change model to sonnet"). If matched, it routes to the model-switch handler instead of the chat agent.
+
+### 6. Natural Language Chat
+
+All non-command text is forwarded to `chat.py` as an `asyncio.Task`. If a new message arrives before the previous response is complete, the in-flight task is cancelled before the new one starts. This prevents response pileups and ensures the user's latest message always gets a response.
 
 ---
 
@@ -63,26 +59,28 @@ All non-command text is forwarded to `chat.sh` in a **background subshell**. If 
 ```
 Telegram API
     │
-    │  getUpdates (long-poll, 10s)
+    │  getUpdates (long-poll)
     ▼
-listener.sh
-    │  jq parse
-    ├─► dispatch_photo()  ─► tg_handle_photo ─► vision ─► chat.sh ─► opencode_run
+listener.py (async loop)
+    │
+    ├─► dispatch_photo()  ─► tg_handle_photo ─► vision ─► chat.py ─► claude_run
     └─► dispatch_message()
             │
-            ├─ auth check (msg_authorize)
+            ├─ auth check (chat_id match)
             ├─ rate limit check (_check_rate_limit)
             ├─ pending state check (pending_reflect)
             │
-            ├─ /command  ─► cmd_* (commands.sh)
+            ├─ /command  ─► cmd_* (commands.py)  [async]
             │                  │
             │                  ├─ inline response (msg_send_text)
-            │                  └─ complex tasks (opencode_run)
+            │                  └─ complex tasks (claude_run)
             │
-            └─ text  ─► chat.sh (background subshell)
+            ├─ model-switch intent ─► cmd_model()
+            │
+            └─ text  ─► chat.py (asyncio.Task)
                             │
                             ▼
-                        opencode_run
+                        claude_run
                             │
                             ▼
                         msg_send_text (reply)
@@ -96,45 +94,43 @@ listener.sh
 adjutant notify "text"
     │
     ▼
-scripts/messaging/telegram/notify.sh
-    │  require_telegram_credentials
-    │  curl sendMessage
+messaging/telegram/notify.py
+    │  load credentials from .env
+    │  HTTP POST sendMessage
     ▼
 Telegram API
 ```
 
-`notify.sh` is standalone — it sends a message without requiring the listener to be running. Used for proactive notifications, scheduled briefings, and emergency kill confirmations.
+`notify.py` is standalone — it sends a message without requiring the listener to be running. Used for proactive notifications, scheduled briefings, and emergency kill confirmations.
 
 ---
 
-## Telegram Adaptor — `scripts/messaging/telegram/`
+## Telegram Adaptor — `src/adjutant/messaging/telegram/`
 
 The only currently implemented backend.
 
-| File | Responsibility |
-|------|---------------|
-| `listener.sh` | Main polling loop. Sources all modules, acquires `state/listener.lock`, polls `getUpdates` (10s long-poll), parses JSON with `jq`, calls `dispatch_message` or `dispatch_photo`. |
-| `send.sh` | Overrides `msg_send_text`, `msg_send_photo`, `msg_react`, `msg_typing` with real Telegram API calls. |
-| `photos.sh` | `tg_download_photo` (downloads from Telegram CDN) + `tg_handle_photo` (vision analysis → chat response). |
-| `commands.sh` | `cmd_*` functions for every slash command. |
-| `chat.sh` | Invokes `opencode_run` with the user message and returns the agent reply. Manages session continuity (reuses session ID within a 2-hour window). |
-| `notify.sh` | Standalone notifier — sends a message without requiring the listener to be running. |
-| `service.sh` | Process manager: `start` (fork listener to background), `stop` (kill by PID), `status`. |
+| Module | Responsibility |
+|--------|---------------|
+| `listener.py` | Main async polling loop. Acquires `state/listener.lock/`, polls `getUpdates`, calls `dispatch_message` or `dispatch_photo`. |
+| `send.py` | Implements `msg_send_text`, `msg_send_photo`, `msg_react`, `msg_typing_start`, `msg_typing_stop` with real Telegram API calls. |
+| `photos.py` | `tg_download_photo` (downloads from Telegram CDN) + `tg_handle_photo` (vision analysis → chat response). |
+| `commands.py` | `async cmd_*` functions for every slash command. |
+| `chat.py` | Invokes `claude_run` with the user message and returns the agent reply. Manages session continuity (reuses session ID within a configured window). |
+| `notify.py` | Standalone notifier — sends a message without requiring the listener to be running. |
+| `reply.py` | Reply helper used by scheduled job results and KB operation output. |
+| `service.py` | Process manager: `start` (fork listener to background), `stop` (kill by PID), `status`. |
 
 ### Listener Process Management
 
-The listener's PID is tracked by a single authoritative function `_find_listener_pid()` in `service.sh`. It checks three sources in priority order:
+The listener's PID is tracked by `service.py`. It checks two sources in priority order:
 
-1. **`state/listener.lock/pid`** — written by `listener.sh` itself (most reliable)
-2. **`state/telegram.pid`** — written by `service.sh` on startup
-3. **`pgrep -f listener.sh`** — fallback pattern match
+1. **`state/listener.lock/pid`** — written by `listener.py` itself (most reliable)
+2. **`state/telegram.pid`** — written by `service.py` on startup
 
-All other scripts (`startup.sh`, `adjutant doctor`, `emergency_kill.sh`) delegate to `service.sh status` instead of implementing their own PID detection. This eliminates the root cause of duplicate listener instances.
-
-`service.sh start` waits up to 5 seconds for `listener.lock/pid` to appear, confirming the listener initialized successfully before reporting success and syncing `telegram.pid`.
+`service.py start` waits for `listener.lock/pid` to appear, confirming the listener initialized successfully before reporting success.
 
 ---
 
 ## Adding a New Backend
 
-See [Adaptor Guide](../development/adaptor-guide.md) for step-by-step instructions on implementing the 8-function interface for a new messaging platform.
+See [Adaptor Guide](../development/adaptor-guide.md) for step-by-step instructions on implementing the interface for a new messaging platform.

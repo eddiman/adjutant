@@ -15,8 +15,8 @@ The autonomous cycle has three tiers:
 | **Review** | `prompts/review.md` | Configurable (default: 1×/day at 8pm) | Thorough daily synthesis across all KBs, processes pending insights |
 
 **What it never does without you:**
-- Call `notify.sh` more than `max_per_day` times (hard script-layer block)
-- Act during quiet hours (enforced in `notify.sh`)
+- Send notifications more than `max_per_day` times (hard budget check in `send_notify()`)
+- Act during quiet hours (enforced in the notification layer)
 - Continue when `PAUSED` exists (checked first in every prompt)
 - Write anything real when `debug.dry_run: true`
 
@@ -31,12 +31,12 @@ Run `adjutant setup`. Step 7 "Autonomy Configuration" asks:
 2. Maximum notifications per day? [3]
 3. Enable quiet hours? [y/N]
 
-If you answer yes to enabling, the wizard writes `autonomy.enabled: true` to `adjutant.yaml` and enables the `autonomous_pulse` and `autonomous_review` schedule entries (installing their crontab entries). The default schedules are weekdays 9am/5pm for pulse and weekdays 8pm for review.
+If you answer yes to enabling, the wizard writes `heartbeat.enabled: true` to `adjutant.yaml` and enables the `autonomous_pulse` and `autonomous_review` schedule entries (installing their crontab entries). The default schedules are weekdays 9am/5pm for pulse and weekdays 8pm for review.
 
 ### Manually in `adjutant.yaml`
 
 ```yaml
-autonomy:
+heartbeat:
   enabled: true
 
 notifications:
@@ -71,7 +71,7 @@ adjutant schedule remove autonomous_pulse
 adjutant schedule add
 # Name: autonomous_pulse
 # Description: Scheduled autonomous pulse check across knowledge bases
-# Script path: scripts/lifecycle/pulse_cron.sh
+# Script path: .venv/bin/python -m adjutant pulse
 # Schedule: 0 12 * * *      ← your new schedule
 # Log file: state/pulse.log
 ```
@@ -93,7 +93,7 @@ Common schedule examples:
 
 ### Hard budget
 
-`notifications.max_per_day` sets the daily ceiling. Once that many notifications have been sent, `notify.sh` outputs `ERROR:budget_exceeded` and exits 1 — no further Telegram messages are sent for the rest of the calendar day regardless of what the LLM decides.
+`notifications.max_per_day` sets the daily ceiling. Once that many notifications have been sent, `send_notify()` raises `BudgetExceededError` — no further Telegram messages are sent for the rest of the calendar day regardless of what the LLM decides.
 
 The counter resets at midnight (it is a date-stamped file: `state/notify_count_YYYY-MM-DD.txt`).
 
@@ -104,7 +104,7 @@ notifications:
 
 ### Quiet hours
 
-When enabled, `notify.sh` will suppress sends between the configured hours. The agent can still run pulses and reviews — it just will not deliver Telegram messages during those hours.
+When enabled, the notification layer suppresses sends between the configured hours. The agent can still run pulses and reviews — it just will not deliver Telegram messages during those hours.
 
 ```yaml
 notifications:
@@ -155,8 +155,8 @@ adjutant resume       # removes ADJ_DIR/PAUSED
 Or directly:
 
 ```bash
-touch "$HOME/.adjutant/PAUSED"   # pause
-rm "$HOME/.adjutant/PAUSED"      # resume
+touch "$ADJ_DIR/PAUSED"   # pause
+rm "$ADJ_DIR/PAUSED"      # resume
 ```
 
 When `PAUSED` exists, every autonomous prompt outputs a skip message and stops immediately. Nothing is written to `insights/`, `state/`, or `actions.jsonl`.
@@ -183,7 +183,7 @@ debug:
 With this set:
 - All three prompts run their full logic
 - **No** files are written to `insights/pending/`
-- **No** `notify.sh` calls are made
+- **No** notifications are sent
 - **No** `state/last_heartbeat.json` update
 - Every journal entry is prefixed `[DRY RUN]`
 - `state/actions.jsonl` records `"dry_run":true` so you can verify the cycle ran
@@ -202,20 +202,19 @@ debug:
 `adjutant status` (or `/status` in Telegram) now includes an "Autonomous activity" section:
 
 ```
-Status: RUNNING
+Adjutant is up and running.
 
-Registered cron jobs:
-  - Autonomous Pulse: Schedule: 0 9,17 * * 1-5
-    → opencode run --print ".../prompts/pulse.md" ...
-  - Daily Review: Schedule: 0 20 * * 1-5
-    → opencode run --print ".../prompts/review.md" ...
+Active jobs:
+  autonomous_pulse — Scheduled autonomous pulse check across knowledge bases, at 09:00 and 17:00, weekdays
+  autonomous_review — End-of-day synthesis and review, at 20:00, weekdays
 
-Autonomous activity:
-  Last cycle: pulse at 2026-03-05T09:00:00Z
-  Notifications today: 1/3
-  Recent actions:
-    2026-03-05T09:00:00Z  pulse
-    2026-03-05T09:00:01Z  notify
+Last cycle ran Mon 05 Mar at 09:00 (pulse).
+
+No notifications sent today (limit is 3).
+
+Recent actions:
+  Mon 05 Mar at 09:00 — pulse
+  Mon 05 Mar at 09:00 — notify
 ```
 
 **Fields:**

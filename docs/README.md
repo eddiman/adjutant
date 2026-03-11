@@ -10,10 +10,12 @@ For people using Adjutant.
 
 | Document | What it covers |
 |----------|---------------|
-| [Getting Started](guides/getting-started.md) | Install via curl, setup wizard, send your first message |
+| [Getting Started](guides/getting-started.md) | Install, setup wizard, send your first message |
 | [Configuration](guides/configuration.md) | `adjutant.yaml`, `.env`, identity files (`soul.md`, `heart.md`, `registry.md`) |
 | [Commands](guides/commands.md) | All Telegram slash commands and `adjutant` CLI subcommands |
 | [Knowledge Bases](guides/knowledge-bases.md) | Creating, structuring, and querying knowledge bases |
+| [Schedules](guides/schedules.md) | Cron-based scheduled jobs, KB operations, registry management |
+| [Autonomy](guides/autonomy.md) | Autonomous pulse/review cycles, notification budget, dry-run mode |
 | [Lifecycle](guides/lifecycle.md) | Start, stop, pause, kill, recover, and update |
 
 ---
@@ -28,6 +30,7 @@ For people who want to understand how Adjutant works internally.
 | [Messaging](architecture/messaging.md) | Adaptor contract, dispatcher, Telegram adaptor internals |
 | [Identity & Agent](architecture/identity.md) | Three-layer identity model and OpenCode integration |
 | [State & Lifecycle](architecture/state.md) | Lockfiles, state files, lifecycle state machine, rate limiting |
+| [Autonomy](architecture/autonomy.md) | Autonomous cycle architecture, pulse/review/escalation design |
 | [Design Decisions](architecture/design-decisions.md) | Why things are the way they are |
 
 ---
@@ -52,6 +55,6 @@ Background context and historical records.
 | Document | What it covers |
 |----------|---------------|
 | [Landscape](reference/landscape.md) | How Adjutant compares to OpenClaw and NanoClaw |
-| [Testing Appendix](reference/testing-appendix.md) | Per-test-case detail for all 529 bats tests |
+| [Testing Appendix](reference/testing-appendix.md) | Historical bats test listings (pre-Python rewrite; superseded by pytest) |
 | [Deployment Readiness Assessment](reference/deployment-readiness.md) | Pre-release checklist and findings (2026-03-01) |
 | [Framework Plan](reference/framework-plan.md) | Original 6-phase development plan |

@@ -6,94 +6,59 @@ How to run the Adjutant test suite and understand its structure.
 
 ## Overview
 
-Adjutant uses [bats-core](https://github.com/bats-core/bats-core) as its test framework, with [bats-support](https://github.com/bats-core/bats-support) and [bats-assert](https://github.com/bats-core/bats-assert) helper libraries installed as git submodules.
+Adjutant uses [pytest](https://pytest.org) as its test framework. All tests are unit tests — no integration tiers, no shell test infrastructure, no bats.
 
-Tests are organized into three tiers based on isolation requirements:
-
-| Tier | Scope | Mocking | Status |
-|------|-------|---------|--------|
-| 1 | Unit tests (pure logic) | None — only `ADJUTANT_HOME` isolation | Complete (210 tests) |
-| 2 | Integration tests | Mock `curl`/`opencode` via PATH injection | Complete (373 tests) |
-| 3 | System tests | Full process isolation | Planned |
+| Metric | Value |
+|--------|-------|
+| Test files | 52 |
+| Tests | ~1081 |
+| Framework | pytest |
+| Location | `tests/unit/` |
+| Runtime | ~75 seconds |
 
 ---
 
 ## CI Policy
 
-CI automation is **intentionally absent**. The 518-test bats suite spawns subprocesses heavily. GitHub Actions runners would consume disproportionate minutes for a single-maintainer project.
+CI automation is **intentionally absent**. The suite runs in ~75 seconds locally. GitHub Actions runners would consume disproportionate minutes for a single-maintainer project.
 
-**Parallelism is required.** Running the full suite serially takes too long and will be killed by shell or tool timeouts before completing. GNU `parallel` must be installed:
-
-```bash
-brew install parallel   # macOS
-apt install parallel    # Debian/Ubuntu
-```
-
-**Pre-release gate**: before tagging a release, run the full suite with `tests/run` and confirm it is clean:
+**Pre-release gate**: before tagging a release, run the full suite and confirm it is clean:
 
 ```bash
-tests/run
+.venv/bin/pytest tests/unit/ -q
 ```
 
-All 518 tests must pass. Any failure blocks the release. This is enforced by discipline, not automation. See [Design Decisions](../architecture/design-decisions.md) for the rationale.
+All tests must pass. Any failure blocks the release. This is enforced by discipline, not automation. See [Design Decisions](../architecture/design-decisions.md) for the rationale.
 
 ---
 
 ## Prerequisites
 
-- `parallel` (GNU parallel) — `brew install parallel` on macOS — **required for full-suite runs**
-- `bats` (v1.13+) — `brew install bats-core` on macOS
-- Git submodules initialized — `git submodule update --init --recursive`
+- Python 3.11+ with a `.venv` set up:
+  ```bash
+  python3 -m venv .venv
+  .venv/bin/pip install -e ".[dev]"
+  ```
 
 ---
 
 ## Running Tests
 
-**First-time setup:**
-
 ```bash
-brew install parallel       # required — install before anything else
-brew install bats-core
-git submodule update --init --recursive
-```
+# Full suite
+.venv/bin/pytest tests/unit/ -q
 
-**Common commands (from project root):**
+# Single file
+.venv/bin/pytest tests/unit/test_kb_run.py -q
 
-```bash
-# Run full suite (always use tests/run — it enforces parallelism)
-tests/run
+# Filter by test name (substring match)
+.venv/bin/pytest tests/unit/ -k "test_runs_operation"
 
-# Run unit tests only
-tests/run unit
+# Verbose output
+.venv/bin/pytest tests/unit/test_kb_run.py -v
 
-# Run integration tests only
-tests/run integration
-
-# Run a single test file (parallelism not needed for a single file)
-bats tests/unit/paths.bats
-
-# Filter by test name (regex)
-bats --filter "load_env succeeds" tests/unit/env.bats
-
-# TAP output (machine-readable)
-bats --tap tests/unit/
-```
-
-**Why parallelism is mandatory for the full suite:**
-
-The suite has 518 tests. Running serially takes several minutes and will be killed by shell or agent timeout before completing. `tests/run` enforces this — it exits with an error if `parallel` is not installed rather than falling back to serial execution.
-
-**Recommended workflow:**
-
-```bash
-# During development — run only affected files (no parallel needed)
-bats tests/unit/wizard.bats tests/integration/wizard.bats
-
-# Debug a specific test
-bats --filter "repair: healthy" tests/integration/wizard.bats
-
-# Full regression check
-tests/run
+# Stop on first failure
+.venv/bin/pytest tests/unit/ -x
 ```
 
 ---
@@ -102,88 +67,115 @@ tests/run
 
 ```
 tests/
-├── test_helper/
-│   ├── setup.bash              # Common setup/teardown helpers
-│   ├── mocks.bash              # Mock creators, assertion helpers, state seeders
-│   └── lib/
-│       ├── bats-support/       # Git submodule
-│       └── bats-assert/        # Git submodule
-├── unit/                       # Tier 1 (210 tests)
-│   ├── paths.bats
-│   ├── env.bats
-│   ├── lockfiles.bats
-│   ├── logging.bats
-│   ├── platform.bats
-│   ├── adaptor.bats
-│   ├── lifecycle.bats
-│   ├── wizard.bats
-│   ├── journal_rotate.bats
-│   └── kb.bats
-├── integration/                # Tier 2 (319 tests)
-│   ├── notify.bats
-│   ├── reply.bats
-│   ├── send.bats
-│   ├── chat.bats
-│   ├── photos.bats
-│   ├── commands.bats
-│   ├── dispatch.bats
-│   ├── fetch.bats
-│   ├── analyze.bats
-│   ├── briefing.bats
-│   ├── vision.bats
-│   ├── screenshot.bats
-│   ├── status.bats
-│   ├── usage_estimate.bats
-│   ├── wizard.bats
-│   ├── journal_rotate.bats
-│   └── kb.bats
-└── system/                     # Tier 3 (planned)
+└── unit/                    # All tests (~52 files, ~1081 tests)
+    ├── test_lockfiles.py
+    ├── test_env.py
+    ├── test_paths.py
+    ├── test_logging.py
+    ├── test_platform.py
+    ├── test_model.py
+    ├── test_config.py
+    ├── test_kb_manage.py
+    ├── test_kb_query.py
+    ├── test_kb_run.py
+    ├── test_schedule_manage.py
+    ├── test_schedule_install.py
+    ├── test_messaging_dispatch.py
+    ├── test_messaging_adaptor.py
+    ├── test_status.py
+    ├── test_usage_estimate.py
+    ├── test_journal_rotate.py
+    ├── test_screenshot.py
+    ├── test_search.py
+    └── ... (52 files total)
 ```
 
 ---
 
-## Tier 1 — Unit Tests
+## Isolation Model
 
-Covers scripts that contain pure bash logic with zero external dependencies. Every test runs in full isolation: a temp directory is created per test, `ADJUTANT_HOME` is pointed at it, and it is torn down afterward.
+Every test creates its own `tmp_path` (via pytest's built-in fixture). There is no shared global state between tests.
 
-The shared helper (`tests/test_helper/setup.bash`) provides:
-- **`setup_test_env`** — Creates `$TEST_ADJ_DIR`, exports `ADJUTANT_HOME`, seeds a minimal `adjutant.yaml` and `.env`, creates `state/`, `journal/`, `identity/` subdirectories.
-- **`teardown_test_env`** — Removes the temp directory and unsets all env vars.
+Common patterns:
 
-Scripts covered: `scripts/common/` (paths, env, lockfiles, logging, platform), `scripts/messaging/adaptor.sh`, `scripts/lifecycle/pause.sh`, `scripts/lifecycle/resume.sh`, `scripts/setup/`, `scripts/observability/journal_rotate.sh`, `scripts/capabilities/kb/manage.sh`.
+```python
+def test_something(tmp_path: Path) -> None:
+    # Set up a minimal adjutant directory
+    adj_dir = tmp_path / "adjutant"
+    adj_dir.mkdir()
+    (adj_dir / ".adjutant-root").touch()
+    (adj_dir / "adjutant.yaml").write_text("...")
+
+    # Run the code under test
+    result = my_function(adj_dir)
+
+    # Assert
+    assert result == "expected"
+```
+
+For tests that invoke subprocesses (e.g. `kb_run`, schedule operations), patch `subprocess.run` at the module level:
+
+```python
+from unittest.mock import patch
+
+def test_kb_run(tmp_path: Path) -> None:
+    with patch("adjutant.capabilities.kb.run.subprocess.run") as mock_run:
+        mock_run.return_value = type("R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""})()
+        result = kb_run(tmp_path, "mydb", "fetch")
+    assert result == "ok\n"
+```
 
 ---
 
-## Tier 2 — Integration Tests
+## Writing a New Test File
 
-Covers scripts that call external tools (`curl`, `opencode`, `npx`, `crontab`). Mocking is done by placing stub scripts earlier in `$PATH`.
+Every new module must have a corresponding `tests/unit/test_<module>.py`. Structure:
 
-The mock infrastructure (`tests/test_helper/mocks.bash`) provides:
-- **`setup_mocks`** — Creates `mock_bin/` and `mock_log/`, prepends to `$PATH`, creates expected directories.
-- **`teardown_mocks`** — Restores `$PATH`, cleans up background processes.
-- **Script copying** — `setup.bash` uses `cp -R` (not symlinks) to copy `scripts/` into the test directory. Tests can safely overwrite scripts with stubs without affecting production files.
+```python
+"""Tests for src/adjutant/capabilities/<name>/<name>.py"""
 
-Mock creators write executable scripts to `$MOCK_BIN/` that log all invocations and return canned responses. See [Testing Appendix](../reference/testing-appendix.md) for the full mock creator and assertion helper reference.
+from __future__ import annotations
 
-Scripts covered: all Telegram adaptor scripts, news pipeline (`fetch.sh`, `analyze.sh`, `briefing.sh`), capabilities (`vision.sh`, `screenshot.sh`), observability (`status.sh`, `usage_estimate.sh`), and setup/KB/journal rotation.
+from pathlib import Path
+from unittest.mock import patch
 
----
+import pytest
 
-## Tier 3 — System Tests (Planned)
+from adjutant.capabilities.<name>.<name> import run_<name>
 
-Covers lifecycle and daemon scripts that manage real processes, manipulate crontab, use interactive prompts, or run infinite loops with signal handlers. These require full process isolation (Docker container or dedicated test user).
 
-Scripts planned: `emergency_kill.sh`, `startup.sh`, `restart.sh`, `service.sh`, `listener.sh`.
+class TestRun<Name>:
+    def test_returns_result_on_success(self, tmp_path: Path) -> None:
+        ...
+
+    def test_raises_on_invalid_input(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="..."):
+            run_<name>(tmp_path, "bad_input")
+```
+
+Group tests in classes named after the function/class under test. Each test method tests one behaviour.
 
 ---
 
 ## Interpreting Output
 
 ```
-ok 1 lockfiles: set_paused creates PAUSED file       # passed
-not ok 2 lockfiles: is_paused returns 0 when paused   # failed
-# (in test file tests/unit/lockfiles.bats, line 42)   # failure location
-#   `run is_paused' failed                             # failing command
+PASSED tests/unit/test_kb_run.py::TestKbRun::test_runs_operation_and_returns_output
+FAILED tests/unit/test_kb_run.py::TestKbRun::test_raises_kb_run_error_on_nonzero_exit
+  AssertionError: assert "Something broke" in str(exc_info.value)
 ```
 
-A successful run ends with all `ok` lines and exit code 0. Any `not ok` line is a failure — the comment lines below it show the file, line number, and the assertion that failed.
+A successful run ends with all `PASSED` and exit code 0. Any `FAILED` line is a failure — pytest shows the assertion that failed and the values that didn't match.
+
+Quick triage workflow:
+
+```bash
+# See only failures
+.venv/bin/pytest tests/unit/ -q --tb=short 2>&1 | grep -A 5 "FAILED"
+
+# Re-run only failed tests
+.venv/bin/pytest tests/unit/ --lf
+
+# Run with full tracebacks
+.venv/bin/pytest tests/unit/ -v --tb=long
+```

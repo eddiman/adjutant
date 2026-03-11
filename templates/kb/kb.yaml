@@ -24,3 +24,6 @@ description: "{{KB_DESCRIPTION}}"
 model: "{{KB_MODEL}}"
 access: "{{KB_ACCESS}}"
 created: "{{KB_CREATED}}"
+# cli_module: "src.cli"  # Uncomment if this KB has a Python CLI (e.g. src/cli.py).
+#                        # kb_run will invoke .venv/bin/python -m <cli_module> --real <op>
+#                        # instead of scripts/<op>.sh. Leave commented for bash-script KBs.

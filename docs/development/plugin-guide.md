@@ -1,72 +1,65 @@
 # Plugin (Capability) Guide
 
-A capability is a self-contained script that gives Adjutant a new skill — taking screenshots, querying an API, reading files, sending notifications to third-party services, etc.
+A capability is a self-contained Python module that gives Adjutant a new skill — taking screenshots, querying an API, reading files, sending notifications to third-party services, etc.
 
-The agent can invoke capabilities directly via bash tool calls. Capabilities can also be wired to slash commands in `commands.sh`.
+The agent can invoke capabilities via OpenCode tool calls. Capabilities can also be wired to slash commands in `commands.py`.
 
 ---
 
 ## Anatomy of a Capability
 
 ```
-scripts/capabilities/
+src/adjutant/capabilities/
 └── <name>/
-    └── <name>.sh          # Entry script (required)
-    └── *.sh               # Supporting scripts (optional)
-    └── *.mjs / *.py       # Helper processes (optional)
+    ├── __init__.py
+    └── <name>.py          # Entry module (required)
 ```
 
-Each capability lives in its own subdirectory. The entry script is the only required file.
+Each capability lives in its own subdirectory under `src/adjutant/capabilities/`. The entry module is the only required file.
 
 ---
 
-## Entry Script Contract
+## Entry Module Contract
 
-The entry script must:
+The entry module must:
 
-1. Load common utilities from `scripts/common/`
-2. Accept arguments as positional parameters
-3. Print `OK:<result>` on success or `ERROR:<reason>` on failure to stdout
-4. Exit 0 on success, non-zero on failure
+1. Import `get_adj_dir()` and credentials via `core/` utilities
+2. Accept arguments as function parameters
+3. Return a result string or raise on failure
+4. Log via `adj_log`, never `print()`
 
-```bash
-#!/bin/bash
-# scripts/capabilities/<name>/<name>.sh
-#
-# One-line description of what this capability does.
-#
-# Usage:
-#   <name>.sh <arg1> [arg2]
-#
-# Output:
-#   OK:<result>    — on success
-#   ERROR:<reason> — on failure
+```python
+# src/adjutant/capabilities/<name>/<name>.py
+"""One-line description of what this capability does."""
 
-# Load common utilities
-COMMON="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/common"
-source "${COMMON}/paths.sh"
-source "${COMMON}/env.sh"
-source "${COMMON}/logging.sh"
-source "${COMMON}/platform.sh"
+from __future__ import annotations
 
-# Validate arguments
-ARG1="${1:-}"
-if [ -z "${ARG1}" ]; then
-  echo "ERROR: No argument provided. Usage: <name>.sh <arg1>"
-  exit 1
-fi
+from pathlib import Path
 
-adj_log "<name>" "Starting with arg: ${ARG1}"
+from adjutant.core.env import get_credential
+from adjutant.core.logging import adj_log
 
-# --- Do the work ---
-RESULT="$(do_something "${ARG1}")" || {
-  adj_log "<name>" "Failed: ${ARG1}"
-  echo "ERROR: Could not process ${ARG1}"
-  exit 1
-}
 
-adj_log "<name>" "Completed: ${ARG1}"
-echo "OK:${RESULT}"
+def run_<name>(adj_dir: Path, arg: str) -> str:
+    """Do the thing.
+
+    Args:
+        adj_dir: Adjutant root directory.
+        arg: The primary argument.
+
+    Returns:
+        Result string on success.
+
+    Raises:
+        RuntimeError: If the operation fails.
+    """
+    adj_log("<name>", f"Starting with arg: {arg}")
+
+    # --- Do the work ---
+    result = _do_something(arg)
+
+    adj_log("<name>", f"Completed: {arg}")
+    return result
 ```
 
 ---
@@ -75,52 +68,45 @@ echo "OK:${RESULT}"
 
 Here is the simplest possible capability — a date/time lookup:
 
-```bash
-#!/bin/bash
-# scripts/capabilities/datetime/datetime.sh
-#
-# Returns the current date and time in a human-readable format.
-#
-# Usage:
-#   datetime.sh [timezone]
-#
-# Output:
-#   OK:<date string>
-#   ERROR:<reason>
+```python
+# src/adjutant/capabilities/datetime/datetime.py
+"""Returns the current date and time."""
 
-COMMON="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/common"
-source "${COMMON}/paths.sh"
-source "${COMMON}/logging.sh"
+from __future__ import annotations
 
-TZ_ARG="${1:-}"
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-if [ -n "${TZ_ARG}" ]; then
-  RESULT="$(TZ="${TZ_ARG}" date '+%A, %B %-d %Y at %H:%M %Z' 2>/dev/null)" || {
-    echo "ERROR: Unknown timezone: ${TZ_ARG}"
-    exit 1
-  }
-else
-  RESULT="$(date '+%A, %B %-d %Y at %H:%M %Z')"
-fi
+from adjutant.core.logging import adj_log
 
-adj_log "datetime" "Queried time (tz=${TZ_ARG:-local})"
-echo "OK:${RESULT}"
+
+def run_datetime(adj_dir: Path, timezone: str = "") -> str:
+    """Return current date/time, optionally in a given timezone."""
+    adj_log("datetime", f"Queried time (tz={timezone or 'local'})")
+
+    if timezone:
+        try:
+            tz = ZoneInfo(timezone)
+        except ZoneInfoNotFoundError:
+            raise ValueError(f"Unknown timezone: {timezone}")
+        return datetime.now(tz).strftime("%A, %B %-d %Y at %H:%M %Z")
+
+    return datetime.now().strftime("%A, %B %-d %Y at %H:%M")
 ```
 
 ---
 
 ## Using Credentials
 
-If your capability needs credentials, load them with `env.sh`:
+If your capability needs credentials, load them with `core/env.py`:
 
-```bash
-source "${COMMON}/env.sh"
+```python
+from adjutant.core.env import get_credential
 
-API_KEY="$(get_credential MY_SERVICE_API_KEY)"
-if [ -z "${API_KEY}" ]; then
-  echo "ERROR: MY_SERVICE_API_KEY not set in .env"
-  exit 1
-fi
+api_key = get_credential("MY_SERVICE_API_KEY")
+if not api_key:
+    raise RuntimeError("MY_SERVICE_API_KEY not set in .env")
 ```
 
 Add the credential to `.env.example` so users know to configure it:
@@ -133,45 +119,49 @@ MY_SERVICE_API_KEY=your_api_key_here
 
 ## Wiring a Slash Command
 
-To make your capability available as a `/command` in chat, add a handler to `scripts/messaging/telegram/commands.sh` (or your backend's equivalent):
+To make your capability available as a `/command` in chat, add an async handler to `src/adjutant/messaging/telegram/commands.py`:
 
-```bash
-cmd_datetime() {
-  local message_id="$1"
-  local tz="${2:-}"
-
-  RESULT="$(bash "${ADJ_DIR}/scripts/capabilities/datetime/datetime.sh" "${tz}")"
-
-  if [[ "${RESULT}" == OK:* ]]; then
-    msg_send_text "${RESULT#OK:}" "${message_id}"
-  else
-    msg_send_text "Could not get date/time: ${RESULT#ERROR:}" "${message_id}"
-  fi
-}
+```python
+async def cmd_datetime(
+    arg: str,
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    from adjutant.capabilities.datetime.datetime import run_datetime
+    try:
+        result = run_datetime(adj_dir, arg.strip())
+        msg_send_text(result, message_id)
+    except Exception as exc:
+        msg_send_text(f"Error: {exc}", message_id)
 ```
 
-Then register the command in `dispatch.sh`'s `case` block:
+Then register the command in `dispatch.py`'s `if/elif` chain:
 
-```bash
-/datetime)      cmd_datetime "${message_id}" ;;
-/datetime\ *)   cmd_datetime "${message_id}" "${text#/datetime }" ;;
+```python
+elif text == "/datetime":
+    await cmd_datetime("", message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+elif text.startswith("/datetime "):
+    await cmd_datetime(text[len("/datetime "):], message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
 ```
 
-And add it to the help text in `cmd_help`.
+For long-running commands, use `msg_typing_start()`/`msg_typing_stop()` and run as a background `asyncio.Task`.
 
 ---
 
 ## Wiring the Agent
 
-The agent (OpenCode) can call any capability directly via the bash tool. No registration is needed — just document the capability in `.opencode/agents/adjutant.md` so the agent knows it exists:
+The agent (OpenCode) can call any capability via the bash tool or Python tool. Document the capability in `.Claude/agents/adjutant.md` so the agent knows it exists:
 
 ```markdown
 ## Available Tools
 
 ### datetime
 Get the current date and time.
-Usage: bash scripts/capabilities/datetime/datetime.sh [timezone]
-Output: OK:<date string>
+Usage: `adjutant datetime [timezone]`
+Or call via Python: `from adjutant.capabilities.datetime.datetime import run_datetime`
 ```
 
 ---
@@ -180,13 +170,7 @@ Output: OK:<date string>
 
 Capabilities do not send messages themselves — they return results to the caller. The caller (a `cmd_*` function or the agent) is responsible for sending the reply.
 
-If your capability generates a file (e.g., a screenshot, a PDF, a CSV), return its path:
-
-```bash
-echo "OK:${OUTPUT_FILE}"
-```
-
-The caller can then pass it to `msg_send_photo` or `msg_send_document`.
+If your capability generates a file (e.g., a screenshot, a PDF, a CSV), return its path as a string. The caller can then pass it to `msg_send_photo` or a file-send function.
 
 ---
 
@@ -194,16 +178,16 @@ The caller can then pass it to `msg_send_photo` or `msg_send_document`.
 
 Always log the start and end of significant operations using `adj_log`:
 
-```bash
-adj_log "<name>" "Starting: ${ARG}"
+```python
+adj_log("<name>", f"Starting: {arg}")
 # ... work ...
-adj_log "<name>" "Completed: ${ARG}"
+adj_log("<name>", f"Completed: {arg}")
 ```
 
 Log failures with enough context to debug:
 
-```bash
-adj_log "<name>" "FAILED for ${ARG}: ${ERROR_MSG}"
+```python
+adj_log("<name>", f"FAILED for {arg}: {exc}")
 ```
 
 Logs go to `state/adjutant.log`. View with `adjutant logs`.
@@ -212,83 +196,72 @@ Logs go to `state/adjutant.log`. View with `adjutant logs`.
 
 ## Error Handling
 
-- Use `set -euo pipefail` only if every external command in your script is expected to succeed. Prefer explicit error checking for commands that may legitimately fail.
-- Always print `ERROR:<reason>` to stdout (not stderr) so the caller can detect and relay failures.
-- Clean up temp files in a `trap`:
-
-```bash
-TMP_FILE="$(mktemp)"
-trap 'rm -f "${TMP_FILE}"' EXIT
-```
+- Raise `RuntimeError` or a domain-specific exception on failure; never return an error string
+- Use `tempfile.NamedTemporaryFile(delete=False)` + `finally: os.unlink(tmp)` for temp files
+- The `cmd_*` handler is responsible for catching exceptions and sending an error message to the user
 
 ---
 
-## Registering a scheduled job
+## Registering a Scheduled Job
 
-Any script — whether it lives in the Adjutant repo or in an external knowledge base — can be registered as a scheduled job in `adjutant.yaml schedules:`.
+Any executable that can be invoked without interactive input can be registered as a scheduled job.
 
-### Requirements for a scheduled script
-
-1. **Executable:** `chmod +x /path/to/script.sh`
-2. **Exit codes:** Exit 0 on success, non-zero on failure
-3. **Stdout:** Captured when the job is run via `/schedule run <name>` or `adjutant schedule run <name>`. For Telegram-visible results, follow the `OK:<result>` / `ERROR:<reason>` convention.
-4. **No interactive input:** Scripts must run non-interactively — they are called from cron without a terminal.
-5. **Self-contained environment:** Cron inherits a minimal PATH. Use absolute paths inside the script or source `scripts/common/paths.sh` to resolve `ADJ_DIR`.
-
-### Registering via CLI wizard
-
-```bash
-adjutant schedule add
-```
-
-Prompts for name, description, script path, schedule, and log file. Installs the crontab entry immediately.
-
-### Registering manually
-
-Add to `adjutant.yaml schedules:`:
+### Using KB operations (preferred for KB-backed jobs)
 
 ```yaml
 schedules:
   - name: "my-kb-fetch"
     description: "Fetch and update my KB data"
     schedule: "0 9 * * 1-5"
-    script: "/absolute/path/to/my-kb/scripts/fetch.sh"
-    log: "/absolute/path/to/my-kb/state/fetch.log"
+    kb_name: "my-kb"
+    kb_operation: "fetch"
+    log: "state/my-kb-fetch.log"
+    enabled: true
+```
+
+This runs `adjutant kb run my-kb fetch` on schedule. No absolute paths needed.
+
+### Using a script path (for non-KB jobs)
+
+```yaml
+schedules:
+  - name: "my-report"
+    description: "Generate daily report"
+    schedule: "0 8 * * 1-5"
+    script: "/absolute/path/to/report.sh"
+    log: "state/my-report.log"
     enabled: true
 ```
 
 Then: `adjutant schedule sync`
 
-### How crontab entries are formatted
+See [docs/guides/schedules.md](../guides/schedules.md) for the full guide.
 
-```
-<schedule> <resolved_script> >> <resolved_log> 2>&1  # adjutant:<name>
-```
+---
 
-The `# adjutant:<name>` suffix is the identity marker used by `install.sh` to manage entries individually. All entries contain `.adjutant`, so existing `startup.sh` grep counts remain valid.
+## Adding a Capability: Checklist
 
-### Removing a scheduled job
+1. Create `src/adjutant/capabilities/<name>/<name>.py` — return result string or raise
+2. Add `async cmd_<name>()` handler in `src/adjutant/messaging/telegram/commands.py`
+3. Register in the `if/elif` dispatch chain in `src/adjutant/messaging/dispatch.py`
+4. Add the CLI command in `src/adjutant/cli.py`
+5. Document in `.Claude/agents/adjutant.md` so the agent knows it exists
+6. Add unit test at `tests/unit/test_<name>.py`
+7. Add to `docs/guides/commands.md`
 
-```bash
-adjutant schedule remove <name>     # removes from registry and crontab
-adjutant schedule disable <name>    # keeps in registry, removes from crontab
-```
-
-### Full documentation
-
-See [docs/guides/schedules.md](../guides/schedules.md) for the user-facing guide.
+Full guide: this file.
 
 ---
 
 ## Reference: Screenshot Capability
 
-`scripts/capabilities/screenshot/screenshot.sh` is the most complete example:
+`src/adjutant/capabilities/screenshot/screenshot.py` is the most complete example:
 
 - Validates the URL argument
-- Loads credentials via `env.sh`
-- Uses a helper Node script for Playwright
-- Falls back from `sendPhoto` to `sendDocument` on error
+- Loads credentials via `get_credential()`
+- Spawns a Node.js Playwright helper for the actual screenshot
+- Falls back from `sendPhoto` to `sendDocument` on Telegram size limits
 - Calls the vision capability for an automatic caption
-- Returns `OK:<filepath>` on success
+- Returns the file path on success
 
 Read it before writing any capability that involves external processes or file output.

@@ -12,7 +12,7 @@ Adjutant has three possible states:
 |-------|--------------|-------------|------------|
 | **RUNNING** | Listener is active and polling for messages | `adjutant start` | `adjutant stop`, `adjutant pause`, or `adjutant kill` |
 | **PAUSED** | Listener is stopped; `PAUSED` lockfile exists | `adjutant pause` or `/pause` | `adjutant resume` or `/resume` |
-| **KILLED** | Hard stop; `KILLED` lockfile exists; nothing will start | `adjutant kill` or `/kill` | `adjutant start` (clears lockfile and restarts) |
+| **KILLED** | Hard stop; `KILLED` lockfile exists; nothing will start | `adjutant kill` or `/kill` | `adjutant startup` (interactive recovery, clears lockfile and restores crontab) |
 
 Check the current state at any time:
 
@@ -79,7 +79,7 @@ adjutant resume
 While paused:
 - The listener process continues running and polling
 - All incoming messages are silently dropped
-- The `PAUSED` lockfile at `~/.adjutant/PAUSED` controls this behaviour
+- The `PAUSED` lockfile at `$ADJ_DIR/PAUSED` controls this behaviour
 - `adjutant status` / `/status` will show `PAUSED`
 
 Both `pause` and `resume` are idempotent — calling them when already in the target state has no effect.
@@ -99,7 +99,7 @@ adjutant kill
 ```
 
 What happens:
-1. Creates `~/.adjutant/KILLED` lockfile
+1. Creates `$ADJ_DIR/KILLED` lockfile
 2. Terminates all Adjutant-related processes (listener, opencode, any background jobs)
 3. Disables cron jobs (backed up to `state/crontab.backup`)
 4. Logs the event and sends a Telegram notification
@@ -109,10 +109,17 @@ After a kill, **nothing will start** until the lockfile is cleared. This is inte
 ### Recovering from a kill
 
 ```bash
-adjutant start
+adjutant startup
 ```
 
-`adjutant start` detects the `KILLED` lockfile, clears it, and starts the listener fresh. Cron jobs are not automatically restored — re-install them via `adjutant startup` if needed.
+`adjutant startup` detects the `KILLED` lockfile, enters recovery mode, and walks through:
+1. Removing the `KILLED` lockfile
+2. Restoring the crontab from `state/crontab.backup`
+3. Re-syncing the schedule registry to crontab
+4. Starting the Telegram listener
+5. Sending a Telegram notification confirming recovery
+
+Note: `adjutant start` (without `startup`) will refuse to start if a `KILLED` lockfile is present — use `adjutant startup` for full recovery.
 
 ### KILLED vs PAUSED
 
@@ -173,7 +180,7 @@ adjutant restart
 adjutant doctor
 ```
 
-Checks that all required tools are installed (`opencode`, `jq`, `curl`), credentials are present in `.env`, identity files exist, and scripts are executable. Does not modify anything — read-only diagnostic.
+Checks that all required tools are installed (`bash`, `curl`, `jq`, `python3`, `opencode`), credentials are present in `.env`, identity files exist, and the listener state. Does not modify anything — read-only diagnostic.
 
 ---
 

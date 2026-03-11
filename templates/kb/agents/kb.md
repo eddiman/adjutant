@@ -1,25 +1,6 @@
 ---
 description: "Knowledge base sub-agent for: {{KB_NAME}}"
 mode: primary
-tools:
-  read: true
-  glob: true
-  grep: true
-  write: {{KB_WRITE_ENABLED}}
-  edit: {{KB_WRITE_ENABLED}}
-  bash: {{KB_WRITE_ENABLED}}
-permission:
-  read:
-    "*": allow
-    "**/.env": deny
-    ".env": deny
-    "**/.env.*": deny
-    "**/*secret*": deny
-    "**/*credential*": deny
-  glob:
-    "*": allow
-    "**/.env": deny
-    ".env": deny
 ---
 
 You are a knowledge base sub-agent scoped to this directory. Answer questions by reading files here only.
