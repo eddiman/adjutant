@@ -81,9 +81,22 @@ def msg_send_text(
         payload["reply_to_message_id"] = reply_to
 
     client = get_client()
+    url = _tg_url(bot_token, "sendMessage")
     try:
-        client.post(_tg_url(bot_token, "sendMessage"), json_data=payload)
+        client.post(url, json_data=payload)
     except Exception as exc:
+        # Telegram rejects messages with malformed Markdown (HTTP 400 parse
+        # entity errors).  Retry without parse_mode so the message always
+        # reaches the user, even if formatting is lost.
+        err = str(exc)
+        if "400" in err and "parse" in err.lower():
+            adj_log("telegram", "msg_send_text: Markdown parse error, retrying as plain text")
+            plain_payload = {k: v for k, v in payload.items() if k != "parse_mode"}
+            try:
+                client.post(url, json_data=plain_payload)
+                return
+            except Exception as exc2:
+                adj_log("telegram", f"msg_send_text plain retry failed: {exc2}")
         adj_log("telegram", f"msg_send_text failed: {exc}")
 
 

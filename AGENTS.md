@@ -23,7 +23,7 @@ adjutant/
 ├── templates/kb/                   # KB scaffold templates — tracked
 ├── prompts/                        # pulse.md, review.md, escalation.md — tracked
 ├── src/adjutant/
-│   ├── cli.py                      # Typer CLI — all commands live here
+│   ├── cli.py                      # Click CLI — all commands live here
 │   ├── __main__.py                 # python -m adjutant entrypoint
 │   ├── core/                       # config, env, lockfiles, logging, model, opencode, paths, platform, process
 │   ├── lib/                        # http, ndjson — shared utilities
@@ -46,8 +46,9 @@ adjutant/
 │   └── unit/                       # ~52 test files, 1055 tests — pytest only
 └── docs/
     ├── development/                # plugin-guide, adaptor-guide, testing, setup-wizard
-    ├── architecture/               # overview, messaging, identity, state, design-decisions
-    └── guides/                     # getting-started, commands, knowledge-bases, configuration
+    ├── architecture/               # overview, messaging, identity, state, design-decisions, autonomy
+    └── guides/                     # getting-started, commands, knowledge-bases, configuration,
+                                    #   schedules, autonomy, lifecycle
 ```
 
 ---
@@ -72,7 +73,7 @@ These are gitignored and contain personal or runtime data:
 3. Credentials: never read `.env` directly — use `get_credential(key)` from `core/env.py`
 4. Paths: use `get_adj_dir()` from `core/paths.py`; never hardcode `~/.adjutant`
 5. Logging: `adj_log("component", "message")` from `core/logging.py` — not `print()`
-6. Return types: capability functions return `OpenCodeResult` (from `core/opencode.py`) or raise; never print to stdout inside library code
+6. Return types: capability functions return `ClaudeCodeResult` (from `core/claude.py`) or raise; never print to stdout inside library code
 7. Temp files: `tempfile.NamedTemporaryFile(delete=False)` + `finally: os.unlink(tmp)`
 8. All new modules need a corresponding `tests/unit/test_<module>.py`
 
@@ -94,11 +95,11 @@ These are gitignored and contain personal or runtime data:
 
 ## Adding a Capability
 
-1. Create `src/adjutant/capabilities/<name>/<name>.py` — return `OpenCodeResult` or raise
+1. Create `src/adjutant/capabilities/<name>/<name>.py` — return `ClaudeCodeResult` or raise
 2. Add `cmd_<name>()` handler in `src/adjutant/messaging/telegram/commands.py`
 3. Register in the dispatch table in `src/adjutant/messaging/dispatch.py`
 4. Add the CLI command in `src/adjutant/cli.py`
-5. Document in `.opencode/agents/adjutant.md` so the agent knows it exists
+5. Document in `.Claude/agents/adjutant.md` so the agent knows it exists
 6. Add unit test at `tests/unit/test_<name>.py`
 7. Add to `docs/guides/commands.md`
 
@@ -108,36 +109,38 @@ Full guide: `docs/development/plugin-guide.md`
 
 ## Adding a Slash Command
 
-Register in `src/adjutant/messaging/dispatch.py`:
+Register in `src/adjutant/messaging/dispatch.py` using the `if/elif` chain:
 
 ```python
-"/mycommand": cmd_mycommand,
-"/mycommand ": cmd_mycommand,   # with args variant if needed
+elif text == "/mycommand":
+    await cmd_mycommand("", message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+elif text.startswith("/mycommand "):
+    await cmd_mycommand(text[len("/mycommand "):], message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
 ```
 
-Handler shape in `commands.py`:
+Handler shape in `commands.py` — handlers are `async`, `message_id` is `int`:
 
 ```python
-def cmd_mycommand(message_id: str, arg: str = "") -> None:
+async def cmd_mycommand(arg: str, message_id: int, adj_dir: Path, *, bot_token: str, chat_id: str) -> None:
     try:
-        result = run_myfeature(get_adj_dir(), arg)
+        result = run_myfeature(adj_dir, arg)
         msg_send_text(result, message_id)
     except Exception as e:
         msg_send_text(f"Error: {e}", message_id)
 ```
 
-For long-running commands, run in a thread and use `msg_typing("start")`/`msg_typing("stop")`.
+For long-running commands, use `msg_typing_start()`/`msg_typing_stop()` and run in a background task.
 
 ---
 
 ## Knowledge Bases
 
-A KB is a sandboxed OpenCode workspace in its own directory. The main Adjutant agent never reads KB files directly — it queries them via a sub-agent process.
+A KB is a sandboxed Claude Code workspace in its own directory. The main Adjutant agent never reads KB files directly — it queries them via a sub-agent process.
 
 **Query a KB:**
 ```python
 from adjutant.capabilities.kb.query import kb_query
-result = kb_query(adj_dir, name="mybase", question="What is the status?")
+result = await kb_query("mybase", "What is the status?", adj_dir)
 ```
 
 **Create a KB** (interactive wizard):
@@ -154,12 +157,14 @@ kb_wizard_interactive(adj_dir)
 **Scaffold structure** (generated from `templates/kb/`):
 ```
 <kb-path>/
-├── kb.yaml                       # Metadata
-├── .opencode/agents/kb.md        # Sub-agent definition (rendered from template)
-├── opencode.json                 # Sandboxed permissions (external_directory: deny)
+├── kb.yaml                       # Metadata (name, description, model, access, cli_module)
+├── .claude/agents/kb.md        # Sub-agent definition (rendered from template)
+├── claude.json                 # Sandboxed permissions (external_directory: deny)
 ├── data/current.md               # Live status — sub-agent reads this first
+├── docs/README.md                # KB orientation doc — what questions it can answer
 ├── knowledge/                    # Stable reference docs
 ├── history/                      # Archived records
+├── state/                        # Runtime state (gitignored)
 └── templates/                    # Reusable formats
 ```
 
@@ -167,7 +172,7 @@ kb_wizard_interactive(adj_dir)
 
 **KB registry** (`knowledge_bases/registry.yaml`) is the routing table. `kb_register()` appends to it; `kb_exists()` / `kb_get_field()` query it via pure-Python line-by-line YAML parsing (no `pyyaml` dependency).
 
-**Access levels:** `read-only` KBs have `bash: false` in their workspace. `read-write` KBs can update their own `data/` files during a `/reflect`.
+**Access levels:** `read-only` KBs have `bash`, `edit`, and `write` denied in their workspace. `read-write` KBs have only `external_directory` denied — they can update their own `data/` files during a `/reflect`.
 
 Full guide: `docs/guides/knowledge-bases.md`
 
@@ -175,7 +180,7 @@ Full guide: `docs/guides/knowledge-bases.md`
 
 ## Agent Prompt
 
-`.opencode/agents/adjutant.md` is the only agent definition that is tracked. Edit it when:
+`.Claude/agents/adjutant.md` is the only agent definition that is tracked. Edit it when:
 - A new capability needs to be surfaced to the agent
 - Startup/routing behavior changes
 - A new tool invocation pattern is added
@@ -208,5 +213,5 @@ Full guide: `docs/development/testing.md`
 - **`_resolve_command()` is private** in `schedule/manage.py` — used directly in CLI for `schedule run`
 - **Playwright files** live in `src/adjutant/capabilities/screenshot/` — `screenshot.py` resolves them via `Path(__file__).parent`
 - **`dispatch_photo` arg order** — check the signature before calling; it differs from `dispatch_message`
-- **NDJSONResult vs OpenCodeResult** — `ndjson.py` returns `NDJSONResult`; `opencode.py` wraps it into `OpenCodeResult`; don't mix them up at call sites
+- **NDJSONResult vs ClaudeCodeResult** — `ndjson.py` returns `NDJSONResult`; `claude.py` wraps it into `ClaudeCodeResult`; don't mix them up at call sites
 - **`dispatch.py` auth + rate-limit block** — security-critical; don't refactor without running the full test suite first

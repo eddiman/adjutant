@@ -12,7 +12,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 
 | Command | What it does |
 |---------|-------------|
-| `/status` | Shows whether Adjutant is RUNNING or PAUSED, plus the last heartbeat timestamp |
+| `/status` | Shows whether Adjutant is up and running, paused, or killed — plus scheduled jobs, last autonomous cycle, and notification count today |
 | `/pulse` | Queries each registered KB for a quick status update — current state, blockers, and upcoming deadlines. No direct file access; all project knowledge flows through KB sub-agents. |
 | `/reflect` | Requests a deep reflection using the expensive model (Opus). Queries each KB in depth and encourages read-write KBs to update stale data. Adjutant will warn you of the cost and ask for `/confirm` before proceeding |
 | `/confirm` | Confirms a pending `/reflect`. If you don't send this, the reflection is cancelled |
@@ -33,7 +33,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | `/screenshot <url>` | Takes a full-page screenshot of the URL and sends it back as an image. Automatically generates a visual description caption using the vision model. Requires Playwright to be installed. |
 | `/search <query>` | Searches the web via the Brave Search API and returns the top 5 results (title, URL, description). No browser automation — fast, token-efficient, and not subject to bot detection. Requires `BRAVE_API_KEY` in `.env`. |
 | `/kb` | Lists all registered knowledge bases |
-| `/kb <name> <question>` | Queries a specific knowledge base with your question. Example: `/kb my-project what's the current status?` |
+| `/kb query <name> <question>` | Queries a specific knowledge base with your question. Example: `/kb query my-project what's the current status?` |
 | `/schedule` | Lists all registered scheduled jobs with enabled/disabled status and schedule |
 | `/schedule run <name>` | Runs a scheduled job immediately. Output is sent to chat. |
 | `/schedule enable <name>` | Enables a job and installs its crontab entry |
@@ -71,7 +71,7 @@ Run from your terminal after adding the `adjutant` alias to your shell profile.
 adjutant start        # Start the Telegram listener
 adjutant stop         # Stop the Telegram listener
 adjutant restart      # Restart all services
-adjutant status       # Show system status (RUNNING/PAUSED/KILLED + listener PID)
+adjutant status       # Show system status (OPERATIONAL/PAUSED/KILLED)
 ```
 
 ### Lifecycle control
@@ -89,8 +89,10 @@ See [Lifecycle](lifecycle.md) for when to use each of these.
 ### Sending messages
 
 ```bash
-adjutant notify "Your message here"   # Send a Telegram notification
+adjutant notify "Your message here"   # Send a Telegram notification (respects daily budget)
+adjutant reply "Your message here"    # Send a Telegram reply (Markdown, no budget cap)
 adjutant screenshot https://example.com   # Take and send a screenshot
+adjutant search "query"               # Search the web via Brave API (prints results)
 adjutant news         # Run the news briefing pipeline manually
 ```
 
@@ -102,7 +104,7 @@ adjutant kb create                    # Interactive KB creation wizard
 adjutant kb create --quick \
   --name my-kb \
   --path /path/to/kb \
-  --desc "What this KB is about"      # Quick non-interactive create
+  --desc "What this KB is about"      # Quick non-interactive create (--desc, not --description)
 adjutant kb info <name>               # Show details about a KB
 adjutant kb query <name> "question"   # Query a KB
 adjutant kb run <name> <operation>    # Run a KB-local operation by convention
@@ -119,7 +121,6 @@ adjutant schedule disable <name>    # Disable job → remove crontab entry, keep
 adjutant schedule remove <name>     # Remove from registry and crontab
 adjutant schedule sync              # Reconcile crontab with registry (idempotent)
 adjutant schedule run <name>        # Run a job immediately in foreground (for testing)
-adjutant schedule help              # Show usage
 ```
 
 See [Schedules](schedules.md) for the full guide including generic KB-backed scheduled jobs.
@@ -137,9 +138,9 @@ adjutant setup --repair   # Repair mode — checks and fixes an existing install
 ### Help
 
 ```bash
-adjutant help              # Show all commands
-adjutant kb help           # Show KB subcommand help
-adjutant schedule help     # Show schedule subcommand help
+adjutant --help              # Show all commands
+adjutant kb --help           # Show KB subcommand help
+adjutant schedule --help     # Show schedule subcommand help
 ```
 
 ---
@@ -153,16 +154,17 @@ Adjutant Health Check
 =====================
 
 Installation: /Users/you/.adjutant
-OS:           macos
+OS:           Darwin
 
 Dependencies:
   bash         OK (GNU bash, version 5.2.15)
   curl         OK (curl 8.4.0)
   jq           OK (jq-1.7)
+  python3      OK (Python 3.12.0)
   opencode     OK (opencode 0.3.1)
 
 Optional:
-  playwright   not installed (needed for /screenshot)
+  playwright   not installed (needed for screenshot)
 
 Configuration:
   adjutant.yaml        present
@@ -170,11 +172,12 @@ Configuration:
   identity/soul.md     present
   identity/heart.md    present
   identity/registry.md present
+  news_config.json     present
   opencode.json        present
 
 State:
-  Status:   operational
-  Listener: running (PID 12345)
+  Status: operational
+  Listener: Running (PID 12345)
 ```
 
 If `adjutant doctor` reports missing dependencies or configuration, run `adjutant setup --repair` to fix them interactively.

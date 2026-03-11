@@ -13,6 +13,8 @@ from adjutant.capabilities.kb.run import (
     KBOperationNotFoundError,
     KBRunError,
     _load_registry,
+    _read_kb_cli_module,
+    _resolve_kb_python,
     get_operation_script,
     kb_run,
     main,
@@ -41,8 +43,13 @@ def _make_registry(adj_dir: Path, entries: list[dict[str, str]]) -> None:
     (kb_dir / "registry.yaml").write_text("\n".join(lines) + "\n")
 
 
-def _make_kb(tmp_path: Path, name: str, operations: list[str] | None = None) -> Path:
-    """Create a minimal KB directory with optional operation scripts."""
+def _make_kb(
+    tmp_path: Path,
+    name: str,
+    operations: list[str] | None = None,
+    cli_module: str = "",
+) -> Path:
+    """Create a minimal KB directory with optional operation scripts or kb.yaml."""
     kb_path = tmp_path / f"kb_{name}"
     scripts_dir = kb_path / "scripts"
     scripts_dir.mkdir(parents=True)
@@ -50,7 +57,19 @@ def _make_kb(tmp_path: Path, name: str, operations: list[str] | None = None) -> 
         script = scripts_dir / f"{op}.sh"
         script.write_text(f"#!/bin/bash\necho 'ran {op}'\n")
         script.chmod(0o755)
+    if cli_module:
+        (kb_path / "kb.yaml").write_text(f'name: "{name}"\ncli_module: "{cli_module}"\n')
     return kb_path
+
+
+def _make_venv_python(kb_path: Path) -> Path:
+    """Create a fake .venv/bin/python file so _resolve_kb_python succeeds."""
+    venv_bin = kb_path / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    python = venv_bin / "python"
+    python.write_text('#!/bin/sh\nexec python3 "$@"\n')
+    python.chmod(0o755)
+    return python
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +124,66 @@ class TestLoadRegistry:
 
 
 # ---------------------------------------------------------------------------
+# _read_kb_cli_module
+# ---------------------------------------------------------------------------
+
+
+class TestReadKbCliModule:
+    def test_returns_empty_when_no_kb_yaml(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        assert _read_kb_cli_module(kb_path) == ""
+
+    def test_returns_empty_when_no_cli_module_field(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\nmodel: "cheap"\n')
+        assert _read_kb_cli_module(kb_path) == ""
+
+    def test_returns_cli_module_value(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\ncli_module: "src.cli"\n')
+        assert _read_kb_cli_module(kb_path) == "src.cli"
+
+    def test_returns_cli_module_without_quotes(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text("name: mydb\ncli_module: src.cli\n")
+        assert _read_kb_cli_module(kb_path) == "src.cli"
+
+    def test_returns_empty_when_cli_module_is_blank(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\ncli_module: ""\n')
+        assert _read_kb_cli_module(kb_path) == ""
+
+    def test_ignores_commented_out_cli_module(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\n# cli_module: "src.cli"\n')
+        assert _read_kb_cli_module(kb_path) == ""
+
+
+# ---------------------------------------------------------------------------
+# _resolve_kb_python
+# ---------------------------------------------------------------------------
+
+
+class TestResolveKbPython:
+    def test_returns_venv_python_when_exists(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        python = _make_venv_python(kb_path)
+        assert _resolve_kb_python(kb_path) == python
+
+    def test_raises_when_venv_missing(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        with pytest.raises(KBRunError, match=".venv/bin/python"):
+            _resolve_kb_python(kb_path)
+
+
+# ---------------------------------------------------------------------------
 # get_operation_script
 # ---------------------------------------------------------------------------
 
@@ -147,7 +226,7 @@ class TestGetOperationScript:
 
 
 # ---------------------------------------------------------------------------
-# kb_run
+# kb_run — bash fallback path
 # ---------------------------------------------------------------------------
 
 
@@ -188,6 +267,151 @@ class TestKbRun:
         cmd = mock_run.call_args[0][0]
         assert "--force" in cmd
         assert "arg1" in cmd
+
+    def test_invokes_bash_for_sh_script(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", ["fetch"])
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "fetch")
+
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "bash"
+        assert cmd[1].endswith("fetch.sh")
+
+    def test_injects_env_vars(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", ["fetch"])
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "fetch")
+
+        env = mock_run.call_args[1]["env"]
+        assert env["ADJ_DIR"] == str(tmp_path)
+        assert env["ADJUTANT_HOME"] == str(tmp_path)
+        assert env["KB_DIR"] == str(kb_path)
+
+
+# ---------------------------------------------------------------------------
+# kb_run — Python CLI path
+# ---------------------------------------------------------------------------
+
+
+class TestKbRunPython:
+    def test_invokes_venv_python_when_cli_module_set(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "OK:fetched\n", "stderr": ""}
+            )()
+            result = kb_run(tmp_path, "mydb", "fetch")
+
+        assert result == "OK:fetched\n"
+        cmd = mock_run.call_args[0][0]
+        # Must use venv Python, not bash
+        assert "python" in cmd[0]
+        assert "bash" not in cmd[0]
+        assert "-m" in cmd
+        assert "src.cli" in cmd
+
+    def test_passes_real_flag_and_kb_dir(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "fetch")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--real" in cmd
+        assert "--kb-dir" in cmd
+        assert str(kb_path) in cmd
+
+    def test_passes_operation_and_extra_args(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "analyze", ["--days", "7"])
+
+        cmd = mock_run.call_args[0][0]
+        assert "analyze" in cmd
+        assert "--days" in cmd
+        assert "7" in cmd
+
+    def test_sets_cwd_to_kb_path(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "fetch")
+
+        kwargs = mock_run.call_args[1]
+        assert kwargs["cwd"] == str(kb_path)
+
+    def test_raises_kb_run_error_when_venv_missing(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        # No venv created
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with pytest.raises(KBRunError, match=".venv/bin/python"):
+            kb_run(tmp_path, "mydb", "fetch")
+
+    def test_raises_kb_run_error_on_nonzero_exit(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 1, "stdout": "", "stderr": "ERROR:fetch: auth failed"}
+            )()
+            with pytest.raises(KBRunError, match="auth failed"):
+                kb_run(tmp_path, "mydb", "fetch")
+
+    def test_injects_env_vars(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "fetch")
+
+        env = mock_run.call_args[1]["env"]
+        assert env["ADJ_DIR"] == str(tmp_path)
+        assert env["ADJUTANT_HOME"] == str(tmp_path)
+        assert env["KB_DIR"] == str(kb_path)
+
+    def test_raises_invalid_operation_name(self, tmp_path: Path) -> None:
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with pytest.raises(ValueError, match="Invalid"):
+            kb_run(tmp_path, "mydb", "../etc/passwd")
 
 
 # ---------------------------------------------------------------------------

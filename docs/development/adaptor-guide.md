@@ -9,9 +9,9 @@ An adaptor connects Adjutant to a messaging backend (Telegram, Slack, Discord, C
 The listener → dispatch → adaptor pipeline works as follows:
 
 1. Your adaptor's **listener** polls (or subscribes to) the backend for new messages.
-2. For each message it calls `dispatch_message` or `dispatch_photo` from `dispatch.sh`.
-3. `dispatch.sh` handles auth, rate limiting, command routing, and natural language chat — all backend-agnostic.
-4. When a response is ready, `dispatch.sh` calls `msg_send_text` or `msg_send_photo` — functions your adaptor provides.
+2. For each message it calls `dispatch_message` or `dispatch_photo` from `dispatch.py`.
+3. `dispatch.py` handles auth, rate limiting, command routing, and natural language chat — all backend-agnostic.
+4. When a response is ready, `dispatch.py` calls `msg_send_text` or `msg_send_photo` — functions your adaptor provides.
 
 You write the polling loop and the send functions. Everything else is handled for you.
 
@@ -19,208 +19,132 @@ You write the polling loop and the send functions. Everything else is handled fo
 
 ## Directory Structure
 
-Create your adaptor under `scripts/messaging/<backend>/`:
+Create your adaptor under `src/adjutant/messaging/<backend>/`:
 
 ```
-scripts/messaging/
-├── adaptor.sh              # Interface contract (do not modify)
-├── dispatch.sh             # Backend-agnostic dispatcher (do not modify)
+src/adjutant/messaging/
+├── adaptor.py              # Interface contract (do not modify)
+├── dispatch.py             # Backend-agnostic dispatcher (do not modify)
 └── <backend>/
-    ├── listener.sh         # REQUIRED: polling loop
-    ├── send.sh             # REQUIRED: send functions
-    ├── service.sh          # REQUIRED: start/stop/status process manager
-    ├── commands.sh         # OPTIONAL: /command handlers (can reuse telegram's)
-    ├── photos.sh           # OPTIONAL: photo handling
-    ├── chat.sh             # OPTIONAL: chat bridge (usually shared)
-    └── notify.sh           # OPTIONAL: standalone notifier
+    ├── listener.py         # REQUIRED: async polling loop
+    ├── send.py             # REQUIRED: send functions
+    ├── service.py          # REQUIRED: start/stop/status process manager
+    ├── commands.py         # OPTIONAL: /command handlers (can reuse telegram's)
+    ├── photos.py           # OPTIONAL: photo handling
+    ├── chat.py             # OPTIONAL: chat bridge (usually shared)
+    └── notify.py           # OPTIONAL: standalone notifier
 ```
 
 ---
 
 ## The Interface Contract
 
-`scripts/messaging/adaptor.sh` defines 8 functions. Your adaptor **must** override the 4 required ones. The 4 optional ones have safe no-op defaults.
+`src/adjutant/messaging/adaptor.py` defines the send functions your adaptor must implement.
 
 ### Required
 
-#### `msg_send_text TEXT [REPLY_TO_ID]`
+#### `msg_send_text(text: str, reply_to_id: int | None = None) -> None`
 
 Send a plain text message to the user.
 
-- `TEXT` — the message string (may contain newlines)
-- `REPLY_TO_ID` — optional; the message ID to reply to (use if the backend supports threading)
-- Returns 0 on success, 1 on failure
+- `text` — the message string (may contain newlines)
+- `reply_to_id` — optional; the message ID to reply to (use if the backend supports threading)
 
-```bash
-msg_send_text() {
-  local text="$1"
-  local reply_to="${2:-}"
-
-  curl -s -X POST "https://api.example.com/messages" \
-    -d "token=${MY_BOT_TOKEN}" \
-    -d "channel=${MY_CHANNEL_ID}" \
-    -d "text=${text}" > /dev/null
-}
+```python
+def msg_send_text(text: str, reply_to_id: int | None = None) -> None:
+    requests.post(
+        f"https://api.example.com/messages",
+        json={"token": MY_BOT_TOKEN, "channel": MY_CHANNEL_ID, "text": text},
+    )
 ```
 
-#### `msg_send_photo FILE_PATH [CAPTION]`
+#### `msg_send_photo(file_path: str, caption: str = "") -> None`
 
 Send an image file.
 
-- `FILE_PATH` — absolute path to the image on disk
-- `CAPTION` — optional text caption (max length varies by backend)
-- Returns 0 on success, 1 on failure
-
-#### `msg_start_listener`
-
-Start the polling loop. This function should run indefinitely. It calls `dispatch_message` or `dispatch_photo` for each received message.
-
-#### `msg_stop_listener`
-
-Stop the listener gracefully (e.g., send SIGTERM to the PID stored in a lockfile).
-
----
+- `file_path` — absolute path to the image on disk
+- `caption` — optional text caption
 
 ### Optional
 
-#### `msg_react MSG_ID [EMOJI]`
+#### `msg_react(msg_id: int, emoji: str = "") -> None`
 
-Add a reaction to a message. Used by the dispatcher to acknowledge receipt before a long-running task completes. Default: no-op.
+Add a reaction to a message. Used by the dispatcher to acknowledge receipt before a long-running task completes.
 
-#### `msg_typing start|stop [SUFFIX]`
+#### `msg_typing_start(suffix: str = "") -> None` / `msg_typing_stop(suffix: str = "") -> None`
 
-Show or hide a typing indicator. `SUFFIX` is an arbitrary string used to namespace concurrent indicators. Default: no-op.
+Show or hide a typing indicator. `suffix` is an arbitrary string used to namespace concurrent indicators.
 
-#### `msg_authorize SENDER_ID`
+#### `msg_authorize(sender_id: str) -> bool`
 
-Called by `dispatch.sh` before processing any message. Return 0 to allow, 1 to reject.
-
-The default (in `adaptor.sh`) allows everyone. Override this to restrict to a known user ID:
-
-```bash
-msg_authorize() {
-  local sender_id="$1"
-  [ "${sender_id}" = "${MY_ALLOWED_USER_ID}" ]
-}
-```
-
-#### `msg_get_user_id`
-
-Return the authenticated user's ID as a string. Used for display/logging. Default: returns `"unknown"`.
+Called by `dispatch.py` before processing any message. Return `True` to allow, `False` to reject. The default allows everyone — override to restrict to a known user ID.
 
 ---
 
-## Writing `listener.sh`
+## Writing `listener.py`
 
 Your listener must:
 
-1. Source common utilities and all messaging modules
-2. Call `check_killed` before entering the loop
+1. Import common utilities and all messaging modules
+2. Check the `KILLED` lockfile before entering the loop
 3. Acquire a single-instance lock
-4. Poll the backend in a loop, checking `is_killed` each iteration
-5. Call `dispatch_message TEXT MESSAGE_ID SENDER_ID` for text messages
-6. Call `dispatch_photo SENDER_ID MESSAGE_ID FILE_REF [CAPTION]` for images
+4. Poll the backend in an async loop
+5. Call `dispatch_message(text, message_id, sender_id, adj_dir, ...)` for text messages
+6. Call `dispatch_photo(sender_id, message_id, file_ref, caption, adj_dir, ...)` for images
 
-Minimal skeleton:
+Minimal async skeleton:
 
-```bash
-#!/bin/bash
-# scripts/messaging/<backend>/listener.sh
+```python
+# src/adjutant/messaging/<backend>/listener.py
+import asyncio
+from pathlib import Path
 
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/common/paths.sh"
-source "${ADJ_DIR}/scripts/common/env.sh"
-source "${ADJ_DIR}/scripts/common/logging.sh"
-source "${ADJ_DIR}/scripts/common/lockfiles.sh"
-source "${ADJ_DIR}/scripts/common/platform.sh"
-source "${ADJ_DIR}/scripts/common/opencode.sh"
+from adjutant.core.lockfiles import check_killed, is_killed
+from adjutant.core.logging import adj_log
+from adjutant.core.paths import get_adj_dir
+from adjutant.messaging.dispatch import dispatch_message
 
-# Load adaptor interface defaults first, then override with your implementations
-source "${ADJ_DIR}/scripts/messaging/adaptor.sh"
-source "${ADJ_DIR}/scripts/messaging/<backend>/send.sh"
-source "${ADJ_DIR}/scripts/messaging/<backend>/commands.sh"
-source "${ADJ_DIR}/scripts/messaging/dispatch.sh"
 
-check_killed || exit 1
-require_<backend>_credentials || exit 1
+async def run_listener(adj_dir: Path, bot_token: str, chat_id: str) -> None:
+    check_killed(adj_dir)
 
-# Single-instance guard
-LISTENER_LOCK="${ADJ_DIR}/state/listener.lock"
-if ! mkdir "${LISTENER_LOCK}" 2>/dev/null; then
-  echo "Another listener is already running." >&2
-  exit 1
-fi
-echo $$ > "${LISTENER_LOCK}/pid"
-trap 'rm -rf "${LISTENER_LOCK}"; adj_log <backend> "Listener stopped."' EXIT
+    lock_dir = adj_dir / "state" / "listener.lock"
+    lock_dir.mkdir(parents=True, exist_ok=False)  # raises if already exists
+    pid_file = lock_dir / "pid"
+    pid_file.write_text(str(os.getpid()))
 
-adj_log <backend> "Listener started."
+    adj_log("<backend>", "Listener started.")
 
-while true; do
-  is_killed && break
+    try:
+        while True:
+            if is_killed(adj_dir):
+                break
 
-  # Poll the backend for new messages...
-  MESSAGES="$(fetch_new_messages)"
+            messages = await fetch_new_messages()
+            for msg in messages:
+                await dispatch_message(
+                    msg.text, msg.id, msg.sender,
+                    adj_dir=adj_dir,
+                    bot_token=bot_token,
+                    chat_id=chat_id,
+                )
 
-  for msg in ${MESSAGES}; do
-    text="$(extract_text "${msg}")"
-    msg_id="$(extract_id "${msg}")"
-    sender="$(extract_sender "${msg}")"
-    dispatch_message "${text}" "${msg_id}" "${sender}"
-  done
-
-  sleep 1
-done
+            await asyncio.sleep(1)
+    finally:
+        import shutil
+        shutil.rmtree(lock_dir, ignore_errors=True)
+        adj_log("<backend>", "Listener stopped.")
 ```
 
 ---
 
-## Writing `send.sh`
+## Writing `service.py`
 
-Source `adaptor.sh` first (it defines the function signatures), then override:
+The service module is called by `adjutant start` / `adjutant stop`. It should provide:
 
-```bash
-#!/bin/bash
-# scripts/messaging/<backend>/send.sh
-
-# Override required functions
-msg_send_text() {
-  local text="$1"
-  local reply_to="${2:-}"
-  # ... backend API call ...
-}
-
-msg_send_photo() {
-  local file_path="$1"
-  local caption="${2:-}"
-  # ... backend API call ...
-}
-
-msg_start_listener() {
-  exec bash "${ADJ_DIR}/scripts/messaging/<backend>/listener.sh"
-}
-
-msg_stop_listener() {
-  local pid_file="${ADJ_DIR}/state/listener.lock/pid"
-  [ -f "${pid_file}" ] && kill "$(cat "${pid_file}")"
-}
-
-# Override optional functions if supported
-msg_react() { return 0; }
-msg_typing() { return 0; }
-msg_authorize() {
-  local sender_id="$1"
-  [ "${sender_id}" = "${MY_ALLOWED_ID}" ]
-}
-```
-
----
-
-## Writing `service.sh`
-
-The service script is called by `adjutant start` / `adjutant stop`. It should:
-
-- `start` — fork `listener.sh` to the background, log the PID
-- `stop` — kill the PID from the lock file
-- `status` — print `Running (PID X)` or `Stopped`
+- `start_listener(adj_dir, bot_token, chat_id)` — fork the listener to the background, write the PID
+- `stop_listener(adj_dir)` — kill the PID from the lock file
+- `get_status(adj_dir)` — return `"running"`, `"stopped"`, or `"paused"`
 
 ---
 
@@ -233,17 +157,16 @@ messaging:
   backend: <backend>   # e.g. "slack", "discord", "cli"
 ```
 
-Then update `adjutant start` and `adjutant stop` in the `adjutant` CLI to call your `service.sh` instead of (or in addition to) `telegram/service.sh`.
+Then update `src/adjutant/messaging/dispatch.py` and `src/adjutant/cli.py` to import your `service.py` and route `adjutant start`/`stop` to it.
 
 ---
 
 ## Testing Your Adaptor
 
-Use the bats test suite:
+Use pytest:
 
 ```bash
-bats tests/unit/messaging/
-bats tests/integration/
+.venv/bin/pytest tests/unit/test_messaging_<backend>.py -v
 ```
 
 For manual smoke testing:
@@ -260,7 +183,7 @@ For manual smoke testing:
 
 The Telegram adaptor is the reference implementation. Read it before writing your own:
 
-- `scripts/messaging/telegram/send.sh` — `msg_send_text`, `msg_send_photo`, `msg_react`, `msg_typing`
-- `scripts/messaging/telegram/listener.sh` — polling loop, jq parsing, `dispatch_message` / `dispatch_photo` calls
-- `scripts/messaging/telegram/service.sh` — start/stop/status
-- `scripts/messaging/telegram/commands.sh` — all `cmd_*` handlers
+- `src/adjutant/messaging/telegram/send.py` — `msg_send_text`, `msg_send_photo`, `msg_react`, `msg_typing_start`/`stop`
+- `src/adjutant/messaging/telegram/listener.py` — async polling loop, `dispatch_message` / `dispatch_photo` calls
+- `src/adjutant/messaging/telegram/service.py` — start/stop/status
+- `src/adjutant/messaging/telegram/commands.py` — all `async cmd_*` handlers

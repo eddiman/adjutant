@@ -67,29 +67,31 @@ schedules:
   - name: "news_briefing"
     description: "Daily AI news digest"
     schedule: "0 8 * * 1-5"
-    script: "scripts/news/briefing.sh"
+    script: ".venv/bin/python -m adjutant news"
     log: "state/news_briefing.log"
     enabled: false                     # set to true when features.news.enabled is true
 
   - name: "autonomous_pulse"
     description: "Scheduled autonomous pulse check across knowledge bases"
     schedule: "0 9,17 * * 1-5"
-    script: "scripts/lifecycle/pulse_cron.sh"
+    script: ".venv/bin/python -m adjutant pulse"
     log: "state/pulse.log"
     enabled: false                     # set to true when autonomy.enabled is true
 
   - name: "autonomous_review"
     description: "End-of-day synthesis and review"
     schedule: "0 20 * * 1-5"
-    script: "scripts/lifecycle/review_cron.sh"
+    script: ".venv/bin/python -m adjutant review"
     log: "state/review.log"
     enabled: false                     # set to true when autonomy.enabled is true
 
-  # External job example — uncomment and fill in to register a KB script:
+  # KB job example — use kb_name + kb_operation instead of a hardcoded script path.
+  # Adjutant resolves the operation via cli_module in kb.yaml, or falls back to scripts/<op>.sh.
   # - name: "portfolio_fetch"
-  #   description: "Fetch Nordnet portfolio positions and prices"
+  #   description: "Fetch portfolio positions and prices"
   #   schedule: "0 9,16 * * 1-5"
-  #   script: "/absolute/path/to/portfolio-kb/scripts/fetch.sh"
+  #   kb_name: "portfolio-kb"
+  #   kb_operation: "fetch"
   #   log: "/absolute/path/to/portfolio-kb/state/fetch.log"
   #   enabled: false
 

@@ -11,10 +11,9 @@ This guide takes you from zero to your first conversation in about 10 minutes.
 Before installing, make sure you have:
 
 - **macOS or Linux**
-- **bash 4+** (macOS ships bash 3; install via `brew install bash`)
-- **curl** (installed on every macOS/Linux system by default)
-- **jq** — `brew install jq` on macOS, `apt install jq` on Linux
+- **Python 3.11+** — `python3 --version` to check
 - **[opencode](https://opencode.ai)** — the AI runtime Adjutant uses for reasoning
+- **curl** (installed on every macOS/Linux system by default)
 
 Check opencode is working:
 
@@ -26,26 +25,23 @@ opencode --version
 
 ## Step 1 — Install
 
-Run the installer:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/eddiman/adjutant/main/scripts/setup/install.sh | bash
-```
-
-The installer will:
-
-1. Check that `curl`, `jq`, and `opencode` are available
-2. Ask where to install (default: `~/.adjutant`)
-3. Download the latest release tarball
-4. Extract it to your chosen directory
-5. Launch the interactive setup wizard
-
-If you'd rather install from source (for development):
+Clone the repository and install with pip:
 
 ```bash
 git clone https://github.com/eddiman/adjutant.git ~/.adjutant
-bash ~/.adjutant/scripts/setup/wizard.sh
+cd ~/.adjutant
+python3 -m venv .venv
+.venv/bin/pip install -e .
 ```
+
+This installs the `adjutant` CLI entry point into `.venv/bin/adjutant`. Add it to your shell profile:
+
+```bash
+echo 'alias adjutant="~/.adjutant/.venv/bin/adjutant"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Adjust the path if you cloned to a different location.
 
 ---
 
@@ -73,24 +69,21 @@ Adjutant communicates through Telegram. You'll need a bot token and your chat ID
 
 ## Step 3 — Run the setup wizard
 
-If the installer didn't launch it automatically:
-
 ```bash
 adjutant setup
 ```
 
-The wizard walks through six steps:
+The wizard walks through seven steps:
 
 1. **Prerequisites** — verifies dependencies are in place
 2. **Install path** — confirms where Adjutant lives
 3. **Identity** — creates your `soul.md`, `heart.md`, and `registry.md` files (see [Configuration](configuration.md))
 4. **Messaging** — prompts for your Telegram bot token and chat ID, writes them to `.env`
-5. **Features** — optional news briefing configuration
+5. **Features** — optional news briefing and search configuration
 6. **Service** — installs the shell alias and optionally sets up auto-start on boot
+7. **Autonomy** — optional autonomous pulse/review scheduling
 
-At the end, the wizard shows a verification summary. All six items should show as present.
-
-If something is wrong later, you can re-run the wizard in repair mode:
+At the end, the wizard shows a completion banner. If something needs fixing later, re-run the wizard in repair mode:
 
 ```bash
 adjutant setup --repair
@@ -110,7 +103,7 @@ The Telegram listener starts in the background. Verify it's running:
 adjutant status
 ```
 
-You should see `RUNNING` and the listener's PID.
+You should see `Status: OPERATIONAL` and the listener's PID.
 
 ---
 
@@ -126,22 +119,9 @@ That's it. Adjutant is running.
 
 ---
 
-## Adding the shell alias
-
-The setup wizard offers to add an alias to your shell profile. If you skipped that step:
-
-```bash
-echo 'alias adjutant="~/.adjutant/adjutant"' >> ~/.zshrc
-source ~/.zshrc
-```
-
-Adjust the path if you installed somewhere other than `~/.adjutant`.
-
----
-
 ## Auto-start on boot (macOS)
 
-To keep Adjutant running across reboots, create a Launch Agent:
+To keep Adjutant running across reboots, use `adjutant startup` which installs a LaunchAgent. Alternatively you can install it manually:
 
 ```bash
 cat > ~/Library/LaunchAgents/adjutant.telegram.plist << 'EOF'
@@ -153,11 +133,17 @@ cat > ~/Library/LaunchAgents/adjutant.telegram.plist << 'EOF'
     <string>adjutant.telegram</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/YOUR_USERNAME/.adjutant/scripts/messaging/telegram/listener.sh</string>
+        <string>/Users/YOUR_USERNAME/.adjutant/.venv/bin/python</string>
+        <string>-m</string>
+        <string>adjutant</string>
+        <string>start</string>
     </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>ADJ_DIR</key>
+        <string>/Users/YOUR_USERNAME/.adjutant</string>
+    </dict>
     <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
     <string>/Users/YOUR_USERNAME/.adjutant/state/listener.stdout.log</string>

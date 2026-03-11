@@ -28,11 +28,13 @@ The `# adjutant:<name>` comment is the identity marker. It lets Adjutant manage 
 
 Three jobs are pre-declared in `adjutant.yaml.example`. They are all disabled by default:
 
-| Name | Script | Default schedule |
+| Name | CLI command | Default schedule |
 |---|---|---|
-| `news_briefing` | `scripts/news/briefing.sh` | Weekdays at 8:00am |
-| `autonomous_pulse` | `scripts/lifecycle/pulse_cron.sh` | Weekdays at 9am and 5pm |
-| `autonomous_review` | `scripts/lifecycle/review_cron.sh` | Weekdays at 8pm |
+| `news_briefing` | `adjutant news` | Weekdays at 8:00am |
+| `autonomous_pulse` | `adjutant pulse` | Weekdays at 9am and 5pm |
+| `autonomous_review` | `adjutant review` | Weekdays at 8pm |
+
+Each job's `script` field in `adjutant.yaml` should point to the virtualenv Python binary and the appropriate CLI command (e.g. `.venv/bin/python -m adjutant pulse`). The setup wizard writes these correctly when you enable the relevant features.
 
 `news_briefing` is enabled when `features.news.enabled: true` (via the setup wizard or manually). `autonomous_pulse` and `autonomous_review` are enabled when `autonomy.enabled: true`.
 
@@ -100,7 +102,7 @@ adjutant schedule disable <name>    # Disable job → remove crontab entry, keep
 adjutant schedule remove <name>     # Remove from registry and crontab (irreversible)
 adjutant schedule sync              # Reconcile crontab with registry (idempotent)
 adjutant schedule run <name>        # Run a job immediately in foreground (for testing)
-adjutant schedule help              # Show usage
+adjutant schedule --help            # Show usage
 ```
 
 ### Telegram
@@ -140,11 +142,14 @@ adjutant kb run ops-kb fetch
 
 The KB must already be registered in `knowledge_bases/registry.yaml`.
 
-**Script requirements:**
+Adjutant resolves `kb_operation: fetch` at install and run time in this order:
+1. If `kb.yaml` declares `cli_module`, runs `python -m <cli_module> fetch`
+2. Otherwise, runs `<kb-path>/scripts/fetch.sh`
+
+**Script requirements (shell path):**
 - Must be executable (`chmod +x`)
 - Exit 0 on success, non-zero on failure
 - Stdout is captured by `/schedule run <name>` and shown in Telegram
-- Should follow the `OK:<result>` / `ERROR:<reason>` output contract for Telegram-visible results
 
 ---
 

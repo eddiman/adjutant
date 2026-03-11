@@ -1,19 +1,23 @@
 """Run a KB-local operation by KB name.
 
-Replaces: scripts/capabilities/kb/run.sh
+Two invocation modes are supported:
 
-The bash script:
-  1. Sources paths.sh + kb/manage.sh
-  2. Looks up the KB in the registry via kb_get_operation_script()
-  3. Resolves the operation script path: <kb-path>/scripts/<operation>.sh
-  4. Runs it via bash, capturing stdout+stderr
-  5. Returns OK:<output> or ERROR:<reason>
+1. **Python CLI** (preferred): If the KB's ``kb.yaml`` declares a
+   ``cli_module`` field (e.g. ``cli_module: "src.cli"``), ``kb_run``
+   invokes the KB's own venv Python directly::
 
-This module reproduces that logic in Python, reading the KB registry YAML
-directly (no bash subprocess needed).
+       <kb-path>/.venv/bin/python -m <cli_module> --kb-dir <kb-path> --real <operation> [args...]
 
-KB operations may emit structured JSON events on stderr (one per line):
-  {"type": "notification", "ts": "...", "message": "..."}
+   No bash shim is needed. The KB's ``.venv`` must exist.
+
+2. **Bash script** (legacy fallback): If ``cli_module`` is absent or empty,
+   ``kb_run`` resolves ``<kb-path>/scripts/<operation>.sh`` and runs it via
+   ``bash``. This preserves backward compatibility for KBs that still use
+   shell scripts.
+
+KB operations may emit structured JSON events on stderr (one per line)::
+
+    {"type": "notification", "ts": "...", "message": "..."}
 
 These are captured and forwarded via Adjutant's notification system.
 """
@@ -21,6 +25,7 @@ These are captured and forwarded via Adjutant's notification system.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -96,11 +101,41 @@ def _get_kb(adj_dir: Path, kb_name: str) -> dict[str, str]:
 _VALID_OPERATION = re.compile(r"^[a-z][a-z0-9_-]*$")
 
 
-def get_operation_script(adj_dir: Path, kb_name: str, operation: str) -> Path:
-    """Resolve the script path for a KB operation.
+def _read_kb_cli_module(kb_path: Path) -> str:
+    """Read the ``cli_module`` field from a KB's ``kb.yaml``.
 
-    Matches bash kb_get_operation_script():
-        <kb-path>/scripts/<operation>.sh
+    Returns the module string (e.g. ``"src.cli"``) if declared, or an
+    empty string if absent or unset.
+    """
+    kb_yaml = kb_path / "kb.yaml"
+    if not kb_yaml.is_file():
+        return ""
+    for line in kb_yaml.read_text().splitlines():
+        m = re.match(r"^cli_module:\s*\"?([^\"#\n]*)\"?\s*$", line)
+        if m:
+            return m.group(1).strip()
+    return ""
+
+
+def _resolve_kb_python(kb_path: Path) -> Path:
+    """Return the path to the Python interpreter inside the KB's venv.
+
+    Raises:
+        KBRunError: If ``.venv/bin/python`` does not exist.
+    """
+    python = kb_path / ".venv" / "bin" / "python"
+    if not python.is_file():
+        raise KBRunError(
+            f"KB at {kb_path} declares a cli_module but has no .venv/bin/python. "
+            "Run: python3 -m venv .venv && .venv/bin/pip install -e ."
+        )
+    return python
+
+
+def get_operation_script(adj_dir: Path, kb_name: str, operation: str) -> Path:
+    """Resolve the bash script path for a KB operation (legacy path).
+
+    Used only when the KB does not declare a ``cli_module``.
 
     Args:
         adj_dir: Adjutant root directory.
@@ -108,7 +143,7 @@ def get_operation_script(adj_dir: Path, kb_name: str, operation: str) -> Path:
         operation: Operation name (e.g. "fetch", "analyze", "reconcile").
 
     Returns:
-        Absolute Path to the operation script.
+        Absolute Path to the operation shell script.
 
     Raises:
         KBNotFoundError: If the KB is not registered.
@@ -168,6 +203,7 @@ def _forward_kb_events(stderr: str, adj_dir: Path, kb_name: str) -> None:
 
         try:
             from adjutant.messaging.telegram.notify import send_notify
+
             send_notify(f"[{kb_name}] {message}", adj_dir)
         except Exception as exc:
             adj_log("kb", f"Failed to forward notification from {kb_name}: {exc}")
@@ -181,35 +217,69 @@ def kb_run(
 ) -> str:
     """Run a KB-local operation and return its stdout.
 
-    Matches bash kb_run() in run.sh:
-      - Resolves the operation script
-      - Runs it via bash, capturing combined stdout+stderr
-      - Returns the output on success
-
-    Structured JSON events on stderr are parsed and forwarded as
-    notifications (see _forward_kb_events).
+    Prefers Python CLI invocation when the KB's ``kb.yaml`` declares a
+    ``cli_module`` field. Falls back to running ``scripts/<operation>.sh``
+    via bash for KBs without a Python CLI.
 
     Args:
         adj_dir: Adjutant root directory.
         kb_name: Name of the knowledge base.
         operation: Operation name.
-        args: Additional arguments to pass to the operation script.
+        args: Additional arguments to pass to the operation.
 
     Returns:
-        Captured stdout from the operation script.
+        Captured stdout from the operation.
 
     Raises:
         KBNotFoundError: If KB or its directory is not found.
-        KBOperationNotFoundError: If the operation script does not exist.
-        KBRunError: If the script exits non-zero.
+        KBOperationNotFoundError: If the bash operation script does not exist
+            (only raised on the bash fallback path).
+        KBRunError: If the operation exits non-zero, or if the KB venv is
+            missing (Python CLI path).
         ValueError: If operation name is invalid.
     """
-    script_path = get_operation_script(adj_dir, kb_name, operation)
-    cmd = ["bash", str(script_path)] + (args or [])
+    if not _VALID_OPERATION.match(operation):
+        raise ValueError(
+            f"Invalid KB operation '{operation}'. "
+            "Use lowercase letters, digits, hyphens, or underscores."
+        )
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    entry = _get_kb(adj_dir, kb_name)
+    kb_path_str = entry.get("path", "")
+    if not kb_path_str:
+        raise KBNotFoundError(f"KB '{kb_name}' has no path in registry.")
 
-    # Forward any structured events from stderr before raising errors
+    kb_path = Path(kb_path_str)
+    if not kb_path.is_dir():
+        raise KBNotFoundError(f"KB directory does not exist: {kb_path}")
+
+    env = os.environ.copy()
+    env["ADJUTANT_HOME"] = str(adj_dir)
+    env["ADJ_DIR"] = str(adj_dir)
+    env["KB_DIR"] = str(kb_path)
+
+    cli_module = _read_kb_cli_module(kb_path)
+
+    if cli_module:
+        # Python CLI path — invoke the KB's own venv Python directly.
+        python = _resolve_kb_python(kb_path)
+        cmd = [
+            str(python),
+            "-m",
+            cli_module,
+            "--kb-dir",
+            str(kb_path),
+            "--real",
+            operation,
+        ] + (args or [])
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(kb_path), env=env)
+    else:
+        # Bash fallback — legacy script-based KB.
+        script_path = get_operation_script(adj_dir, kb_name, operation)
+        cmd = ["bash", str(script_path)] + (args or [])
+        result = subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+    # Forward any structured events from stderr before raising errors.
     _forward_kb_events(result.stderr, adj_dir, kb_name)
 
     if result.returncode != 0:
@@ -226,8 +296,6 @@ def main(argv: list[str] | None = None) -> int:
       OK:<output>   on success (exit 0)
       ERROR:<msg>   on failure (exit 1)
     """
-    import os as _os
-
     args = argv if argv is not None else sys.argv[1:]
 
     if len(args) < 2:
@@ -236,7 +304,7 @@ def main(argv: list[str] | None = None) -> int:
 
     kb_name, operation, *extra = args
 
-    adj_dir_str = _os.environ.get("ADJ_DIR", "").strip()
+    adj_dir_str = os.environ.get("ADJ_DIR", "").strip()
     if not adj_dir_str:
         sys.stderr.write("ERROR: ADJ_DIR not set\n")
         return 1

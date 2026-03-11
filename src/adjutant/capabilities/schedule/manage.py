@@ -76,7 +76,9 @@ def _resolve_command(entry: dict, adj_dir: Path) -> str:
     kb_operation = entry.get("kb_operation", "") or ""
 
     if kb_name and kb_operation:
-        return f"bash {adj_dir}/scripts/capabilities/kb/run.sh {kb_name} {kb_operation}"
+        venv_py = adj_dir / ".venv" / "bin" / "python"
+        python = str(venv_py) if venv_py.exists() else "python3"
+        return f"{python} -m adjutant kb run {kb_name} {kb_operation}"
 
     script = entry.get("script", "") or ""
     if script:

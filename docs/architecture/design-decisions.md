@@ -4,16 +4,16 @@ Why Adjutant is built the way it is.
 
 ---
 
-## No server process
+## Python over bash
 
-There is no long-running daemon with its own event loop. The listener is a plain shell `while true` loop. This means:
+The original Adjutant codebase was written in bash. It was fully rewritten in Python because:
 
-- No custom init system or supervisor required
-- Stopping the listener leaves in-flight commands to complete naturally
-- Restarts are clean — no shared mutable state between runs
-- The entire system is inspectable with `ps`, `ls`, and `cat`
+- **Testability** — pytest gives first-class unit testing with proper mocking, fixtures, and assertions. The bash suite relied on `bats-core` which is hard to mock correctly and slow to run in parallel.
+- **Type safety** — Python type annotations catch whole classes of bugs that bash silently ignores (e.g. empty variable expansion, wrong argument order).
+- **Maintainability** — Python modules, imports, and dataclasses are far easier to reason about than sourced bash scripts with global variable mutation.
+- **Async I/O** — The Telegram listener uses `asyncio` for non-blocking message handling and in-flight task cancellation. This is trivial in Python and extremely hard to do correctly in bash.
 
-The tradeoff is that the listener must be restarted explicitly after updates. This is acceptable for a single-maintainer personal agent.
+The tradeoff: Python requires a `.venv` setup step that bash didn't. This is acceptable for a project that already requires `opencode` as a dependency.
 
 ---
 
@@ -25,63 +25,45 @@ The alternative — checking if a PID file exists and then creating one — has 
 
 ---
 
-## `jq` over Python for JSON parsing
-
-The original listener used embedded Python heredocs for JSON parsing. Phase 2 replaced all JSON parsing with `jq`:
-
-- Simpler: one-liner expressions instead of multi-line Python
-- Faster: no interpreter startup cost per call
-- Consistent: `jq` is a single dependency with a predictable API
-- Testable: `jq` expressions are easy to unit-test in isolation
-
-The one remaining Python dependency is `screenshot.sh`, which uses `python3` for URL domain extraction. This is a known technical debt item.
-
----
-
 ## Adaptor abstraction before multiple backends exist
 
-The `adaptor.sh` interface contract was written before any second backend was built. The reason: forcing all shared logic into `dispatch.sh` early prevents it from bleeding into `telegram/listener.sh` where it would be hard to extract later.
+The `adaptor.py` interface contract was written before any second backend was built. The reason: forcing all shared logic into `dispatch.py` early prevents it from bleeding into `telegram/listener.py` where it would be hard to extract later.
 
-The rule: anything that should work regardless of which messaging platform is in use belongs in `dispatch.sh`. The Telegram adaptor only handles Telegram-specific concerns (API format, photo downloads, bot token auth).
+The rule: anything that should work regardless of which messaging platform is in use belongs in `dispatch.py`. The Telegram adaptor only handles Telegram-specific concerns (API format, photo downloads, bot token auth).
 
 ---
 
 ## Rate limiting in the dispatcher, not the adaptor
 
-Rate limiting applies regardless of backend. Putting it in `dispatch.sh` means a Slack or Discord adaptor gets rate limiting for free, without reimplementing it. The adaptor only needs to call `dispatch_message` — all safety checks are centralized.
+Rate limiting applies regardless of backend. Putting it in `dispatch.py` means a Slack or Discord adaptor gets rate limiting for free, without reimplementing it. The adaptor only needs to call `dispatch_message` — all safety checks are centralized.
+
+---
+
+## Line-by-line `.env` parsing, never `exec`
+
+`core/env.py` extracts credentials from `.env` using line-by-line parsing. It never `exec`s or `import`s the file.
+
+Executing a `.env` file runs its contents as Python code. A malformed or tampered `.env` could run arbitrary commands. Line-by-line extraction treats the file as data, not code — it can only extract values for known keys.
 
 ---
 
 ## Personal files are never committed
 
-`adjutant.yaml`, `.env`, `identity/*.md`, `knowledge_bases/`, and `journal/` are gitignored. Example templates are tracked. This is enforced in two places:
-
-1. `.gitignore` — prevents accidental staging
-2. The release tarball build — strips personal files via `.github/workflows/release.yml`
-
-The consequence: you can `git pull` updates without worrying about your configuration being overwritten, and you can push your adjutant fork to a public repo without leaking credentials or personal data.
-
----
-
-## grep-based `.env` parsing, never `source`
-
-`scripts/common/env.sh` extracts credentials from `.env` using `grep`/`cut`/`tr`. It never `source`s the file.
-
-Sourcing a `.env` file executes its contents as shell code. A malformed or tampered `.env` could run arbitrary commands. Grep-based extraction treats the file as data, not code — it can only extract values for known keys.
+`adjutant.yaml`, `.env`, `identity/*.md`, `knowledge_bases/`, and `journal/` are gitignored. Example templates are tracked. This is enforced by `.gitignore` — you can `git pull` updates without worrying about your configuration being overwritten, and you can push your adjutant fork to a public repo without leaking credentials or personal data.
 
 ---
 
 ## CI is intentionally absent
 
-The 518-test bats suite spawns subprocesses heavily and takes 60–90 seconds locally. GitHub Actions runners would consume disproportionate minutes for what is a single-maintainer personal tool.
+The pytest suite runs in ~75 seconds locally with 1081 tests. GitHub Actions runners would consume disproportionate minutes for what is a single-maintainer personal tool.
 
 The pre-release gate is a clean local run:
 
 ```bash
-bats tests/unit/ tests/integration/
+.venv/bin/pytest tests/unit/ -q
 ```
 
-All 518 tests must pass before tagging a release. This is enforced by discipline, not automation. The tradeoff — no per-commit CI — is acceptable given the project's scale and audience.
+All tests must pass before tagging a release. This is enforced by discipline, not automation. The tradeoff — no per-commit CI — is acceptable given the project's scale and audience.
 
 ---
 
@@ -93,55 +75,35 @@ All 518 tests must pass before tagging a release. This is enforced by discipline
 - `heart.md` changes occasionally — communication style, tone preferences
 - `registry.md` changes frequently — active projects, current priorities, schedule
 
-Loading all three every request is correct: the agent needs full context. But splitting them makes updates surgical — you edit only the file that changed, and git history is meaningful (a commit to `registry.md` is clearly "updated project state", not "changed core values").
+Loading all three every request is correct: the agent needs full context. But splitting them makes updates surgical — you edit only the file that changed, and git history is meaningful.
 
 ---
 
-## Timeout on all opencode_run calls
+## KB operations: Python CLI preferred over bash shims
 
-`opencode run` can hang indefinitely if the underlying server is in a degraded state (e.g. after a macOS sleep/wake cycle). Without a timeout, a single hung call silently kills the briefing or leaves a chat session showing "typing…" forever — with no log evidence of what happened.
+`kb_run()` supports two invocation modes:
 
-The fix is `OPENCODE_TIMEOUT` — an env var consumed by `opencode_run` in `opencode.sh` that wraps the call with `_adj_timeout`. Callers set it explicitly:
+1. **Python CLI** (preferred): If `kb.yaml` declares `cli_module: "src.cli"`, `kb_run` invokes `.venv/bin/python -m src.cli --real <operation>` directly — no bash involved.
+2. **Bash script** (legacy fallback): If `cli_module` is absent, `kb_run` resolves `scripts/<operation>.sh` and runs it via `bash`.
 
-- `analyze.sh`: 90s — enough for a Haiku analysis call, short enough to fail clearly
-- `chat.sh`: 120s — slightly longer to accommodate heavier Sonnet calls
-
-Exit code 124 (the standard `timeout` exit code) is checked at each call site and logged with a clear message.
-
-`timeout` is not available on macOS without GNU coreutils. `_adj_timeout` handles this: it prefers `timeout` or `gtimeout` if present, and falls back to a shell-native watchdog (background job + `sleep` + `kill`) otherwise. This means timeouts work correctly on a stock macOS install.
+This dual-path design means KBs with a Python CLI (like `portfolio-kb`) need zero bash shims. Older KBs that only have shell scripts continue to work unchanged.
 
 ---
 
-## Health check before critical opencode calls
+## Timeout on all claude_run calls
 
-Timing out a hung call is necessary but not sufficient — the next retry will hang again unless the root cause (degraded web server) is fixed first.
+`claude` can hang indefinitely if the underlying process is in a degraded state. Without a timeout, a single hung call silently kills a briefing or leaves a chat session showing "typing…" forever — with no log evidence.
 
-`opencode_health_check` probes the server with a `curl --max-time 5` GET to `http://localhost:4096/` before the main API call. If it fails:
-
-1. Kills the existing `opencode web` process (identified via `state/opencode_web.pid`)
-2. Restarts it
-3. Waits up to 15s for the probe to succeed
-
-This is called in `analyze.sh` before the Haiku analysis step. If the restart fails, the script exits cleanly with a log entry rather than hanging.
-
-`curl` is used rather than `opencode --version` because `--version` does not actually connect to the server — it exits 0 immediately regardless of server state. The HTTP probe is the only reliable way to confirm the server is accepting connections.
+The fix: `core/claude.py` wraps subprocess calls with a configurable timeout. Callers set it explicitly based on expected response time. Exit code 124 (standard `timeout` exit code) is checked and logged with a clear message.
 
 ---
 
-## Reaper catches language servers stranded under opencode web
+## KB sub-agents are sandboxed
 
-`opencode_run` diffs bash/yaml-language-server PIDs before and after each call to kill any it spawned. This works when the call exits normally.
+Every KB has a `claude.json` that sets `external_directory: deny`. This means a KB sub-agent cannot read or write files outside its own workspace. A compromised or misbehaving KB cannot:
 
-When a call is killed by timeout, the diff still runs — but the language servers may already have been reparented to the `opencode web` process (their grandparent) before cleanup. The old reaper only killed servers whose parent was PID 1 or gone, so these looked legitimate and were never reaped.
+- Read your identity files or other KBs
+- Write to `state/` or `journal/`
+- Send Telegram notifications
 
-The fix: `opencode_reap` now also kills any language server whose direct parent is the `opencode web` PID. A language server that has a *live* `opencode run` as its parent is fine — that run is still working. One directly under the web server means its run has already exited, so it's stranded.
-
-## Reaper kills language servers that exceed the RSS memory threshold
-
-A second failure mode: a language-server process that is a *live* child of the current healthy `opencode web` — not an orphan, not stranded — but whose V8 heap has entered a runaway growth loop. The previous reaper rules correctly left these alone (they looked legitimate), allowing them to grow to hundreds of MB or more over minutes.
-
-The fix: `opencode_reap` now checks the RSS (resident set size) of every language-server process. Any process exceeding `_OPENCODE_LANGSERVER_RSS_LIMIT_KB` (default 512 MB, overridable via `OPENCODE_LANGSERVER_RSS_LIMIT_KB`) is killed immediately, regardless of parentage.
-
-This is safe because bash-language-server and yaml-language-server are non-critical background helpers — they provide shell/YAML intelligence for the editor experience. Adjutant never calls them directly. `opencode web` will respawn a fresh language server on next need. Killing a runaway instance causes no interruption to Telegram I/O, heartbeat, or the news pipeline.
-
-The kill is logged: `adj_log "opencode" "Killed runaway language-server PID <pid> (RSS <n> KB > limit <m> KB)"` so incidents are visible in `state/adjutant.log`.
+Adjutant is the sole orchestrator. Only Adjutant's prompts call `notify.py`. Only Adjutant's prompts write to `insights/` and `state/actions.jsonl`.
