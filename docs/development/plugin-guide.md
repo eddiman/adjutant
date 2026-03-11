@@ -2,7 +2,7 @@
 
 A capability is a self-contained Python module that gives Adjutant a new skill — taking screenshots, querying an API, reading files, sending notifications to third-party services, etc.
 
-The agent can invoke capabilities via Claude Code tool calls. Capabilities can also be wired to slash commands in `commands.py`.
+The agent can invoke capabilities via OpenCode tool calls. Capabilities can also be wired to slash commands in `commands.py`.
 
 ---
 
@@ -153,7 +153,7 @@ For long-running commands, use `msg_typing_start()`/`msg_typing_stop()` and run 
 
 ## Wiring the Agent
 
-The agent (Claude Code) can call any capability via the bash tool or Python tool. Document the capability in `.Claude/agents/adjutant.md` so the agent knows it exists:
+The agent (OpenCode) can call any capability via the bash tool or Python tool. Document the capability in `.Claude/agents/adjutant.md` so the agent knows it exists:
 
 ```markdown
 ## Available Tools

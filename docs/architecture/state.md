@@ -15,7 +15,7 @@ All runtime state lives under `ADJ_DIR/state/`. These files are gitignored and u
 | `listener.lock/` | Directory-based mutex. Only the process that successfully creates this directory can poll. Contains a `pid` file with the listener's PID. |
 | `listener.lock/pid` | The authoritative PID of the running listener. |
 | `telegram.pid` | PID written by `service.py start`. Kept in sync with `listener.lock/pid`. |
-| `telegram_session.json` | Session ID for Claude Code chat continuity. Reused within a configured window; starts fresh after expiry. |
+| `telegram_session.json` | Session ID for OpenCode chat continuity. Reused within a configured window; starts fresh after expiry. |
 | `telegram_model.txt` | Currently selected LLM model for Telegram chat. Switched via `/model`. |
 | `rate_limit_window` | Sliding-window timestamp log for rate limiting. |
 | `pending_reflect` | Marker file indicating a `/reflect` confirmation is awaited. |

@@ -73,7 +73,7 @@ These are gitignored and contain personal or runtime data:
 3. Credentials: never read `.env` directly — use `get_credential(key)` from `core/env.py`
 4. Paths: use `get_adj_dir()` from `core/paths.py`; never hardcode `~/.adjutant`
 5. Logging: `adj_log("component", "message")` from `core/logging.py` — not `print()`
-6. Return types: capability functions return `ClaudeCodeResult` (from `core/claude.py`) or raise; never print to stdout inside library code
+6. Return types: capability functions return a result string or raise; never print to stdout inside library code
 7. Temp files: `tempfile.NamedTemporaryFile(delete=False)` + `finally: os.unlink(tmp)`
 8. All new modules need a corresponding `tests/unit/test_<module>.py`
 
@@ -95,7 +95,7 @@ These are gitignored and contain personal or runtime data:
 
 ## Adding a Capability
 
-1. Create `src/adjutant/capabilities/<name>/<name>.py` — return `ClaudeCodeResult` or raise
+1. Create `src/adjutant/capabilities/<name>/<name>.py` — return a result string or raise
 2. Add `cmd_<name>()` handler in `src/adjutant/messaging/telegram/commands.py`
 3. Register in the dispatch table in `src/adjutant/messaging/dispatch.py`
 4. Add the CLI command in `src/adjutant/cli.py`
@@ -135,7 +135,7 @@ For long-running commands, use `msg_typing_start()`/`msg_typing_stop()` and run 
 
 ## Knowledge Bases
 
-A KB is a sandboxed Claude Code workspace in its own directory. The main Adjutant agent never reads KB files directly — it queries them via a sub-agent process.
+A KB is a sandboxed OpenCode workspace in its own directory. The main Adjutant agent never reads KB files directly — it queries them via a sub-agent process.
 
 **Query a KB:**
 ```python
@@ -213,5 +213,5 @@ Full guide: `docs/development/testing.md`
 - **`_resolve_command()` is private** in `schedule/manage.py` — used directly in CLI for `schedule run`
 - **Playwright files** live in `src/adjutant/capabilities/screenshot/` — `screenshot.py` resolves them via `Path(__file__).parent`
 - **`dispatch_photo` arg order** — check the signature before calling; it differs from `dispatch_message`
-- **NDJSONResult vs ClaudeCodeResult** — `ndjson.py` returns `NDJSONResult`; `claude.py` wraps it into `ClaudeCodeResult`; don't mix them up at call sites
+- **NDJSONResult vs OpenCodeResult** — `ndjson.py` returns `NDJSONResult`; `opencode.py` wraps it into `OpenCodeResult`; don't mix them up at call sites
 - **`dispatch.py` auth + rate-limit block** — security-critical; don't refactor without running the full test suite first

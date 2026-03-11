@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Adjutant is a persistent autonomous agent framework that runs on your local machine. It listens for messages from a messaging backend, routes them through a backend-agnostic dispatcher, and responds via Claude Code-powered AI or built-in commands.
+Adjutant is a persistent autonomous agent framework that runs on your local machine. It listens for messages from a messaging backend, routes them through a backend-agnostic dispatcher, and responds via OpenCode-powered AI or built-in commands.
 
 ---
 
@@ -22,8 +22,8 @@ Adjutant is a persistent autonomous agent framework that runs on your local mach
 │         └──► natural language ──► chat.py            │
 │                                       │              │
 │                                       ▼              │
-│                               claude_run             │
-│                               (Claude Code agent)    │
+│                               opencode_run            │
+│                               (OpenCode agent)       │
 │         │                                            │
 │         ▼                                            │
 │   Adaptor send functions ──► Messaging Backend       │
@@ -44,7 +44,7 @@ Everything runs on your machine. There is no server, no cloud component, and no 
 | Lifecycle | `src/adjutant/lifecycle/` | Start, stop, pause, kill, restart, update |
 | Capabilities | `src/adjutant/capabilities/` | Screenshot, vision, knowledge base, schedule, search |
 | Identity | `identity/` | Three-layer agent persona loaded at chat time |
-| Claude Code | `.Claude/` | Agent definition, workspace config, permissions |
+| OpenCode | `.Claude/` | Agent definition, workspace config, permissions |
 
 ---
 
@@ -81,7 +81,7 @@ Shared library imported by every other module.
 | `env.py` | Extracts credential values from `.env` using line-by-line parsing — never `exec`s the file. Provides `get_credential(key)`, `has_credential(key)`. |
 | `lockfiles.py` | Manages the `KILLED` and `PAUSED` state files. Provides check functions and state mutators. |
 | `logging.py` | Appends structured log lines to `state/adjutant.log`. Provides `adj_log(component, message)`. |
-| `claude.py` | Wraps `claude` CLI invocation with timeout support, NDJSON output parsing, and a `ClaudeCodeResult` return type. |
+| `opencode.py` | Wraps `opencode` CLI invocation with timeout support, NDJSON output parsing, and an `OpenCodeResult` return type. |
 | `model.py` | Resolves model tier names (`cheap`/`medium`/`expensive`) to actual model slugs from `adjutant.yaml`. |
 | `config.py` | Loads and validates `adjutant.yaml`. |
 | `platform.py` | OS and architecture detection. |
@@ -91,14 +91,14 @@ Shared library imported by every other module.
 
 ## Capabilities Layer — `src/adjutant/capabilities/`
 
-Each capability is an isolated subdirectory. Capability functions accept arguments and return `ClaudeCodeResult` or raise.
+Each capability is an isolated subdirectory. Capability functions accept arguments and return a result string or raise.
 
 | Capability | Entry Module | Description |
 |-----------|-------------|-------------|
 | `kb/` | `kb/query.py`, `kb/run.py`, `kb/manage.py` | KB query, KB-local operations, KB CRUD |
 | `schedule/` | `schedule/install.py`, `schedule/manage.py` | Scheduled job management |
 | `screenshot/` | `screenshot/screenshot.py` | Playwright screenshot + vision caption + Telegram send |
-| `vision/` | `vision/vision.py` | LLM image analysis via Claude Code |
+| `vision/` | `vision/vision.py` | LLM image analysis via OpenCode |
 | `search/` | `search/search.py` | Brave Search API integration |
 
 ---
@@ -106,7 +106,7 @@ Each capability is an isolated subdirectory. Capability functions accept argumen
 ## Further Reading
 
 - [Messaging](messaging.md) — adaptor contract, dispatcher, Telegram internals
-- [Identity & Agent](identity.md) — three-layer identity model, Claude Code integration
+- [Identity & Agent](identity.md) — three-layer identity model, OpenCode integration
 - [State & Lifecycle](state.md) — lockfiles, state files, lifecycle state machine
 - [Autonomy](autonomy.md) — pulse/review cycle, notification budget, action ledger
 - [Design Decisions](design-decisions.md) — why things are the way they are
