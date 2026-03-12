@@ -13,6 +13,7 @@ from adjutant.capabilities.kb.run import (
     KBOperationNotFoundError,
     KBRunError,
     _load_registry,
+    _read_kb_cli_flags,
     _read_kb_cli_module,
     _resolve_kb_python,
     get_operation_script,
@@ -48,6 +49,7 @@ def _make_kb(
     name: str,
     operations: list[str] | None = None,
     cli_module: str = "",
+    cli_flags: str = "",
 ) -> Path:
     """Create a minimal KB directory with optional operation scripts or kb.yaml."""
     kb_path = tmp_path / f"kb_{name}"
@@ -57,8 +59,13 @@ def _make_kb(
         script = scripts_dir / f"{op}.sh"
         script.write_text(f"#!/bin/bash\necho 'ran {op}'\n")
         script.chmod(0o755)
-    if cli_module:
-        (kb_path / "kb.yaml").write_text(f'name: "{name}"\ncli_module: "{cli_module}"\n')
+    if cli_module or cli_flags:
+        yaml_content = f'name: "{name}"\n'
+        if cli_module:
+            yaml_content += f'cli_module: "{cli_module}"\n'
+        if cli_flags:
+            yaml_content += f'cli_flags: "{cli_flags}"\n'
+        (kb_path / "kb.yaml").write_text(yaml_content)
     return kb_path
 
 
@@ -163,6 +170,54 @@ class TestReadKbCliModule:
         kb_path.mkdir()
         (kb_path / "kb.yaml").write_text('name: "mydb"\n# cli_module: "src.cli"\n')
         assert _read_kb_cli_module(kb_path) == ""
+
+
+# ---------------------------------------------------------------------------
+# _read_kb_cli_flags
+# ---------------------------------------------------------------------------
+
+
+class TestReadKbCliFlags:
+    def test_defaults_to_real_when_no_kb_yaml(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        assert _read_kb_cli_flags(kb_path) == ["--real"]
+
+    def test_defaults_to_real_when_no_cli_flags_field(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\ncli_module: "src.cli"\n')
+        assert _read_kb_cli_flags(kb_path) == ["--real"]
+
+    def test_returns_mock_flag(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\ncli_flags: "--mock"\n')
+        assert _read_kb_cli_flags(kb_path) == ["--mock"]
+
+    def test_returns_real_flag_explicit(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\ncli_flags: "--real"\n')
+        assert _read_kb_cli_flags(kb_path) == ["--real"]
+
+    def test_returns_multiple_flags(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\ncli_flags: "--mock --verbose"\n')
+        assert _read_kb_cli_flags(kb_path) == ["--mock", "--verbose"]
+
+    def test_defaults_to_real_when_field_is_empty(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\ncli_flags: ""\n')
+        assert _read_kb_cli_flags(kb_path) == ["--real"]
+
+    def test_ignores_commented_out_cli_flags(self, tmp_path: Path) -> None:
+        kb_path = tmp_path / "kb"
+        kb_path.mkdir()
+        (kb_path / "kb.yaml").write_text('name: "mydb"\n# cli_flags: "--mock"\n')
+        assert _read_kb_cli_flags(kb_path) == ["--real"]
 
 
 # ---------------------------------------------------------------------------
@@ -323,7 +378,8 @@ class TestKbRunPython:
         assert "-m" in cmd
         assert "src.cli" in cmd
 
-    def test_passes_real_flag_and_kb_dir(self, tmp_path: Path) -> None:
+    def test_passes_real_flag_by_default(self, tmp_path: Path) -> None:
+        """--real is the default when kb.yaml has no cli_flags field."""
         kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
         _make_venv_python(kb_path)
         _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
@@ -338,6 +394,22 @@ class TestKbRunPython:
         assert "--real" in cmd
         assert "--kb-dir" in cmd
         assert str(kb_path) in cmd
+
+    def test_passes_mock_flag_when_cli_flags_set(self, tmp_path: Path) -> None:
+        """cli_flags: --mock in kb.yaml replaces the default --real."""
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli", cli_flags="--mock")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "fetch")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--mock" in cmd
+        assert "--real" not in cmd
 
     def test_passes_operation_and_extra_args(self, tmp_path: Path) -> None:
         kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")

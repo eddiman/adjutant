@@ -117,6 +117,30 @@ def _read_kb_cli_module(kb_path: Path) -> str:
     return ""
 
 
+def _read_kb_cli_flags(kb_path: Path) -> list[str]:
+    """Read the ``cli_flags`` field from a KB's ``kb.yaml``.
+
+    Returns a list of flag tokens to insert between ``--kb-dir <path>`` and
+    the operation name when invoking the KB's Python CLI.  Defaults to
+    ``["--real"]`` if the field is absent or empty, so existing KBs that do
+    not set ``cli_flags`` continue to run with real-API mode.
+
+    Example kb.yaml entries:
+        cli_flags: "--mock"        → ["--mock"]
+        cli_flags: "--real"        → ["--real"]
+        cli_flags: "--mock --verbose"  → ["--mock", "--verbose"]
+    """
+    kb_yaml = kb_path / "kb.yaml"
+    if kb_yaml.is_file():
+        for line in kb_yaml.read_text().splitlines():
+            m = re.match(r"^cli_flags:\s*\"?([^\"#\n]*)\"?\s*$", line)
+            if m:
+                value = m.group(1).strip()
+                if value:
+                    return value.split()
+    return ["--real"]
+
+
 def _resolve_kb_python(kb_path: Path) -> Path:
     """Return the path to the Python interpreter inside the KB's venv.
 
@@ -263,13 +287,14 @@ def kb_run(
     if cli_module:
         # Python CLI path — invoke the KB's own venv Python directly.
         python = _resolve_kb_python(kb_path)
+        cli_flags = _read_kb_cli_flags(kb_path)
         cmd = [
             str(python),
             "-m",
             cli_module,
             "--kb-dir",
             str(kb_path),
-            "--real",
+            *cli_flags,
             operation,
         ] + (args or [])
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(kb_path), env=env)
