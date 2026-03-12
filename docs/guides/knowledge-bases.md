@@ -230,7 +230,27 @@ cli_module: "src.cli"
 
 This causes `adjutant kb run <name> <op>` to run:
 ```
-python -m <cli_module> <op>
+<kb-path>/.venv/bin/python -m <cli_module> --kb-dir <kb-path> <cli_flags> <op>
+```
+
+**Optional: `cli_flags`**
+
+If the KB's `kb.yaml` declares a `cli_flags` field, those flags are inserted
+between `--kb-dir` and the operation name. This is useful for KBs that support
+different operating modes (e.g. mock vs real API access).
+
+```yaml
+# kb.yaml
+cli_module: "src.cli"
+cli_flags: "--mock"     # or "--real"
+```
+
+If `cli_flags` is absent or empty, `--real` is passed by default — so existing
+KBs that do not set this field continue to run as before.
+
+Multiple flags are supported (space-separated):
+```yaml
+cli_flags: "--mock --verbose"
 ```
 
 **2. Shell script fallback**
