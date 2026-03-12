@@ -7,21 +7,52 @@ Telegram notification with the result. Used by install.py when a job has
 notify: true set in adjutant.yaml.
 
 Notification format (success):
-  [job_name] <first line of output>
+  [job_name] <rich message from kb_notify, or first line of stdout>
 
 Notification format (failure):
   [job_name] ERROR (rc=N): <first line of output>
 
 Always exits 0 so cron does not generate its own mail on failure.
 The real exit code is preserved in the notification message.
+
+kb_notify protocol:
+  portfolio-kb pipelines emit structured JSON events to stderr:
+    {"type": "notification", "ts": "...", "message": "<human-readable text>"}
+  notify_wrap parses these and uses the last message field as the summary,
+  falling back to the first non-empty stdout line if no JSON event is found.
+  The last event is used (not first) because pipelines may emit fill events
+  before the final summary, and the summary is always the last kb_notify call.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _extract_kb_notify_message(output: str) -> str | None:
+    """Extract the last kb_notify message from combined stdout+stderr output.
+
+    kb_notify emits lines like:
+        {"type": "notification", "ts": "...", "message": "..."}
+
+    Returns the last message value found, or None if no JSON notification found.
+    """
+    last_message = None
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("{"):
+            continue
+        try:
+            event = json.loads(stripped)
+            if event.get("type") == "notification" and "message" in event:
+                last_message = event["message"]
+        except (json.JSONDecodeError, AttributeError):
+            continue
+    return last_message
 
 
 def notify_wrap(
@@ -41,9 +72,8 @@ def notify_wrap(
     """
     from adjutant.core.logging import adj_log
 
-    # Run the script, capturing combined stdout+stderr.
-    # Use shell=True so that script_path can be a full command string
-    # (e.g. ".venv/bin/python -m adjutant news"), not just a bare file path.
+    # Run the script, capturing stdout and stderr separately so we can
+    # parse JSON events from stderr while also reading stdout for fallback.
     try:
         result = subprocess.run(
             script_path,
@@ -53,17 +83,27 @@ def notify_wrap(
             cwd=str(adj_dir),
         )
         script_rc = result.returncode
-        output = result.stdout + result.stderr
+        stdout = result.stdout
+        stderr = result.stderr
+        combined = stdout + stderr
     except OSError as e:
         script_rc = 1
-        output = str(e)
-
-    # Extract first non-empty line for the summary
-    summary = next((line for line in output.splitlines() if line.strip()), "(no output)")
+        stdout = ""
+        stderr = ""
+        combined = str(e)
 
     if script_rc == 0:
+        # Prefer the rich human-readable kb_notify message from stderr JSON events.
+        # Fall back to the first non-empty stdout line (terse machine string).
+        kb_message = _extract_kb_notify_message(stderr)
+        if kb_message:
+            summary = kb_message
+        else:
+            summary = next((line for line in stdout.splitlines() if line.strip()), "(no output)")
         message = f"[{job_name}] {summary}"
     else:
+        # On failure always use first non-empty line of combined output for context
+        summary = next((line for line in combined.splitlines() if line.strip()), "(no output)")
         message = f"[{job_name}] ERROR (rc={script_rc}): {summary}"
 
     adj_log("schedule", message)
