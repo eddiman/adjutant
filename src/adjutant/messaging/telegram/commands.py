@@ -772,8 +772,8 @@ async def cmd_screenshot(
     except Exception as exc:
         adj_log("telegram", f"Screenshot error for {url}: {exc}")
         result = f"ERROR:{exc}"
-
-    msg_typing_stop(suffix)
+    finally:
+        msg_typing_stop(suffix)
 
     if result.startswith("ERROR:"):
         err_msg = result[len("ERROR:") :]
@@ -851,8 +851,8 @@ async def cmd_search(
     except Exception as exc:
         adj_log("telegram", f"Search error for '{query}': {exc}")
         result = f"ERROR:{exc}"
-
-    msg_typing_stop(suffix)
+    finally:
+        msg_typing_stop(suffix)
 
     if result.startswith("ERROR:"):
         err_msg = result[len("ERROR:") :]
@@ -942,8 +942,8 @@ async def cmd_kb(
         except Exception as exc:
             adj_log("telegram", f"KB query error for {kb_name}: {exc}")
             result = ""
-
-        msg_typing_stop(suffix)
+        finally:
+            msg_typing_stop(suffix)
 
         if not result:
             msg_send_text(

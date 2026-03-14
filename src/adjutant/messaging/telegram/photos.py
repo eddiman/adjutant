@@ -232,8 +232,8 @@ async def tg_handle_photo(
         except Exception as exc:
             adj_log("telegram", f"Vision analysis error for {local_path}: {exc}")
             vision_reply = ""
-
-        msg_typing_stop(suffix)
+        finally:
+            msg_typing_stop(suffix)
 
         if not vision_reply:
             msg_send_text(

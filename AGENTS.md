@@ -4,6 +4,14 @@ For AI coding agents working on Adjutant. Not read at runtime — zero token cos
 
 ---
 
+## Hard Rules
+
+These are absolute constraints. Violating any of them is a critical error.
+
+1. **NEVER read KB files directly.** Do not use Read, Glob, Grep, `cat`, `ls`, or any other tool to access files inside a knowledge base directory. KBs are sandboxed — always query them via the KB sub-agent using the CLI: `.venv/bin/python -m adjutant kb query <name> "<question>"`. This applies to all KB paths, whether local or on external volumes.
+
+---
+
 ## What This Is
 
 Adjutant is a Python-based persistent agent framework. An OpenCode-powered LLM agent receives messages via Telegram, queries sandboxed knowledge base sub-agents, and orchestrates lifecycle/heartbeat logic. The CLI entrypoint (`adjutant`) is a thin bash shim that delegates to `python -m adjutant`.

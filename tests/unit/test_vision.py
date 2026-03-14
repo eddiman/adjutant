@@ -90,9 +90,10 @@ def _make_ndjson_result(text="", error_type=""):
     return m
 
 
-def _make_opencode_result(stdout=""):
+def _make_opencode_result(stdout="", timed_out=False):
     m = MagicMock()
     m.stdout = stdout
+    m.timed_out = timed_out
     return m
 
 
@@ -174,13 +175,32 @@ class TestRunVision:
 
         assert result == ""
 
+    def test_returns_timeout_message_when_timed_out(self, tmp_path: Path) -> None:
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake png")
+
+        with (
+            patch(
+                "adjutant.core.opencode.opencode_run",
+                return_value=_make_opencode_result("", timed_out=True),
+            ),
+            patch("adjutant.core.logging.adj_log"),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model",
+                return_value=_FALLBACK_MODEL,
+            ),
+        ):
+            result = run_vision(str(img), "Describe", tmp_path)
+
+        assert "timed out" in result.lower()
+
     def test_uses_override_model(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
 
         captured_args = {}
 
-        async def mock_opencode_run(args):
+        async def mock_opencode_run(args, timeout=None):
             captured_args["args"] = args
             return _make_opencode_result("")
 

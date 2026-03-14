@@ -186,16 +186,23 @@ def msg_react(
 # ---------------------------------------------------------------------------
 
 
-def msg_typing_start(suffix: str, bot_token: str, chat_id: str) -> None:
+_TYPING_MAX_DURATION = 300  # seconds — hard ceiling to prevent infinite typing loops
+
+
+def msg_typing_start(
+    suffix: str, bot_token: str, chat_id: str, *, max_duration: float = _TYPING_MAX_DURATION
+) -> None:
     """Start a looping typing indicator for the given suffix.
 
-    Sends 'typing' chatAction every 4 seconds until msg_typing_stop() is called.
-    Stops any existing indicator for the same suffix first.
+    Sends 'typing' chatAction every 4 seconds until msg_typing_stop() is called
+    or max_duration seconds have elapsed (whichever comes first).
 
     Args:
         suffix: Unique key to identify this typing indicator (e.g. 'chat_42').
         bot_token: Telegram bot token.
         chat_id: Target chat ID.
+        max_duration: Safety ceiling in seconds. The loop auto-stops after this
+            even if msg_typing_stop() is never called. Defaults to 300s.
     """
     msg_typing_stop(suffix)  # stop any existing one for this suffix
 
@@ -204,13 +211,21 @@ def msg_typing_start(suffix: str, bot_token: str, chat_id: str) -> None:
     payload: dict[str, Any] = {"chat_id": chat_id, "action": "typing"}
 
     def _loop() -> None:
+        deadline = time.monotonic() + max_duration
         while not stop_event.is_set():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                adj_log(
+                    "telegram",
+                    f"Typing indicator '{suffix}' auto-stopped after {max_duration}s ceiling",
+                )
+                break
             try:
                 client = get_client()
                 client.post(url, json_data=payload)
             except Exception:
                 pass
-            stop_event.wait(4.0)
+            stop_event.wait(min(4.0, remaining))
 
     t = threading.Thread(target=_loop, daemon=True, name=f"typing-{suffix}")
     _TYPING_THREADS[suffix] = (t, stop_event)

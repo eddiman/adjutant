@@ -28,6 +28,7 @@ from pathlib import Path
 
 _FALLBACK_MODEL = "anthropic/claude-haiku-4-5"
 _DEFAULT_PROMPT = "Describe what you see in this image. Be concise and informative."
+_VISION_TIMEOUT = 240  # seconds — matches chat timeout
 
 
 def _get_vision_model_from_config(adj_dir: Path) -> str:
@@ -116,7 +117,11 @@ def run_vision(
         prompt,
     ]
 
-    result = asyncio.run(opencode_run(args))
+    result = asyncio.run(opencode_run(args, timeout=_VISION_TIMEOUT))
+
+    if result.timed_out:
+        adj_log("vision", f"Vision analysis timed out after {_VISION_TIMEOUT}s for {image_path}")
+        return f"Vision analysis timed out after {_VISION_TIMEOUT}s. Try again in a moment."
 
     parsed = parse_ndjson(result.stdout)
 

@@ -157,6 +157,17 @@ class TestMsgTyping:
             assert "dup_key" in _TYPING_THREADS
             msg_typing_stop("dup_key")
 
+    def test_max_duration_auto_stops(self) -> None:
+        mock_client = MagicMock()
+        with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
+            with patch("adjutant.messaging.telegram.send.adj_log"):
+                msg_typing_start("ceiling_key", BOT, CHAT, max_duration=0.3)
+                thread, _ = _TYPING_THREADS["ceiling_key"]
+                # wait uses min(4.0, remaining) so the thread wakes up promptly
+                thread.join(timeout=2.0)
+                assert not thread.is_alive(), "Typing thread should auto-stop after max_duration"
+                msg_typing_stop("ceiling_key")
+
 
 class TestMsgAuthorize:
     def test_authorized_when_ids_match(self) -> None:
