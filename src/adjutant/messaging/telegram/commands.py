@@ -532,6 +532,10 @@ Or use a command:
 /pause — I'll stop monitoring until you're ready for me to resume.
 /resume — I'll pick back up where I left off.
 /model — Show current model, or switch with /model <name>.
+/remember <text> — Save something to long-term memory (auto-classified).
+/forget <topic> — Archive memory entries matching a topic.
+/recall [query] — Search long-term memory (or show the index).
+/digest — Compress recent journal entries into a weekly memory summary.
 /kill — Emergency shutdown. Terminates all Adjutant processes and locks system. Use `adjutant start` to recover.
 /help — Shows this message.
 
@@ -1133,3 +1137,111 @@ async def cmd_schedule(
         bot_token=bot_token,
         chat_id=chat_id,
     )
+
+
+# ---------------------------------------------------------------------------
+# /remember <text>
+# ---------------------------------------------------------------------------
+
+
+async def cmd_remember(
+    text: str,
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Store a memory entry (auto-classified)."""
+    from adjutant.capabilities.memory.memory import memory_add
+
+    try:
+        result = memory_add(adj_dir, text)
+        _send(result, message_id, bot_token=bot_token, chat_id=chat_id)
+    except Exception as exc:
+        adj_log("telegram", f"cmd_remember error: {exc}")
+        _send(f"Failed to save memory: {exc}", message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+# ---------------------------------------------------------------------------
+# /forget <query>
+# ---------------------------------------------------------------------------
+
+
+async def cmd_forget(
+    query: str,
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Archive memory entries matching a query."""
+    from adjutant.capabilities.memory.memory import memory_forget
+
+    try:
+        result = memory_forget(adj_dir, query)
+        _send(result, message_id, bot_token=bot_token, chat_id=chat_id)
+    except Exception as exc:
+        adj_log("telegram", f"cmd_forget error: {exc}")
+        _send(f"Failed to forget: {exc}", message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+# ---------------------------------------------------------------------------
+# /recall [query]
+# ---------------------------------------------------------------------------
+
+
+async def cmd_recall(
+    query: str,
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Search memory for relevant entries."""
+    from adjutant.capabilities.memory.memory import memory_recall
+
+    try:
+        result = memory_recall(adj_dir, query.strip() or None)
+        _send(result, message_id, bot_token=bot_token, chat_id=chat_id)
+    except Exception as exc:
+        adj_log("telegram", f"cmd_recall error: {exc}")
+        _send(f"Failed to recall: {exc}", message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+# ---------------------------------------------------------------------------
+# /digest
+# ---------------------------------------------------------------------------
+
+
+async def cmd_digest(
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Compress recent journal entries into a weekly memory summary."""
+    from adjutant.messaging.telegram.send import (
+        msg_react,
+        msg_typing_start,
+        msg_typing_stop,
+    )
+
+    msg_react(message_id, "👀", bot_token=bot_token, chat_id=chat_id)
+    suffix = f"digest_{message_id}"
+    msg_typing_start(suffix, bot_token, chat_id)
+
+    try:
+        from adjutant.capabilities.memory.memory import memory_digest
+
+        result = await asyncio.to_thread(memory_digest, adj_dir)
+    except Exception as exc:
+        adj_log("telegram", f"cmd_digest error: {exc}")
+        result = f"Digest failed: {exc}"
+    finally:
+        msg_typing_stop(suffix)
+
+    _send(result, message_id, bot_token=bot_token, chat_id=chat_id)

@@ -150,14 +150,18 @@ async def dispatch_message(
     """
     from adjutant.messaging.telegram.commands import (
         _load_pending_model,
+        cmd_digest,
+        cmd_forget,
         cmd_help,
         cmd_kb,
         cmd_kill,
         cmd_model,
         cmd_pause,
         cmd_pulse,
+        cmd_recall,
         cmd_reflect_confirm,
         cmd_reflect_request,
+        cmd_remember,
         cmd_restart,
         cmd_resume,
         cmd_schedule,
@@ -253,6 +257,26 @@ async def dispatch_message(
         await cmd_schedule(
             text[len("/schedule ") :], message_id, adj_dir, bot_token=bot_token, chat_id=chat_id
         )
+    elif text == "/remember":
+        _send("Usage: /remember <thing to remember>")
+    elif text.startswith("/remember "):
+        await cmd_remember(
+            text[len("/remember ") :], message_id, adj_dir, bot_token=bot_token, chat_id=chat_id
+        )
+    elif text == "/forget":
+        _send("Usage: /forget <topic to forget>")
+    elif text.startswith("/forget "):
+        await cmd_forget(
+            text[len("/forget ") :], message_id, adj_dir, bot_token=bot_token, chat_id=chat_id
+        )
+    elif text == "/recall":
+        await cmd_recall("", message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+    elif text.startswith("/recall "):
+        await cmd_recall(
+            text[len("/recall ") :], message_id, adj_dir, bot_token=bot_token, chat_id=chat_id
+        )
+    elif text == "/digest":
+        await cmd_digest(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
     else:
         # Natural language model-switch intent detection
         m = _MODEL_SWITCH_RE.match(text.strip())

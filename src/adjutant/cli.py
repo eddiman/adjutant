@@ -34,6 +34,12 @@ Subcommands:
   schedule remove     — Remove a scheduled job
   schedule sync       — Reconcile crontab with config
   schedule run        — Run a scheduled job immediately
+  memory init         — Initialise the memory directory
+  memory remember     — Store a memory entry (auto-classified)
+  memory forget       — Archive memory entries matching a topic
+  memory recall       — Search long-term memory
+  memory digest       — Compress journal entries into weekly summary
+  memory status       — Show memory system stats
 """
 
 from __future__ import annotations
@@ -927,6 +933,110 @@ def kb_info_cmd(ctx: click.Context, name: str) -> None:
     except ValueError as exc:
         click.echo(f"ERROR: {exc}", err=True)
         raise SystemExit(1) from exc
+
+
+# ---------------------------------------------------------------------------
+# memory group
+# ---------------------------------------------------------------------------
+
+
+@main.group()
+def memory() -> None:
+    """Long-term memory management."""
+
+
+@memory.command(name="init")
+@click.pass_context
+def memory_init_cmd(ctx: click.Context) -> None:
+    """Initialise the memory directory structure."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.memory.memory import memory_init
+
+    result = memory_init(adj_dir)
+    click.echo(result)
+
+
+@memory.command(name="remember")
+@click.argument("text")
+@click.pass_context
+def memory_remember_cmd(ctx: click.Context, text: str) -> None:
+    """Store a memory entry (auto-classified)."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.memory.memory import memory_add
+
+    result = memory_add(adj_dir, text)
+    click.echo(result)
+
+
+@memory.command(name="forget")
+@click.argument("query")
+@click.pass_context
+def memory_forget_cmd(ctx: click.Context, query: str) -> None:
+    """Archive memory entries matching a topic."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.memory.memory import memory_forget
+
+    result = memory_forget(adj_dir, query)
+    click.echo(result)
+
+
+@memory.command(name="recall")
+@click.argument("query", required=False, default="")
+@click.pass_context
+def memory_recall_cmd(ctx: click.Context, query: str) -> None:
+    """Search long-term memory (or show the index)."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.memory.memory import memory_recall
+
+    result = memory_recall(adj_dir, query.strip() or None)
+    click.echo(result)
+
+
+@memory.command(name="digest")
+@click.option("--days", "-d", default=7, help="Number of days to digest (default: 7).")
+@click.pass_context
+def memory_digest_cmd(ctx: click.Context, days: int) -> None:
+    """Compress recent journal entries into a weekly memory summary."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.memory.memory import memory_digest
+
+    result = memory_digest(adj_dir, days=days)
+    click.echo(result)
+
+
+@memory.command(name="status")
+@click.pass_context
+def memory_status_cmd(ctx: click.Context) -> None:
+    """Show memory system stats."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.memory.memory import memory_status
+
+    result = memory_status(adj_dir)
+    click.echo(result)
 
 
 if __name__ == "__main__":

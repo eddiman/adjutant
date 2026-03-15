@@ -85,6 +85,13 @@ schedules:
     log: "state/review.log"
     enabled: false                     # set to true when heartbeat.enabled is true
 
+  - name: "memory_digest"
+    description: "Weekly memory compression from journal entries"
+    schedule: "0 21 * * 0"
+    script: ".venv/bin/python -m adjutant memory digest"
+    log: "state/memory_digest.log"
+    enabled: false                     # compresses journal into memory/summaries/weekly/
+
   # KB job example — use kb_name + kb_operation instead of a hardcoded script path.
   # Adjutant resolves the operation via cli_module in kb.yaml, or falls back to scripts/<op>.sh.
   # - name: "portfolio_fetch"

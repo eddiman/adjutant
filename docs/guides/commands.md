@@ -39,6 +39,15 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | `/schedule enable <name>` | Enables a job and installs its crontab entry |
 | `/schedule disable <name>` | Disables a job and removes its crontab entry (keeps the registry entry) |
 
+### Memory
+
+| Command | What it does |
+|---------|-------------|
+| `/remember <text>` | Saves something to long-term memory. Auto-classified into the right category (corrections, decisions, preferences, etc.) |
+| `/forget <topic>` | Archives memory entries matching a topic. Entries are moved to `.archive/`, not deleted. |
+| `/recall [query]` | Searches long-term memory for entries matching a query. With no query, shows the memory index. |
+| `/digest` | Compresses recent journal entries (past 7 days) into a weekly memory summary. |
+
 ### Configuration
 
 | Command | What it does |
@@ -124,6 +133,19 @@ adjutant schedule run <name>        # Run a job immediately in foreground (for t
 ```
 
 See [Schedules](schedules.md) for the full guide including generic KB-backed scheduled jobs.
+
+### Memory
+
+```bash
+adjutant memory init              # Initialise the memory directory structure
+adjutant memory remember "text"   # Store a memory entry (auto-classified)
+adjutant memory forget "topic"    # Archive memory entries matching a topic
+adjutant memory recall            # Show the memory index
+adjutant memory recall "query"    # Search long-term memory
+adjutant memory digest            # Compress journal entries into weekly summary
+adjutant memory digest --days 14  # Digest the last 14 days instead of 7
+adjutant memory status            # Show memory system stats
+```
 
 ### Maintenance
 
