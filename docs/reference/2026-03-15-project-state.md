@@ -104,15 +104,19 @@ src/adjutant/
 
 ---
 
-## What's Left to Build
+## Roadmap — Future Enhancements
+
+> All issues from the codebase audit (23 bugs, security, debt) and all 7 GitHub issues
+> (#2–#8) are **resolved and closed**. The items below are **new feature work** for future
+> sessions, not open bugs.
 
 ### Priority 1: LaunchAgent Plist Hardening (Medium)
 
 The wizard generates a macOS LaunchAgent plist. Needs verification:
 
-- [ ] `KeepAlive: true` is set (unconditional — listener must always restart)
-- [ ] `ThrottleInterval >= 30` (limit crash loop blast radius)
-- [ ] Listener does NOT send startup notification (only `control.py` sends "I'm online" — prevents notification spam on launchd restarts)
+- `KeepAlive: true` is set (unconditional — listener must always restart)
+- `ThrottleInterval >= 30` (limit crash loop blast radius)
+- Listener does NOT send startup notification (only `control.py` sends "I'm online" — prevents notification spam on launchd restarts)
 
 **Where**: `src/adjutant/setup/steps/service.py` (plist generation), `src/adjutant/messaging/telegram/listener.py` (startup message)
 
