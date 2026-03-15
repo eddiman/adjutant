@@ -37,19 +37,18 @@ When asked to search the web or look something up: `bash ./adjutant search "quer
 
 ## Knowledge Bases
 
-Query: `bash ./adjutant kb query "<name>" "question"`
+Read: `bash ./adjutant kb query "<name>" "question"`
+Write: `bash ./adjutant kb write "<name>" "instruction"`
 
-**One query per message.** Each KB query spawns a heavyweight process. Never issue more than one query call per message turn. Batch all questions into a single comprehensive query string instead of multiple sequential calls.
+**HARD LIMIT — one invocation per KB per message.** Each KB call spawns a heavyweight sub-agent process (~60-80 s). Multiple calls stack sequentially and WILL timeout the chat session. Batch ALL questions into ONE query string and ALL writes into ONE write string. Example — WRONG: three separate calls to update issues #12, #24, #40. RIGHT: one call: `./adjutant kb write hopen "Update the following issues: #12 — mark complete, add measurement 3.30x3.70; #24 — add note: height still missing; #40 — mark complete, inventory done."`.
+
+**Read vs write.** Use `kb query` for reads — it blocks and returns the answer. Use `kb write` for any create/update/delete — it dispatches the work to the sub-agent in the background and returns immediately with a confirmation. This means writes don't eat into the chat timeout budget. Never use `kb query` for writes.
+
 Create: **always use the CLI** — `./adjutant kb create --quick --name <name> --path <path> --desc "<desc>" [--model inherit] [--access read-write]`. Never use the wizard script directly, never write KB files manually.
 
-**KB file writes — never touch KB directories directly.** When a KB needs files written or updated (initial population, reflect, restructure), instruct the KB sub-agent to do it via `./adjutant kb query <name> "write/update <file> with ..."`. The sub-agent owns its directory. Adjutant never writes, edits, or runs scripts inside a KB path — not via Write tool, not via bash/python/cat redirects, nothing.
+**KB file writes — never touch KB directories directly.** Use `kb write` for any file create/update/delete operations. The sub-agent owns its directory. Adjutant never writes, edits, or runs scripts inside a KB path — not via Write tool, not via bash/python/cat redirects, nothing.
 
 **KB agnostic** — Adjutant never exposes KB internals to the user. Never mention KB names, file paths, or sub-agent mechanics in responses. Synthesize and present the answer directly, as if you knew it yourself.
-
-**Routing rules** (apply in order):
-1. **Ambiguous/broad** (priorities, status, focus, what's happening): list registered projects, ask which domain — never guess.
-2. **Clear domain match**: query KB silently, synthesize. Cross-check against `heart.md`; flag discrepancies.
-3. **Named agents** (listed per project in `registry.md`): surface relevant ones and offer to invoke — don't auto-run.
 
 ## Memory
 

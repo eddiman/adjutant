@@ -962,9 +962,57 @@ async def cmd_kb(
             adj_log("telegram", f"KB query answered from {kb_name}")
         return
 
+    if action == "write":
+        # /kb write <name> <instruction...>
+        if len(parts) < 3:
+            _send(
+                "Usage: /kb write <name> <instruction>",
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
+
+        kb_name = parts[1]
+        instruction = " ".join(parts[2:])
+
+        if not kb_exists(adj_dir, kb_name):
+            _send(
+                f"Knowledge base '{kb_name}' not found. Run /kb list to see available KBs.",
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
+
+        msg_react(message_id, "👀", bot_token=bot_token, chat_id=chat_id)
+
+        try:
+            from adjutant.capabilities.kb.query import kb_write as _kb_write
+
+            result = _kb_write(kb_name, instruction, adj_dir)
+        except Exception as exc:
+            adj_log("telegram", f"KB write dispatch error for {kb_name}: {exc}")
+            _send(
+                f"KB write dispatch failed: {exc}",
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
+
+        msg_send_text(
+            f"[{kb_name}] {result}",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        adj_log("telegram", f"KB write dispatched to {kb_name}")
+        return
+
     # Unknown action
     _send(
-        "Usage: /kb list — show knowledge bases\n/kb query <name> <question> — ask a KB",
+        "Usage: /kb list — show knowledge bases\n/kb query <name> <question> — ask a KB\n/kb write <name> <instruction> — write to a KB (background)",
         message_id,
         bot_token=bot_token,
         chat_id=chat_id,

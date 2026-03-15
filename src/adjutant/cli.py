@@ -369,6 +369,53 @@ def kb_query_cmd(
         raise SystemExit(1) from exc
 
 
+@kb.command(name="write")
+@click.argument("kb_name", required=False)
+@click.argument("instruction", required=False)
+@click.option("--path", "kb_path", default=None, help="Write by directory path instead of name.")
+@click.pass_context
+def kb_write_cmd(
+    ctx: click.Context,
+    kb_name: str | None,
+    instruction: str | None,
+    kb_path: str | None,
+) -> None:
+    """Dispatch a write operation to a KB sub-agent (fire-and-forget).
+
+    Spawns the sub-agent in the background and returns immediately.
+    The sub-agent logs completion/failure to adjutant.log.
+
+    Usage:\n
+      adjutant kb write my-kb "Update issue #12: mark complete"\n
+      adjutant kb write --path /path/to/kb "Add new entry"
+    """
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.kb.query import KBQueryError, kb_write, kb_write_by_path
+    from adjutant.core.opencode import OpenCodeNotFoundError
+    from pathlib import Path as _Path
+
+    try:
+        if kb_path:
+            if not instruction:
+                click.echo("ERROR: An instruction argument is required with --path.", err=True)
+                raise SystemExit(1)
+            msg = kb_write_by_path(_Path(kb_path), instruction, adj_dir)
+        else:
+            if not kb_name or not instruction:
+                click.echo("ERROR: KB_NAME and INSTRUCTION are required.", err=True)
+                raise SystemExit(1)
+            msg = kb_write(kb_name, instruction, adj_dir)
+
+        click.echo(msg)
+    except (KBQueryError, OpenCodeNotFoundError) as exc:
+        click.echo(f"ERROR: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+
 # ---------------------------------------------------------------------------
 # start / stop / restart
 # ---------------------------------------------------------------------------

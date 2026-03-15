@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,8 +13,11 @@ from adjutant.capabilities.kb.query import (
     KB_QUERY_TIMEOUT,
     KBQueryError,
     _read_kb_model_from_yaml,
+    _shell_quote,
     kb_query,
     kb_query_by_path,
+    kb_write,
+    kb_write_by_path,
     main,
 )
 
@@ -260,3 +264,176 @@ class TestMain:
         with patch.dict(os.environ, {"ADJ_DIR": str(adj_dir)}):
             rc = main(["--path"])
         assert rc == 1
+
+
+# ---------------------------------------------------------------------------
+# _shell_quote
+# ---------------------------------------------------------------------------
+
+
+class TestShellQuote:
+    def test_quotes_simple_string(self) -> None:
+        assert _shell_quote("hello") == "hello"
+
+    def test_quotes_string_with_spaces(self) -> None:
+        assert _shell_quote("hello world") == "'hello world'"
+
+    def test_quotes_string_with_single_quotes(self) -> None:
+        result = _shell_quote("it's")
+        # shlex.quote handles single quotes by breaking and escaping
+        assert "it" in result and "s" in result
+
+    def test_quotes_empty_string(self) -> None:
+        assert _shell_quote("") == "''"
+
+
+# ---------------------------------------------------------------------------
+# kb_write_by_path
+# ---------------------------------------------------------------------------
+
+
+class TestKbWriteByPath:
+    def test_raises_when_kb_dir_missing(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        missing = tmp_path / "nonexistent"
+
+        with pytest.raises(KBQueryError, match="does not exist"):
+            kb_write_by_path(missing, "update something", adj_dir)
+
+    def test_raises_when_instruction_empty(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_path = _make_kb(tmp_path, "mydb")
+
+        with pytest.raises(KBQueryError, match="empty"):
+            kb_write_by_path(kb_path, "   ", adj_dir)
+
+    def test_raises_when_opencode_not_found(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_path = _make_kb(tmp_path, "mydb")
+
+        from adjutant.core.opencode import OpenCodeNotFoundError
+
+        with patch("adjutant.capabilities.kb.query.shutil.which", return_value=None):
+            with pytest.raises(OpenCodeNotFoundError):
+                kb_write_by_path(kb_path, "update issue #1", adj_dir)
+
+    def test_returns_confirmation_message(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_path = _make_kb(tmp_path, "mydb")
+
+        mock_popen = MagicMock()
+        with (
+            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
+            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
+        ):
+            msg = kb_write_by_path(kb_path, "Update issue #12: mark complete", adj_dir)
+
+        assert "Write dispatched" in msg
+        assert "mydb" in msg
+        assert "Update issue #12" in msg
+
+    def test_spawns_detached_process(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_path = _make_kb(tmp_path, "mydb")
+
+        mock_popen = MagicMock()
+        with (
+            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
+            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
+        ):
+            kb_write_by_path(kb_path, "Update issue #12", adj_dir)
+
+        # Verify start_new_session=True for process detachment
+        call_kwargs = mock_popen.call_args[1]
+        assert call_kwargs["start_new_session"] is True
+        assert call_kwargs["stdout"] == subprocess.DEVNULL
+        assert call_kwargs["stderr"] == subprocess.DEVNULL
+        assert call_kwargs["stdin"] == subprocess.DEVNULL
+
+    def test_shell_script_contains_opencode_and_logging(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_path = _make_kb(tmp_path, "mydb")
+
+        mock_popen = MagicMock()
+        with (
+            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
+            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
+        ):
+            kb_write_by_path(kb_path, "Update issue #12", adj_dir)
+
+        # The shell script should contain the opencode binary, kb agent, and logging
+        shell_cmd = mock_popen.call_args[0][0]
+        assert shell_cmd[0] == "bash"
+        assert shell_cmd[1] == "-c"
+        shell_script = shell_cmd[2]
+        assert "/usr/bin/opencode" in shell_script
+        assert "--agent" in shell_script
+        assert "kb" in shell_script
+        assert "Write complete" in shell_script
+        assert "Write failed" in shell_script
+
+    def test_truncates_long_instruction_in_preview(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_path = _make_kb(tmp_path, "mydb")
+
+        long_instruction = "x" * 200
+
+        mock_popen = MagicMock()
+        with (
+            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
+            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
+        ):
+            msg = kb_write_by_path(kb_path, long_instruction, adj_dir)
+
+        assert msg.endswith("...")
+        # Preview should be 120 chars + "..."
+        assert "x" * 120 in msg
+
+
+# ---------------------------------------------------------------------------
+# kb_write (by name)
+# ---------------------------------------------------------------------------
+
+
+class TestKbWrite:
+    def _make_registry(self, adj_dir: Path, name: str, path: str) -> None:
+        kb_dir = adj_dir / "knowledge_bases"
+        kb_dir.mkdir(parents=True, exist_ok=True)
+        (kb_dir / "registry.yaml").write_text(
+            f'knowledge_bases:\n  - name: "{name}"\n    path: "{path}"\n'
+        )
+
+    def test_raises_kb_query_error_when_not_found(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_dir = adj_dir / "knowledge_bases"
+        kb_dir.mkdir(parents=True, exist_ok=True)
+        (kb_dir / "registry.yaml").write_text("knowledge_bases:\n")
+
+        with pytest.raises(KBQueryError):
+            kb_write("ghost-kb", "update something", adj_dir)
+
+    def test_delegates_to_write_by_path(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_path = _make_kb(tmp_path, "notes")
+        self._make_registry(adj_dir, "notes", str(kb_path))
+
+        mock_popen = MagicMock()
+        with (
+            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
+            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
+        ):
+            msg = kb_write("notes", "Add a new entry", adj_dir)
+
+        assert "Write dispatched" in msg
+        assert "notes" in msg
+
+    def test_raises_when_no_path_in_registry(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_dir = adj_dir / "knowledge_bases"
+        kb_dir.mkdir(parents=True, exist_ok=True)
+        (kb_dir / "registry.yaml").write_text(
+            'knowledge_bases:\n  - name: "broken"\n    description: "no path"\n'
+        )
+
+        with pytest.raises(KBQueryError, match="no path"):
+            kb_write("broken", "update something", adj_dir)
