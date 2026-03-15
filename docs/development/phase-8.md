@@ -1,10 +1,27 @@
 # Phase 8 — Scheduling Plugin System
 
+**Status**: Complete — originally designed for bash, re-implemented in Python during the rewrite.
+
 ## Goal
 
 Replace the hardcoded, per-job crontab installation pattern with a generic scheduling plugin system. Users can register any scheduled job (Adjutant-internal or external, e.g. a KB fetch script) by adding an entry to `adjutant.yaml schedules:` or running `adjutant schedule add`. No Adjutant repo edits required for new jobs.
 
 ---
+
+> **Note (2026-03-15):** This document was written for the bash-era architecture. The
+> scheduling system was re-implemented in Python as part of the full rewrite (PR #1,
+> `f3f7d88`). All bash script references below (`scripts/capabilities/schedule/manage.sh`,
+> etc.) now correspond to Python modules under `src/adjutant/capabilities/schedule/`. The
+> design decisions, schema, and CLI interface remain identical. See the mapping below.
+>
+> | Bash (this doc) | Python (actual) |
+> |-----------------|-----------------|
+> | `scripts/capabilities/schedule/manage.sh` | `src/adjutant/capabilities/schedule/manage.py` |
+> | `scripts/capabilities/schedule/install.sh` | `src/adjutant/capabilities/schedule/install.py` |
+> | `scripts/setup/steps/schedule_wizard.sh` | `src/adjutant/setup/steps/schedule_wizard.py` |
+> | `scripts/lifecycle/pulse_cron.sh` | `src/adjutant/capabilities/schedule/notify_wrap.py` |
+> | `scripts/lifecycle/review_cron.sh` | `src/adjutant/capabilities/schedule/notify_wrap.py` |
+> | `adjutant schedule` CLI | `src/adjutant/cli.py` (Click subcommands) |
 
 ## Background
 
@@ -94,9 +111,12 @@ The `# adjutant:<name>` suffix is the identity marker. All entries still contain
 
 ## New Files
 
-### `scripts/capabilities/schedule/manage.sh`
+> **Note:** The files below are described in their original bash form. The Python
+> equivalents live under `src/adjutant/capabilities/schedule/` and `src/adjutant/setup/steps/`.
 
-Sourced library — CRUD over `adjutant.yaml schedules:`. No `yq` dependency (pure `awk`/`grep`).
+### `scripts/capabilities/schedule/manage.sh` → `src/adjutant/capabilities/schedule/manage.py`
+
+Sourced library — CRUD over `adjutant.yaml schedules:`. No `yq` dependency (pure line-by-line YAML parsing).
 
 Public functions:
 
@@ -110,7 +130,7 @@ Public functions:
 | `schedule_remove name` | Remove entry, call `schedule_uninstall_one` |
 | `schedule_set_enabled name true\|false` | Toggle `enabled:`, call install/uninstall |
 
-### `scripts/capabilities/schedule/install.sh`
+### `scripts/capabilities/schedule/install.sh` → `src/adjutant/capabilities/schedule/install.py`
 
 Sourced library — owns all crontab interaction. Single source of truth for crontab format.
 
@@ -125,7 +145,7 @@ Public functions:
 
 Backwards compatibility: crontab lines containing `.adjutant` but without `# adjutant:<name>` (old format) are left untouched by `schedule_install_all`.
 
-### `scripts/setup/steps/schedule_wizard.sh`
+### `scripts/setup/steps/schedule_wizard.sh` → `src/adjutant/setup/steps/schedule_wizard.py`
 
 Interactive creation wizard, called by `adjutant schedule add`.
 
@@ -138,17 +158,17 @@ Prompts (in order):
 
 On completion: calls `schedule_add`, installs crontab entry immediately, prints summary, suggests `adjutant schedule run <name>` to test.
 
-### `scripts/lifecycle/pulse_cron.sh`
+### `scripts/lifecycle/pulse_cron.sh` / `review_cron.sh` → `src/adjutant/capabilities/schedule/notify_wrap.py`
 
-Thin wrapper script for the autonomous pulse job. Calls `opencode run --print prompts/pulse.md`. Normalises the job into the script-path executor model.
-
-### `scripts/lifecycle/review_cron.sh`
-
-Identical pattern for the autonomous review job. Calls `opencode run --print prompts/review.md`.
+In the Python rewrite, both pulse and review cron wrappers are handled by a single `notify_wrap.py` module that reads the schedule entry, resolves the command (script or KB operation), executes it, and forwards structured JSON notification events from stderr to Telegram.
 
 ---
 
 ## Modified Files
+
+> **Note:** The file references below are from the bash era. In the Python codebase,
+> the equivalent changes were made to the corresponding Python modules. See the
+> mapping table at the top of this document.
 
 ### `adjutant.yaml.example`
 - Add top-level `schedules:` block with three built-in entries (news_briefing, autonomous_pulse, autonomous_review) and a commented external example.
@@ -207,6 +227,8 @@ adjutant schedule help              Show usage
 
 ## Files Touched Summary
 
+### Bash era (as originally planned)
+
 | File | Type | Change |
 |---|---|---|
 | `scripts/capabilities/schedule/manage.sh` | New | CRUD helpers |
@@ -214,16 +236,21 @@ adjutant schedule help              Show usage
 | `scripts/setup/steps/schedule_wizard.sh` | New | Interactive creation wizard |
 | `scripts/lifecycle/pulse_cron.sh` | New | Thin opencode wrapper for pulse |
 | `scripts/lifecycle/review_cron.sh` | New | Thin opencode wrapper for review |
-| `adjutant.yaml.example` | Edit | Add `schedules:`, simplify `autonomy:`, remove `features.news.schedule:` |
-| `adjutant` | Edit | Add `schedule` subcommand |
-| `scripts/setup/steps/service.sh` | Edit | Replace news cron → `schedule_install_all` |
-| `scripts/setup/steps/features.sh` | Edit | Remove `schedule:` key write |
-| `scripts/setup/steps/autonomy.sh` | Edit | Simplify: remove schedule prompts, call `schedule_set_enabled` |
-| `scripts/observability/status.sh` | Edit | Registry-driven job display |
-| `scripts/lifecycle/emergency_kill.sh` | Edit | Registry-driven pkill |
-| `scripts/lifecycle/startup.sh` | Edit | Call `schedule_install_all` on recovery |
-| `scripts/messaging/dispatch.sh` | Edit | Add `/schedule` routing |
-| `scripts/messaging/telegram/commands.sh` | Edit | Add `cmd_schedule`, update `cmd_help` |
+
+### Python rewrite (actual implementation)
+
+| File | Type | Change |
+|---|---|---|
+| `src/adjutant/capabilities/schedule/manage.py` | New | CRUD helpers, pure-Python YAML parsing |
+| `src/adjutant/capabilities/schedule/install.py` | New | Crontab reconciler, `_resolve_command()` |
+| `src/adjutant/capabilities/schedule/notify_wrap.py` | New | Cron wrapper for pulse/review/KB operations |
+| `src/adjutant/setup/steps/schedule_wizard.py` | New | Interactive creation wizard |
+| `src/adjutant/cli.py` | Edit | Added `schedule` subcommand group |
+| `src/adjutant/messaging/dispatch.py` | Edit | Added `/schedule` routing |
+| `src/adjutant/messaging/telegram/commands.py` | Edit | Added `cmd_schedule`, updated `cmd_help` |
+| `src/adjutant/lifecycle/control.py` | Edit | Registry-driven process kill on emergency |
+| `adjutant.yaml.example` | Edit | Added `schedules:` block |
+| `tests/unit/test_schedule_*.py` | New | Unit tests for manage, install, wizard |
 
 ---
 

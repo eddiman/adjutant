@@ -1,7 +1,7 @@
 # Adjutant Framework — Generalization Plan
 
-**Status**: Phase 5 complete (Generalization & Public Distribution)  
-**Last Updated**: 2026-03-01  
+**Status**: Phase 7 complete (Codebase Audit & Hardening)  
+**Last Updated**: 2026-03-15  
 **Objective**: Transform Adjutant from a personal agent into a generalizable framework for building persistent autonomous agents with pluggable interfaces, multiple LLM backends, and flexible deployment.
 
 ---
@@ -1509,21 +1509,90 @@ makes updates manual.
 
 ---
 
-## Next Steps
+## Phase 6: Python Rewrite (Completed)
 
-Phases 1–4 and Phase 5 are complete. The remaining items are:
+**Status**: Complete (merged PR #1, commit `f3f7d88`, 2026-03-13)
 
-1. **Phase 6 — Documentation** — comprehensive `docs/` directory (adaptor guide, plugin guide, architecture deep-dive, troubleshooting)
-2. **Multi-instance support** — allows running multiple Adjutant instances with separate configs
-3. **Tier 3 system tests** — process isolation tests for lifecycle scripts (see `docs/testing.md`)
-4. **Additional messaging backends** — Slack, Discord, etc. via the adaptor interface
-5. **Setup wizard revamp — LaunchAgent plist hardening** — the wizard's Step 6 currently generates a basic plist with `KeepAlive: true`. The key things to ensure:
-   - `KeepAlive: true` (unconditional) is correct — the listener must always be restarted since it is a long-running service. `SuccessfulExit: false` must NOT be used; the listener can exit cleanly (exit 0) in certain states and must be restarted in those cases too.
-   - `ThrottleInterval` should be at least 30 seconds to limit blast radius during any crash loops
-   - The listener must never send a startup notification itself — only `startup.sh` sends "I'm online". This prevents notification spam when launchd restarts the listener after a crash.
+The entire bash infrastructure described in Parts 1–8 above was replaced by a full Python rewrite. All scripts under `scripts/` were superseded by Python modules under `src/adjutant/`.
 
-The framework is now publicly distributable with a curl installer, optional Telegram,
-setup wizard, self-update mechanism, and knowledge base sub-agent architecture.
+### What Changed
+
+The bash-era architecture (660-line listener, `scripts/common/` shared utilities, Python-in-heredoc patterns, scattered `.sh` files) was replaced by a structured Python package:
+
+| Bash (Plan) | Python (Actual) |
+|-------------|-----------------|
+| `scripts/common/env.sh` | `src/adjutant/core/env.py` — `get_credential()` |
+| `scripts/common/paths.sh` | `src/adjutant/core/paths.py` — `get_adj_dir()` |
+| `scripts/common/logging.sh` | `src/adjutant/core/logging.py` — `adj_log()` |
+| `scripts/common/lockfiles.sh` | `src/adjutant/core/lockfiles.py` — `check_killed()`, `is_killed()` |
+| `scripts/common/platform.sh` | `src/adjutant/core/platform.py` |
+| `scripts/common/opencode.sh` | `src/adjutant/core/opencode.py` — `opencode_run()`, `opencode_reap()` |
+| `scripts/messaging/telegram/listener.sh` | `src/adjutant/messaging/telegram/listener.py` |
+| `scripts/messaging/telegram/commands.sh` | `src/adjutant/messaging/telegram/commands.py` |
+| `scripts/messaging/telegram/chat.sh` | `src/adjutant/messaging/telegram/chat.py` |
+| `scripts/messaging/telegram/send.sh` | `src/adjutant/messaging/telegram/send.py` |
+| `scripts/messaging/telegram/photos.sh` | `src/adjutant/messaging/telegram/photos.py` |
+| `scripts/messaging/telegram/service.sh` | `src/adjutant/messaging/telegram/service.py` |
+| `scripts/messaging/dispatch.sh` | `src/adjutant/messaging/dispatch.py` |
+| `scripts/messaging/adaptor.sh` | `src/adjutant/messaging/adaptor.py` |
+| `scripts/capabilities/kb/manage.sh` | `src/adjutant/capabilities/kb/manage.py` |
+| `scripts/capabilities/kb/query.sh` | `src/adjutant/capabilities/kb/query.py` |
+| `scripts/capabilities/kb/run.sh` | `src/adjutant/capabilities/kb/run.py` |
+| `scripts/capabilities/schedule/manage.sh` | `src/adjutant/capabilities/schedule/manage.py` |
+| `scripts/capabilities/schedule/install.sh` | `src/adjutant/capabilities/schedule/install.py` |
+| `scripts/lifecycle/startup.sh` | `src/adjutant/lifecycle/control.py` |
+| `scripts/lifecycle/emergency_kill.sh` | `src/adjutant/lifecycle/control.py` |
+| `scripts/lifecycle/update.sh` | `src/adjutant/lifecycle/update.py` |
+| `scripts/news/` | `src/adjutant/news/` |
+| `scripts/setup/wizard.sh` | `src/adjutant/setup/wizard.py` |
+| `adjutant` (bash shim) | `src/adjutant/cli.py` (Click CLI, 933 lines) |
+| bats tests | pytest (`tests/unit/`, 1139 tests) |
+
+### What the Plan Diagnosed vs What Was Delivered
+
+Every problem identified in Part 1 has been resolved:
+
+| Problem (Part 1) | Resolution |
+|-------------------|------------|
+| 1.1 — 660-line god script | Split into 6 focused modules (`listener.py`, `commands.py`, `chat.py`, `send.py`, `photos.py`, `dispatch.py`) |
+| 1.2 — Hardcoded `~/.adjutant` | All paths use `get_adj_dir()` from `core/paths.py` |
+| 1.3 — 5× credential loading | Single `get_credential()` in `core/env.py` |
+| 1.4 — Python-in-bash | Eliminated — everything is Python |
+| 1.5 — Flat scripts directory | Organized under `src/adjutant/` by concern: `core/`, `messaging/`, `capabilities/`, `lifecycle/`, `setup/`, `news/`, `observability/` |
+| 1.6 — No configuration layer | `adjutant.yaml` + Pydantic models in `core/config.py` |
+| 1.7 — macOS-only | `core/platform.py` handles OS detection; Python stdlib handles cross-platform |
+| 1.8 — Dead code | Removed during rewrite; further cleanup in codebase audit (2026-03-15) |
+
+---
+
+## Phase 7: Codebase Audit & Hardening (Completed)
+
+**Status**: Complete (commits `c9c8bec`, `85eef60`, 2026-03-15)
+
+See `docs/reference/2026-03-15-codebase-audit.md` for full details. Summary:
+
+- 23 issues identified and fixed across bugs, security, technical debt, and documentation
+- Prompt injection guards added to all prompts
+- SHA256 checksum verification added to self-update mechanism
+- Code deduplication: `_sanitize`, registry parsers, colour helpers, `.env` parsing
+- Listener now processes all messages per poll batch (was dropping all but last)
+- Dead code removed (`reply.py`)
+- CLI test coverage added (35 tests via Click CliRunner)
+- Configurable timeouts (`chat_timeout_seconds`, `rate_limit.window_seconds`)
+- `WizardContext` dataclass replaces scattered `WIZARD_*` globals
+- Test count: 1055 → 1139
+
+---
+
+## Remaining Items
+
+| Item | Priority | Status | Notes |
+|------|----------|--------|-------|
+| Multi-instance support | Low | Not started | `adjutant.yaml` `instance.name` field exists but no multi-instance CLI support |
+| Additional messaging backends | Low | Not started | `adaptor.py` defines the interface; `TelegramSender` in `send.py` is the only implementation |
+| LaunchAgent plist hardening | Medium | Partially done | Wizard generates plist; `ThrottleInterval` and startup notification guard need verification |
+| Tier 3 system tests | Low | Not started | Only unit tests exist (1139 tests); no process isolation or integration tests |
+| Plugin/capability discovery | Low | Not started | Capabilities exist as Python modules but no `capability.yaml` discovery system |
 
 ---
 

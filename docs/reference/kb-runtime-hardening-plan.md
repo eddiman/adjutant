@@ -1,6 +1,6 @@
 # KB Runtime Hardening Plan
 
-Last updated: 2026-03-06
+Last updated: 2026-03-15
 
 ## Purpose
 
@@ -26,11 +26,13 @@ Adjutant must not contain direct portfolio-specific logic, portfolio-specific ru
 
 ## Current gaps
 
-- KB query flow is registry-driven, but scheduled KB operations are still defined as direct external script paths in `adjutant.yaml`
-- `portfolio` is not registered in `~/.adjutant/knowledge_bases/registry.yaml`, even though Adjutant schedules point at its scripts
-- Adjutant has no generic concept of running a named KB operation such as `fetch` or `reconcile`
-- KB guidance assumes `data/current.md` is primary, but does not clearly describe structured-state-first KBs
-- reflect guidance is too permissive for safety-sensitive operational KBs
+> **All gaps below have been resolved.** This section is preserved for historical context.
+
+- ~~KB query flow is registry-driven, but scheduled KB operations are still defined as direct external script paths in `adjutant.yaml`~~ → Schedules now support `kb_name` + `kb_operation` fields
+- ~~`portfolio` is not registered in `~/.adjutant/knowledge_bases/registry.yaml`~~ → Registered
+- ~~Adjutant has no generic concept of running a named KB operation~~ → `adjutant kb run <name> <operation>` implemented
+- ~~KB guidance assumes `data/current.md` is primary~~ → Docs updated for structured-state KBs
+- ~~reflect guidance is too permissive for safety-sensitive operational KBs~~ → Tightened in `review.md`
 
 ## Design principles
 
@@ -85,6 +87,21 @@ Examples of invalid Adjutant tests:
 - asserting financial reconciliation semantics
 
 ## Proposed architecture changes
+
+> **Note (2026-03-15):** This plan was written for the bash-era architecture. All phases
+> were implemented first in bash, then re-implemented in Python during the full rewrite
+> (PR #1, `f3f7d88`). Bash script references below (e.g. `scripts/capabilities/kb/run.sh`)
+> now correspond to Python modules:
+>
+> | Bash (this doc) | Python (actual) |
+> |-----------------|-----------------|
+> | `scripts/capabilities/kb/run.sh` | `src/adjutant/capabilities/kb/run.py` — `kb_run()` |
+> | `scripts/capabilities/kb/manage.sh` | `src/adjutant/capabilities/kb/manage.py` — `kb_info()`, `kb_list()`, etc. |
+> | `scripts/capabilities/kb/query.sh` | `src/adjutant/capabilities/kb/query.py` — `kb_query()` |
+>
+> Additionally, the codebase audit (2026-03-15, commits `c9c8bec`/`85eef60`) deduplicated
+> the registry parser: `run.py`'s `_get_kb()` now delegates to `manage.py`'s `kb_info()`
+> instead of maintaining a duplicate YAML parser.
 
 ## Phase 1 - Formalize generic KB runtime contract
 
@@ -299,20 +316,26 @@ Adjutant is done with this plan when:
 
 ## Implementation status
 
+**All phases complete.** Implemented first in bash, then re-implemented in Python.
+
 Completed in this repo:
 
-- generic `kb run` capability added
-- CLI support for `adjutant kb run <name> <operation>` added
+- generic `kb run` capability added (`src/adjutant/capabilities/kb/run.py`)
+- CLI support for `adjutant kb run <name> <operation>` added (`src/adjutant/cli.py`)
 - KB operation resolution moved into generic registry-backed helpers
-- schedule runtime extended to support `kb_name` + `kb_operation`
+- schedule runtime extended to support `kb_name` + `kb_operation` (`src/adjutant/capabilities/schedule/install.py`)
 - live schedule config migrated away from direct KB script paths
 - KB docs and templates updated for structured-state KBs
 - reflect guidance updated for safety-sensitive operational KBs
 - generic tests added for KB run and KB-backed schedule execution
 - KB scaffold extended with `state/` and `docs/reference/`
+- `kb_run()` now reads `cli_module` and `cli_flags` from `kb.yaml` for Python CLI KBs (2026-03-13, `96c9d08`)
+- KB model pass-through: `kb_run()` resolves model tier from registry and passes `--model` to subprocess (2026-03-13, see `docs/reference/2026-03-13-kb-model-passthrough.md`)
+- Registry parser deduplicated: `run.py`'s `_get_kb()` delegates to `manage.py`'s `kb_info()` (2026-03-15, `85eef60`)
 
 Current outcome:
 
-- Adjutant now supports registry-driven KB query and registry-driven KB operation execution
-- schedules can target KB operations without embedding KB-specific framework logic
-- tests remain KB-agnostic
+- Adjutant supports registry-driven KB query and registry-driven KB operation execution
+- Schedules target KB operations without embedding KB-specific framework logic
+- Tests remain KB-agnostic (1139 unit tests, all passing)
+- No Adjutant code path contains portfolio-specific assumptions
