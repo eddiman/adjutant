@@ -48,14 +48,10 @@ _CHAT_ID_RE = re.compile(r"^-?\d+$")
 
 
 def _read_env_cred(env_file: Path, key: str) -> str:
-    """Read a KEY=value from .env, stripping quotes. Returns '' if not found."""
-    if not env_file.is_file():
-        return ""
-    for line in env_file.read_text().splitlines():
-        if line.startswith(f"{key}="):
-            val = line[len(key) + 1 :].strip().strip("'\"")
-            return val
-    return ""
+    """Read a credential from .env — delegates to core/env.py."""
+    from adjutant.core.env import get_credential
+
+    return get_credential(key, env_file) or ""
 
 
 def _get_http_client():

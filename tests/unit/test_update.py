@@ -138,21 +138,39 @@ class TestDownloadAndApply:
         return tarball
 
     def test_applies_non_excluded_files(self, tmp_path: Path) -> None:
+        import httpx as _httpx
+
         adj_dir = tmp_path / "install"
         adj_dir.mkdir()
         tarball = self._make_tarball(tmp_path, "v1.1.0")
 
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_resp.iter_bytes = MagicMock(return_value=[tarball.read_bytes()])
-        mock_http = MagicMock()
-        mock_http.__enter__ = MagicMock(return_value=mock_http)
-        mock_http.__exit__ = MagicMock(return_value=False)
-        mock_http.stream.return_value = mock_resp
+        # Mock for the tarball download (stream context)
+        mock_stream_resp = MagicMock()
+        mock_stream_resp.raise_for_status = MagicMock()
+        mock_stream_resp.__enter__ = MagicMock(return_value=mock_stream_resp)
+        mock_stream_resp.__exit__ = MagicMock(return_value=False)
+        mock_stream_resp.iter_bytes = MagicMock(return_value=[tarball.read_bytes()])
 
-        with patch("adjutant.lifecycle.update.httpx.Client", return_value=mock_http):
+        # Two httpx.Client() calls: first for tarball, second for checksum.
+        # The checksum client should return a 404 to skip verification.
+        mock_tarball_http = MagicMock()
+        mock_tarball_http.__enter__ = MagicMock(return_value=mock_tarball_http)
+        mock_tarball_http.__exit__ = MagicMock(return_value=False)
+        mock_tarball_http.stream.return_value = mock_stream_resp
+
+        mock_checksum_http = MagicMock()
+        mock_checksum_http.__enter__ = MagicMock(return_value=mock_checksum_http)
+        mock_checksum_http.__exit__ = MagicMock(return_value=False)
+        mock_cs_resp = MagicMock()
+        mock_cs_resp.raise_for_status.side_effect = _httpx.HTTPStatusError(
+            "404", request=MagicMock(), response=MagicMock(status_code=404)
+        )
+        mock_checksum_http.get.return_value = mock_cs_resp
+
+        with patch(
+            "adjutant.lifecycle.update.httpx.Client",
+            side_effect=[mock_tarball_http, mock_checksum_http],
+        ):
             download_and_apply("v1.1.0", adj_dir, quiet=True)
 
         assert (adj_dir / "scripts" / "foo.sh").is_file()

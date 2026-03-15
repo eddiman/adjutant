@@ -18,8 +18,42 @@ import os
 import platform
 import shutil
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
+
+
+# ---------------------------------------------------------------------------
+# Wizard state — passed through setup steps instead of global variables
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class WizardContext:
+    """Shared state bag passed through wizard steps.
+
+    Replaces the module-level ``WIZARD_*`` globals that were previously
+    scattered across messaging.py, features.py, and autonomy.py.
+    Step functions can still write to their module-level globals for
+    backward compatibility, but the context is the canonical source.
+    """
+
+    # messaging
+    telegram_token: str = ""
+    telegram_chat_id: str = ""
+    telegram_enabled: bool = False
+
+    # features
+    features_news: bool = False
+    features_screenshot: bool = False
+    features_vision: bool = True
+    features_search: bool = False
+    features_usage: bool = True
+
+    # autonomy
+    heartbeat_enabled: bool = False
+    heartbeat_max_per_day: int = 3
+
 
 # ---------------------------------------------------------------------------
 # Colour helpers (match helpers.sh)
@@ -384,6 +418,8 @@ def _run_fresh_setup(adj_dir: Path | None, *, dry_run: bool = False) -> None:
 
     ensure_config(adj_dir, dry_run=dry_run)
 
+    ctx = WizardContext()
+
     for step_name, module_path, fn_name in [
         ("identity", "adjutant.setup.steps.identity", "step_identity"),
         ("messaging", "adjutant.setup.steps.messaging", "step_messaging"),
@@ -396,11 +432,27 @@ def _run_fresh_setup(adj_dir: Path | None, *, dry_run: bool = False) -> None:
 
             mod = importlib.import_module(module_path)
             fn = getattr(mod, fn_name)
-            fn(adj_dir)
+            fn(adj_dir, dry_run=dry_run)
         except (ImportError, AttributeError, NotImplementedError):
             wiz_warn(f"Step '{step_name}' not yet implemented — skipping")
 
-    _show_completion(adj_dir)
+    # Sync context from the step module globals (until steps are fully migrated)
+    try:
+        from adjutant.setup.steps import messaging as _msg_mod
+
+        ctx.telegram_token = getattr(_msg_mod, "WIZARD_TELEGRAM_TOKEN", "")
+        ctx.telegram_chat_id = getattr(_msg_mod, "WIZARD_TELEGRAM_CHAT_ID", "")
+        ctx.telegram_enabled = getattr(_msg_mod, "WIZARD_TELEGRAM_ENABLED", False)
+    except ImportError:
+        pass
+    try:
+        from adjutant.setup.steps import features as _feat_mod
+
+        ctx.features_news = getattr(_feat_mod, "WIZARD_FEATURES_NEWS", False)
+    except ImportError:
+        pass
+
+    _show_completion(adj_dir, news_enabled=ctx.features_news)
 
 
 def main(argv: list[str] | None = None) -> int:

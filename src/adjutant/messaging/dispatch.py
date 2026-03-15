@@ -28,7 +28,7 @@ from adjutant.core.logging import adj_log
 # In-flight chat tasks: message_id -> asyncio.Task
 _INFLIGHT: dict[str, asyncio.Task[None]] = {}
 
-_RATE_LIMIT_WINDOW = 60  # seconds
+_DEFAULT_RATE_LIMIT_WINDOW = 60  # seconds
 _PENDING_REFLECT_FILE_NAME = "pending_reflect"
 
 # Regex for natural-language model-switch intent.
@@ -46,11 +46,26 @@ _MODEL_SWITCH_RE = re.compile(
 )
 
 
-def _rate_limit_max() -> int:
+def _rate_limit_config(adj_dir: Path) -> tuple[int, int]:
+    """Return (max_messages, window_seconds) from config with env var override."""
+    window = _DEFAULT_RATE_LIMIT_WINDOW
+    max_msgs = 10
     try:
-        return int(os.environ.get("ADJUTANT_RATE_LIMIT_MAX", "10"))
+        from adjutant.core.config import load_typed_config
+
+        config = load_typed_config(adj_dir / "adjutant.yaml")
+        max_msgs = config.messaging.telegram.rate_limit.messages_per_minute
+        window = config.messaging.telegram.rate_limit.window_seconds
+    except Exception:
+        pass
+    # Env var override for max (backwards compat)
+    try:
+        env_max = os.environ.get("ADJUTANT_RATE_LIMIT_MAX", "")
+        if env_max:
+            max_msgs = int(env_max)
     except ValueError:
-        return 10
+        pass
+    return max_msgs, window
 
 
 def _check_rate_limit(adj_dir: Path) -> bool:
@@ -63,9 +78,9 @@ def _check_rate_limit(adj_dir: Path) -> bool:
     state_dir.mkdir(parents=True, exist_ok=True)
     rate_file = state_dir / "rate_limit_window"
 
+    max_msgs, window = _rate_limit_config(adj_dir)
     now = int(time.time())
-    cutoff = now - _RATE_LIMIT_WINDOW
-    max_msgs = _rate_limit_max()
+    cutoff = now - window
 
     # Read existing timestamps
     timestamps: list[int] = []
@@ -93,7 +108,7 @@ def _check_rate_limit(adj_dir: Path) -> bool:
     if count > max_msgs:
         adj_log(
             "messaging",
-            f"Rate limit exceeded: {count} messages in last {_RATE_LIMIT_WINDOW}s "
+            f"Rate limit exceeded: {count} messages in last {window}s "
             f"(max {max_msgs}). Dropping message.",
         )
         return False

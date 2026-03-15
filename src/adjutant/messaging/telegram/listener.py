@@ -7,7 +7,7 @@ Responsibilities (and nothing else):
   2. Acquire single-instance lock (PidLock)
   3. Write own PID into the lock directory
   4. Poll Telegram getUpdates (long-poll, timeout=10s)
-  5. Process ONLY the LAST update in each batch
+  5. Process ALL updates in each batch (sequentially)
   6. Advance offset past ALL updates
   7. Route to dispatch_message / dispatch_photo
   8. Run opencode_reap every 6 cycles (~1 minute)
@@ -157,60 +157,67 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
 
             # Always advance offset past ALL returned updates
             last_update = updates[-1]
-            update_id: int | None = last_update.get("update_id")
-            if update_id is not None:
-                new_offset = update_id + 1
+            last_update_id: int | None = last_update.get("update_id")
+            if last_update_id is not None:
+                new_offset = last_update_id + 1
                 if new_offset != offset:
                     offset = new_offset
                     _save_offset(adj_dir, offset)
 
-                # Deduplicate: skip if we already processed this update_id
-                if update_id <= last_processed_id:
-                    adj_log(
-                        "telegram", f"Skipping duplicate update_id={update_id} (already processed)"
-                    )
-                    await asyncio.sleep(1)
-                    continue
-                last_processed_id = update_id
-
-            # Process ONLY the last update (matches original bash behavior)
-            message = last_update.get("message") or {}
-            msg_chat_id = (message.get("chat") or {}).get("id")
-            message_id = message.get("message_id")
-
-            if not msg_chat_id or not message_id:
-                await asyncio.sleep(1)
-                continue
-
             from adjutant.messaging.dispatch import dispatch_message, dispatch_photo
 
-            # Photo or text?
-            photo = message.get("photo")
-            if photo:
-                # Highest resolution = last element
-                file_id = photo[-1].get("file_id") if photo else None
-                caption = message.get("caption") or ""
-                if file_id:
-                    await dispatch_photo(
-                        str(msg_chat_id),
-                        message_id,
-                        file_id,
-                        adj_dir,
-                        bot_token=bot_token,
-                        chat_id=chat_id,
-                        caption=caption,
-                    )
-            else:
-                text = message.get("text") or ""
-                if text:
-                    await dispatch_message(
-                        text,
-                        message_id,
-                        str(msg_chat_id),
-                        adj_dir,
-                        bot_token=bot_token,
-                        chat_id=chat_id,
-                    )
+            # Process ALL updates in the batch sequentially
+            skipped = 0
+            for update in updates:
+                update_id: int | None = update.get("update_id")
+
+                # Deduplicate: skip if we already processed this update_id
+                if update_id is not None and update_id <= last_processed_id:
+                    skipped += 1
+                    continue
+                if update_id is not None:
+                    last_processed_id = update_id
+
+                message = update.get("message") or {}
+                msg_chat_id = (message.get("chat") or {}).get("id")
+                message_id = message.get("message_id")
+
+                if not msg_chat_id or not message_id:
+                    continue
+
+                # Photo or text?
+                photo = message.get("photo")
+                if photo:
+                    # Highest resolution = last element
+                    file_id = photo[-1].get("file_id") if photo else None
+                    caption = message.get("caption") or ""
+                    if file_id:
+                        await dispatch_photo(
+                            str(msg_chat_id),
+                            message_id,
+                            file_id,
+                            adj_dir,
+                            bot_token=bot_token,
+                            chat_id=chat_id,
+                            caption=caption,
+                        )
+                else:
+                    text = message.get("text") or ""
+                    if text:
+                        await dispatch_message(
+                            text,
+                            message_id,
+                            str(msg_chat_id),
+                            adj_dir,
+                            bot_token=bot_token,
+                            chat_id=chat_id,
+                        )
+
+            if skipped:
+                adj_log(
+                    "telegram",
+                    f"Skipped {skipped} duplicate update(s) (already processed)",
+                )
 
     finally:
         lock.release()

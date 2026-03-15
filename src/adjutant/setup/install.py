@@ -29,38 +29,26 @@ from urllib.error import URLError
 import json
 
 # ---------------------------------------------------------------------------
-# Colour helpers (match install.sh)
+# Colour helpers — delegates to wizard.py for NO_COLOR compliance
 # ---------------------------------------------------------------------------
 
-_IS_TTY = sys.stderr.isatty() and not os.environ.get("NO_COLOR")
-
-
-def _c(code: str) -> str:
-    return f"\033[{code}m" if _IS_TTY else ""
-
-
-_BOLD = _c("1")
-_GREEN = _c("32")
-_YELLOW = _c("33")
-_RED = _c("31")
-_CYAN = _c("36")
-_RESET = _c("0")
+from adjutant.setup.wizard import BOLD, CYAN, GREEN, RED, RESET, YELLOW  # noqa: E402
 
 
 def info(msg: str) -> None:
-    print(f"  {_CYAN}→{_RESET} {msg}", file=sys.stderr)
+    print(f"  {CYAN}→{RESET} {msg}", file=sys.stderr)
 
 
 def ok(msg: str) -> None:
-    print(f"  {_GREEN}✓{_RESET} {msg}", file=sys.stderr)
+    print(f"  {GREEN}✓{RESET} {msg}", file=sys.stderr)
 
 
 def warn(msg: str) -> None:
-    print(f"  {_YELLOW}!{_RESET} {msg}", file=sys.stderr)
+    print(f"  {YELLOW}!{RESET} {msg}", file=sys.stderr)
 
 
 def die(msg: str) -> None:
-    print(f"\n  {_RED}✗ Error:{_RESET} {msg}\n", file=sys.stderr)
+    print(f"\n  {RED}✗ Error:{RESET} {msg}\n", file=sys.stderr)
     sys.exit(1)
 
 
@@ -71,7 +59,7 @@ def die(msg: str) -> None:
 
 def print_banner() -> None:
     print("", file=sys.stderr)
-    print(f"  {_BOLD}Adjutant{_RESET} — persistent autonomous agent", file=sys.stderr)
+    print(f"  {BOLD}Adjutant{RESET} — persistent autonomous agent", file=sys.stderr)
     print("  ─────────────────────────────────────────", file=sys.stderr)
     print("", file=sys.stderr)
 
@@ -137,7 +125,7 @@ def prompt_install_dir() -> Path:
     if env_dir:
         install_dir = Path(env_dir).expanduser()
     else:
-        sys.stderr.write(f"  {_BOLD}Install directory{_RESET} [{default_dir}]: ")
+        sys.stderr.write(f"  {BOLD}Install directory{RESET} [{default_dir}]: ")
         sys.stderr.flush()
         try:
             answer = input().strip()
@@ -153,7 +141,7 @@ def prompt_install_dir() -> Path:
         print("", file=sys.stderr)
         warn(f"Adjutant is already installed at '{install_dir}'.")
         print(
-            f"  Run {_BOLD}adjutant setup --repair{_RESET} to check the existing installation.\n",
+            f"  Run {BOLD}adjutant setup --repair{RESET} to check the existing installation.\n",
             file=sys.stderr,
         )
         sys.exit(0)
@@ -243,7 +231,7 @@ def run_wizard(install_dir: Path) -> None:
         die(f"Wizard not found at '{wizard_py}'. The extraction may have failed.")
 
     print("", file=sys.stderr)
-    print(f"  {_BOLD}Starting setup wizard...{_RESET}", file=sys.stderr)
+    print(f"  {BOLD}Starting setup wizard...{RESET}", file=sys.stderr)
     print("", file=sys.stderr)
 
     # Set environment so the wizard knows its home dir
@@ -285,7 +273,7 @@ def main() -> None:
 
     if os.environ.get("ADJUTANT_NO_WIZARD") == "true":
         ok(f"Adjutant {version} installed to {install_dir}")
-        info(f"Run {_BOLD}adjutant setup{_RESET} to complete setup.")
+        info(f"Run {BOLD}adjutant setup{RESET} to complete setup.")
     else:
         run_wizard(install_dir)
 

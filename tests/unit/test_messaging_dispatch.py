@@ -11,11 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from adjutant.messaging.dispatch import (
+    _DEFAULT_RATE_LIMIT_WINDOW,
     _INFLIGHT,
-    _RATE_LIMIT_WINDOW,
     _cancel_inflight,
     _check_rate_limit,
-    _rate_limit_max,
     dispatch_message,
     dispatch_photo,
 )
@@ -23,25 +22,6 @@ from adjutant.messaging.dispatch import (
 
 BOT = "123:testtoken"
 CHAT = "999"
-
-
-# ---------------------------------------------------------------------------
-# _rate_limit_max
-# ---------------------------------------------------------------------------
-
-
-class TestRateLimitMax:
-    def test_default_is_10(self, monkeypatch) -> None:
-        monkeypatch.delenv("ADJUTANT_RATE_LIMIT_MAX", raising=False)
-        assert _rate_limit_max() == 10
-
-    def test_reads_from_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("ADJUTANT_RATE_LIMIT_MAX", "5")
-        assert _rate_limit_max() == 5
-
-    def test_falls_back_on_invalid_env(self, monkeypatch) -> None:
-        monkeypatch.setenv("ADJUTANT_RATE_LIMIT_MAX", "bad")
-        assert _rate_limit_max() == 10
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +55,7 @@ class TestCheckRateLimit:
         # Write old timestamps (outside the 60s window)
         state = tmp_path / "state"
         state.mkdir()
-        old_time = int(time.time()) - _RATE_LIMIT_WINDOW - 10
+        old_time = int(time.time()) - _DEFAULT_RATE_LIMIT_WINDOW - 10
         (state / "rate_limit_window").write_text(f"{old_time}\n{old_time}\n{old_time}\n")
         # Should be allowed because old timestamps were pruned
         assert _check_rate_limit(tmp_path) is True

@@ -12,7 +12,7 @@ from adjutant.capabilities.kb.run import (
     KBNotFoundError,
     KBOperationNotFoundError,
     KBRunError,
-    _load_registry,
+    _get_kb,
     _read_kb_cli_flags,
     _read_kb_cli_module,
     _resolve_kb_python,
@@ -80,54 +80,22 @@ def _make_venv_python(kb_path: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# _load_registry
+# _get_kb (delegates to manage.py's registry parser)
 # ---------------------------------------------------------------------------
 
 
-class TestLoadRegistry:
-    def test_returns_empty_list_when_no_registry(self, tmp_path: Path) -> None:
-        assert _load_registry(tmp_path) == []
-
-    def test_parses_single_entry(self, tmp_path: Path) -> None:
+class TestGetKb:
+    def test_returns_dict_for_existing_kb(self, tmp_path: Path) -> None:
         kb_path = _make_kb(tmp_path, "notes")
         _make_registry(tmp_path, [{"name": "notes", "path": str(kb_path)}])
-        entries = _load_registry(tmp_path)
-        assert len(entries) == 1
-        assert entries[0]["name"] == "notes"
-        assert entries[0]["path"] == str(kb_path)
+        entry = _get_kb(tmp_path, "notes")
+        assert entry["name"] == "notes"
+        assert entry["path"] == str(kb_path)
 
-    def test_parses_multiple_entries(self, tmp_path: Path) -> None:
-        kb1 = _make_kb(tmp_path, "kb1")
-        kb2 = _make_kb(tmp_path, "kb2")
-        _make_registry(
-            tmp_path,
-            [
-                {"name": "kb1", "path": str(kb1)},
-                {"name": "kb2", "path": str(kb2)},
-            ],
-        )
-        entries = _load_registry(tmp_path)
-        assert len(entries) == 2
-        assert {e["name"] for e in entries} == {"kb1", "kb2"}
-
-    def test_parses_optional_fields(self, tmp_path: Path) -> None:
-        kb_path = _make_kb(tmp_path, "notes")
-        _make_registry(
-            tmp_path,
-            [
-                {
-                    "name": "notes",
-                    "path": str(kb_path),
-                    "description": "My notes",
-                    "model": "inherit",
-                    "access": "read-only",
-                }
-            ],
-        )
-        entry = _load_registry(tmp_path)[0]
-        assert entry["description"] == "My notes"
-        assert entry["model"] == "inherit"
-        assert entry["access"] == "read-only"
+    def test_raises_on_missing_kb(self, tmp_path: Path) -> None:
+        _make_registry(tmp_path, [])
+        with pytest.raises(KBNotFoundError):
+            _get_kb(tmp_path, "nonexistent")
 
 
 # ---------------------------------------------------------------------------

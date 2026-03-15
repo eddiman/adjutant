@@ -2,17 +2,14 @@
 
 Replaces: scripts/messaging/telegram/notify.sh
 
-Differences vs reply.py:
-- Tracks a per-day counter in state/notify_count_YYYY-MM-DD.txt
-- Refuses to send if count >= max_per_day (from adjutant.yaml, default 3)
-- Max message length is 4096 (Telegram hard limit; bash uses 4096 here,
-  reply.sh uses 4000 — INCONSISTENCY noted in docs/reference/inconsistencies.md)
-- No parse_mode=Markdown (bash notify.sh does NOT set parse_mode)
+Tracks a per-day counter in state/notify_count_YYYY-MM-DD.txt
+Refuses to send if count >= max_per_day (from adjutant.yaml, default 3)
+Max message length is 4096 (Telegram hard limit).
+No parse_mode=Markdown.
 """
 
 from __future__ import annotations
 
-import re
 import sys
 from datetime import date
 from pathlib import Path
@@ -20,8 +17,9 @@ from pathlib import Path
 from adjutant.core.config import load_typed_config
 from adjutant.core.env import require_telegram_credentials
 from adjutant.lib.http import get_client
+from adjutant.messaging.telegram.send import sanitize_message
 
-_TELEGRAM_MAX_LEN = 4096  # notify.sh uses 4096; reply.sh uses 4000
+_TELEGRAM_NOTIFY_MAX_LEN = 4096
 
 
 class BudgetExceededError(Exception):
@@ -31,15 +29,6 @@ class BudgetExceededError(Exception):
         self.count = count
         self.max_count = max_count
         super().__init__(f"budget_exceeded ({count}/{max_count} sent today)")
-
-
-def _sanitize(message: str) -> str:
-    """Strip control characters and clamp to 4096 chars.
-
-    Matches bash: ``tr -d '\\000-\\010\\013-\\037\\177' | cut -c1-4096``
-    """
-    message = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", message)
-    return message[:_TELEGRAM_MAX_LEN]
 
 
 def _count_file(state_dir: Path, today: date | None = None) -> Path:
@@ -101,7 +90,7 @@ def send_notify(
 
     bot_token, chat_id = require_telegram_credentials(env_path or (adj_dir / ".env"))
 
-    sanitized = _sanitize(message)
+    sanitized = sanitize_message(message, _TELEGRAM_NOTIFY_MAX_LEN)
     if not sanitized:
         raise ValueError("Message is empty after sanitisation")
 

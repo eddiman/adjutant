@@ -36,11 +36,13 @@ class IdentityConfig(BaseModel):
 
 class TelegramRateLimitConfig(BaseModel):
     messages_per_minute: int = 10
+    window_seconds: int = 60
     backoff_exponential: bool = True
 
 
 class TelegramConfig(BaseModel):
     session_timeout_seconds: int = 7200
+    chat_timeout_seconds: int = 240
     default_model: str = "anthropic/claude-haiku-4-5"
     rate_limit: TelegramRateLimitConfig = Field(default_factory=TelegramRateLimitConfig)
 

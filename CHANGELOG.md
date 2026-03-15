@@ -7,6 +7,38 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [2.0.2] — 2026-03-15 — Architecture Hardening
+
+Addresses all 7 remaining issues from the codebase audit.
+
+### Fixed
+
+- **listener.py**: now processes ALL updates in each poll batch sequentially instead of only the last one — no more silently dropped messages
+- **emergency_kill** pattern match scoped to this Adjutant instance (from previous round)
+
+### Security
+
+- **update.py**: SHA256 checksum verification for downloaded release tarballs; gracefully skips when no `.sha256` file is published
+- **release.yml**: generates and publishes `adjutant-{version}.tar.gz.sha256` alongside tarball
+
+### Changed
+
+- **reply.py**: removed — dead code superseded by `send.py`'s `msg_send_text()`
+- **send.py**: extracted `sanitize_message(msg, max_len)` as the canonical sanitisation function; `notify.py` now imports it instead of maintaining a duplicate
+- **kb/run.py**: `_get_kb()` now delegates to `manage.py`'s `kb_info()` instead of maintaining a duplicate registry parser; `_load_registry()` removed from run.py
+- **install.py**: colour/TTY helpers (`_IS_TTY`, `_c()`, `_BOLD`, etc.) replaced with imports from `wizard.py` for NO_COLOR compliance
+- **repair.py** and **messaging.py**: `_read_env_cred()` now delegates to `core/env.py`'s `get_credential()` instead of maintaining inline parsers
+- **wizard.py**: added `WizardContext` dataclass for shared state; orchestrator now passes `dry_run` to all steps (was missing before); syncs step globals into context
+- **config.py**: added `window_seconds` to `TelegramRateLimitConfig` and `chat_timeout_seconds` to `TelegramConfig`
+- **chat.py**: chat timeout now reads from `adjutant.yaml` (`messaging.telegram.chat_timeout_seconds`)
+- **dispatch.py**: rate limit window now reads from config (`messaging.telegram.rate_limit.window_seconds`)
+
+### Added
+
+- **test_cli.py**: smoke tests for all 22 CLI commands and 13 subcommands via Click's `CliRunner`
+
+---
+
 ## [2.0.1] — 2026-03-15 — Codebase Audit & Bug Fixes
 
 Full codebase audit identifying and fixing 16 issues across bugs, security,

@@ -13,6 +13,7 @@ Environment variables (match bash original):
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import shutil
@@ -164,6 +165,7 @@ def download_and_apply(
     matching the rsync --exclude list in the bash original.
     """
     tarball_url = f"https://github.com/{repo}/releases/download/{version}/adjutant-{version}.tar.gz"
+    checksum_url = f"{tarball_url}.sha256"
 
     if not quiet:
         print(f"  → Downloading adjutant {version}...")
@@ -181,6 +183,32 @@ def download_and_apply(
                             f.write(chunk)
         except Exception as exc:
             raise RuntimeError(f"Download failed from {tarball_url}: {exc}") from exc
+
+        # Verify SHA256 checksum if a .sha256 file is published alongside the tarball
+        try:
+            with httpx.Client(timeout=30.0, follow_redirects=True) as http:
+                cs_resp = http.get(checksum_url)
+                cs_resp.raise_for_status()
+                expected_hash = cs_resp.text.strip().split()[0].lower()
+                actual_hash = hashlib.sha256(tarball_path.read_bytes()).hexdigest().lower()
+                if actual_hash != expected_hash:
+                    raise RuntimeError(
+                        f"Checksum mismatch for {tarball_url}:\n"
+                        f"  expected: {expected_hash}\n"
+                        f"  actual:   {actual_hash}\n"
+                        f"The download may be corrupt or tampered with."
+                    )
+                if not quiet:
+                    print(f"  ✓ Checksum verified ({actual_hash[:12]}...)")
+        except httpx.HTTPStatusError:
+            # No checksum file published for this release — skip verification
+            if not quiet:
+                print("  ! No checksum file found — skipping integrity verification")
+        except RuntimeError:
+            raise  # re-raise checksum mismatch
+        except Exception as exc:
+            if not quiet:
+                print(f"  ! Checksum verification skipped ({exc})")
 
         if not quiet:
             print(f"  ✓ Downloaded adjutant {version}")

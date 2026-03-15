@@ -44,58 +44,21 @@ class KBRunError(Exception):
     """Raised when the operation script exits non-zero."""
 
 
-def _load_registry(adj_dir: Path) -> list[dict[str, str]]:
-    """Parse knowledge_bases/registry.yaml into a list of dicts.
-
-    The registry is a hand-written YAML file in the format:
-
-        knowledge_bases:
-          - name: "my-notes"
-            path: "/path/to/kb"
-            description: "..."
-            model: "inherit"
-            access: "read-only"
-            created: "2026-01-01"
-
-    We parse it without an external YAML library to match the pure-bash
-    line-by-line approach in manage.sh (which also avoids yq).  The
-    registry structure is simple enough that this is safe.
-    """
-    registry_path = adj_dir / "knowledge_bases" / "registry.yaml"
-    if not registry_path.is_file():
-        return []
-
-    entries: list[dict[str, str]] = []
-    current: dict[str, str] = {}
-
-    for line in registry_path.read_text().splitlines():
-        # New entry
-        m = re.match(r'\s*-\s+name:\s+"?([^"]+)"?', line)
-        if m:
-            if current:
-                entries.append(current)
-            current = {"name": m.group(1)}
-            continue
-        # Field: value pairs inside an entry block
-        for field in ("path", "description", "model", "access", "created"):
-            m = re.match(rf'\s+{field}:\s+"?([^"]*)"?', line)
-            if m:
-                current[field] = m.group(1)
-                break
-
-    if current:
-        entries.append(current)
-
-    return entries
-
-
 def _get_kb(adj_dir: Path, kb_name: str) -> dict[str, str]:
-    """Return the registry entry for kb_name or raise KBNotFoundError."""
-    entries = _load_registry(adj_dir)
-    for entry in entries:
-        if entry.get("name") == kb_name:
-            return entry
-    raise KBNotFoundError(f"Knowledge base '{kb_name}' not found in registry.")
+    """Return the registry entry for kb_name or raise KBNotFoundError.
+
+    Delegates to the canonical registry parser in manage.py and converts
+    the KBEntry dataclass to a plain dict for backward compatibility with
+    callers that use ``entry.get("path")``, ``entry["name"]``, etc.
+    """
+    from adjutant.capabilities.kb.manage import kb_info
+
+    try:
+        entry = kb_info(adj_dir, kb_name)
+    except ValueError as exc:
+        raise KBNotFoundError(str(exc)) from exc
+
+    return entry.as_dict()
 
 
 _VALID_OPERATION = re.compile(r"^[a-z][a-z0-9_-]*$")
@@ -282,6 +245,21 @@ def kb_run(
     env["ADJ_DIR"] = str(adj_dir)
     env["KB_DIR"] = str(kb_path)
 
+    # Resolve model from registry tier → concrete model ID.
+    # If the registry entry has a model field (e.g. "cheap") and the
+    # caller did not already pass --model in args, resolve the tier and
+    # append --model <resolved> so the KB CLI uses the intended model.
+    extra_args: list[str] = list(args or [])
+    kb_model_raw = entry.get("model", "")
+    if kb_model_raw and "--model" not in extra_args:
+        from adjutant.core.config import load_config
+        from adjutant.core.model import resolve_kb_model
+
+        config = load_config(adj_dir / "adjutant.yaml")
+        resolved_model = resolve_kb_model(kb_model_raw, adj_dir / "state", config)
+        if resolved_model:
+            extra_args = ["--model", resolved_model] + extra_args
+
     cli_module = _read_kb_cli_module(kb_path)
 
     if cli_module:
@@ -296,12 +274,12 @@ def kb_run(
             str(kb_path),
             *cli_flags,
             operation,
-        ] + (args or [])
+        ] + extra_args
         result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(kb_path), env=env)
     else:
         # Bash fallback — legacy script-based KB.
         script_path = get_operation_script(adj_dir, kb_name, operation)
-        cmd = ["bash", str(script_path)] + (args or [])
+        cmd = ["bash", str(script_path)] + extra_args
         result = subprocess.run(cmd, capture_output=True, text=True, env=env)
 
     # Forward any structured events from stderr before raising errors.

@@ -76,6 +76,10 @@ jobs:
           tar -czf "${TARBALL}" "${STAGING}/"
           echo "Built ${TARBALL} ($(du -sh "${TARBALL}" | cut -f1))"
 
+          # Generate SHA256 checksum for integrity verification
+          sha256sum "${TARBALL}" > "${TARBALL}.sha256"
+          echo "Checksum: $(cat "${TARBALL}.sha256")"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -104,6 +108,7 @@ jobs:
             See [README](https://github.com/${{ github.repository }}#readme) for full documentation.
           files: |
             ${{ steps.version.outputs.tarball }}
+            ${{ steps.version.outputs.tarball }}.sha256
             scripts/setup/install.sh
           draft: false
           prerelease: ${{ contains(steps.version.outputs.tag, '-') }}

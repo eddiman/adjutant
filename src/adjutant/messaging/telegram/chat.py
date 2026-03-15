@@ -19,23 +19,31 @@ from adjutant.core.logging import adj_log
 
 
 _DEFAULT_SESSION_TIMEOUT = 7200  # seconds (2 hours)
+_DEFAULT_CHAT_TIMEOUT = 240  # seconds
 _SESSION_FILE_NAME = "telegram_session.json"
-_CHAT_TIMEOUT = 240  # seconds
 
 
-def _get_session_timeout(adj_dir: Path) -> int:
-    """Read session timeout from adjutant.yaml, falling back to 7200s."""
+def _get_config_timeouts(adj_dir: Path) -> tuple[int, int]:
+    """Read session and chat timeouts from adjutant.yaml.
+
+    Returns:
+        (session_timeout, chat_timeout) tuple with defaults as fallback.
+    """
     try:
         from adjutant.core.config import load_typed_config
 
         config = load_typed_config(adj_dir / "adjutant.yaml")
-        return config.messaging.telegram.session_timeout_seconds
+        return (
+            config.messaging.telegram.session_timeout_seconds,
+            config.messaging.telegram.chat_timeout_seconds,
+        )
     except Exception:
-        return _DEFAULT_SESSION_TIMEOUT
+        return _DEFAULT_SESSION_TIMEOUT, _DEFAULT_CHAT_TIMEOUT
 
 
-# Module-level alias for backwards compatibility
+# Module-level aliases for backwards compatibility
 SESSION_TIMEOUT = _DEFAULT_SESSION_TIMEOUT
+_CHAT_TIMEOUT = _DEFAULT_CHAT_TIMEOUT
 
 
 # ---------------------------------------------------------------------------
@@ -190,10 +198,11 @@ async def run_chat(message: str, adj_dir: Path) -> str:
         args += ["--session", existing_session]
     args.append(message)
 
+    _, chat_timeout = _get_config_timeouts(adj_dir)
     adj_log("telegram", f"Chat: model={model} session={'yes' if existing_session else 'new'}")
 
     try:
-        result = await opencode_run(args, timeout=_CHAT_TIMEOUT)
+        result = await opencode_run(args, timeout=chat_timeout)
     except OpenCodeNotFoundError:
         return "opencode is not available. Please check your installation."
 

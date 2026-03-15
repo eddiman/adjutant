@@ -11,14 +11,20 @@ import pytest
 
 from adjutant.messaging.telegram.notify import (
     BudgetExceededError,
+    _TELEGRAM_NOTIFY_MAX_LEN,
     _count_file,
     _read_count,
-    _sanitize,
     _write_count,
     get_max_per_day,
     main,
     send_notify,
 )
+from adjutant.messaging.telegram.send import sanitize_message
+
+
+def _sanitize(msg: str) -> str:
+    """Test helper — wraps the shared sanitize with notify's max length."""
+    return sanitize_message(msg, _TELEGRAM_NOTIFY_MAX_LEN)
 
 
 # ---------------------------------------------------------------------------

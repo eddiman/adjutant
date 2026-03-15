@@ -21,7 +21,7 @@ from typing import Any
 from adjutant.core.logging import adj_log
 from adjutant.lib.http import get_client
 
-# Telegram maximum message length (matches reply.py)
+# Telegram maximum message length
 _TELEGRAM_MAX_LEN = 4000
 
 # Active typing threads: suffix → (Thread, stop_event)
@@ -32,15 +32,25 @@ _TYPING_THREADS: dict[str, tuple[threading.Thread, threading.Event]] = {}
 # Helpers
 # ---------------------------------------------------------------------------
 
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def sanitize_message(msg: str, max_len: int = _TELEGRAM_MAX_LEN) -> str:
+    """Strip control characters and clamp to *max_len* chars.
+
+    Strips 0x00-0x08, 0x0B-0x1F, 0x7F. Newlines (0x0A) and tabs (0x09) are
+    kept because Telegram renders them.
+
+    This is the canonical sanitisation function — used by both ``msg_send_text``
+    (max_len=4000) and ``send_notify`` (max_len=4096).
+    """
+    msg = _CONTROL_CHAR_RE.sub("", msg)
+    return msg[:max_len]
+
 
 def _sanitize(msg: str) -> str:
-    """Strip control characters and clamp to 4000 chars.
-
-    Matches bash: tr -d '\\000-\\010\\013-\\037\\177' | cut -c1-4000
-    Strips 0x00-0x08, 0x0B-0x1F, 0x7F. Newlines (0x0A) and tabs (0x09) kept.
-    """
-    msg = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", msg)
-    return msg[:_TELEGRAM_MAX_LEN]
+    """Strip control characters and clamp to 4000 chars (legacy alias)."""
+    return sanitize_message(msg, _TELEGRAM_MAX_LEN)
 
 
 def _tg_url(bot_token: str, method: str) -> str:
