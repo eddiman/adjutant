@@ -124,39 +124,52 @@ That's it. Adjutant is running.
 To keep Adjutant running across reboots, use `adjutant startup` which installs a LaunchAgent. Alternatively you can install it manually:
 
 ```bash
-cat > ~/Library/LaunchAgents/adjutant.telegram.plist << 'EOF'
+cat > ~/Library/LaunchAgents/com.adjutant.telegram.plist << 'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>adjutant.telegram</string>
+    <string>com.adjutant.telegram</string>
     <key>ProgramArguments</key>
     <array>
         <string>/path/to/adjutant/.venv/bin/python</string>
         <string>-m</string>
-        <string>adjutant</string>
-        <string>start</string>
+        <string>adjutant.messaging.telegram.listener</string>
     </array>
+    <key>WorkingDirectory</key>
+    <string>/path/to/adjutant</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
     <key>EnvironmentVariables</key>
     <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
         <key>ADJ_DIR</key>
         <string>/path/to/adjutant</string>
     </dict>
-    <key>RunAtLoad</key>
-    <true/>
     <key>StandardOutPath</key>
-    <string>/path/to/adjutant/state/listener.stdout.log</string>
+    <string>/path/to/adjutant/state/launchd_stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/path/to/adjutant/state/listener.stderr.log</string>
+    <string>/path/to/adjutant/state/launchd_stderr.log</string>
 </dict>
 </plist>
 EOF
 
-launchctl load ~/Library/LaunchAgents/adjutant.telegram.plist
+launchctl load ~/Library/LaunchAgents/com.adjutant.telegram.plist
 ```
 
 Replace `/path/to/adjutant` with your actual install path.
+
+Key plist properties:
+- **`KeepAlive: true`** — unconditional restart on any exit (including clean exit 0)
+- **`ThrottleInterval: 30`** — prevents restart loops faster than every 30 seconds
+- **`ADJ_DIR`** — the listener reads this to find config, state, and identity files
+- The listener does NOT send a startup notification — only `adjutant start` does, so launchd auto-restarts don't spam Telegram
 
 ---
 

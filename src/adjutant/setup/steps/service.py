@@ -141,15 +141,18 @@ _LAUNCHD_PLIST = """\
   <string>com.adjutant.telegram</string>
   <key>ProgramArguments</key>
   <array>
-    <string>{listener}</string>
+    <string>{python}</string>
+    <string>-m</string>
+    <string>adjutant.messaging.telegram.listener</string>
   </array>
+  <key>WorkingDirectory</key>
+  <string>{adj_dir}</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
-  <dict>
-    <key>SuccessfulExit</key>
-    <false/>
-  </dict>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
   <key>StandardOutPath</key>
   <string>{adj_dir}/state/launchd_stdout.log</string>
   <key>StandardErrorPath</key>
@@ -158,7 +161,7 @@ _LAUNCHD_PLIST = """\
   <dict>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    <key>ADJUTANT_HOME</key>
+    <key>ADJ_DIR</key>
     <string>{adj_dir}</string>
   </dict>
 </dict>
@@ -173,7 +176,10 @@ def _install_launchd(adj_dir: Path, *, dry_run: bool = False) -> None:
 
     plist_dir = Path.home() / "Library" / "LaunchAgents"
     plist_file = plist_dir / "com.adjutant.telegram.plist"
-    listener = adj_dir / "scripts" / "messaging" / "telegram" / "listener.sh"
+
+    # Resolve Python interpreter — prefer the project venv, fall back to sys.executable
+    venv_python = adj_dir / ".venv" / "bin" / "python"
+    python = str(venv_python) if venv_python.is_file() else sys.executable
 
     if dry_run:
         wiz_ok(f"[DRY RUN] Would create {plist_file}")
@@ -181,7 +187,7 @@ def _install_launchd(adj_dir: Path, *, dry_run: bool = False) -> None:
         return
 
     plist_dir.mkdir(parents=True, exist_ok=True)
-    plist_content = _LAUNCHD_PLIST.format(listener=listener, adj_dir=adj_dir)
+    plist_content = _LAUNCHD_PLIST.format(python=python, adj_dir=adj_dir)
     plist_file.write_text(plist_content)
     wiz_ok(f"Created {plist_file}")
 

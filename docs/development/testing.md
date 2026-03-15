@@ -6,15 +6,12 @@ How to run the Adjutant test suite and understand its structure.
 
 ## Overview
 
-Adjutant uses [pytest](https://pytest.org) as its test framework. All tests are unit tests — no integration tiers, no shell test infrastructure, no bats.
+Adjutant uses [pytest](https://pytest.org) as its test framework. Tests are organized into two tiers:
 
-| Metric | Value |
-|--------|-------|
-| Test files | 52 |
-| Tests | ~1081 |
-| Framework | pytest |
-| Location | `tests/unit/` |
-| Runtime | ~75 seconds |
+| Tier | Location | Tests | Runtime | Description |
+|------|----------|-------|---------|-------------|
+| Unit | `tests/unit/` | ~1139 | ~75s | Fast, fully mocked, no external calls |
+| Integration | `tests/integration/` | ~20 | ~5s | Real process spawning, mocked external services |
 
 ---
 
@@ -25,7 +22,7 @@ CI automation is **intentionally absent**. The suite runs in ~75 seconds locally
 **Pre-release gate**: before tagging a release, run the full suite and confirm it is clean:
 
 ```bash
-.venv/bin/pytest tests/unit/ -q
+.venv/bin/pytest tests/ -q
 ```
 
 All tests must pass. Any failure blocks the release. This is enforced by discipline, not automation. See [Design Decisions](../architecture/design-decisions.md) for the rationale.
@@ -45,8 +42,14 @@ All tests must pass. Any failure blocks the release. This is enforced by discipl
 ## Running Tests
 
 ```bash
-# Full suite
+# Full suite (unit + integration)
+.venv/bin/pytest tests/ -q
+
+# Unit tests only
 .venv/bin/pytest tests/unit/ -q
+
+# Integration tests only
+.venv/bin/pytest tests/integration/ -q
 
 # Single file
 .venv/bin/pytest tests/unit/test_kb_run.py -q

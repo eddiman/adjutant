@@ -57,7 +57,7 @@ warn_return_any = true
 warn_unused_configs = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests/unit"]
+testpaths = ["tests/unit", "tests/integration"]
 timeout = 30
 addopts = "-x --tb=short"
 markers = [

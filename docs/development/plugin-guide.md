@@ -149,6 +149,23 @@ elif text.startswith("/datetime "):
 
 For long-running commands, use `msg_typing_start()`/`msg_typing_stop()` and run as a background `asyncio.Task`.
 
+### Feature Gating
+
+If your capability should be toggleable via `adjutant.yaml`, add a feature gate:
+
+1. Add the feature flag to `core/config.py`'s `FeaturesConfig` model
+2. Add the feature to `adjutant.yaml.example` under `features:`
+3. Add the command prefix to `_FEATURE_GATES` in `dispatch.py`:
+   ```python
+   _FEATURE_GATES: dict[str, str] = {
+       "/screenshot": "screenshot",
+       "/search": "search",
+       "/datetime": "datetime",  # add your command here
+   }
+   ```
+
+When a feature is disabled in config, `dispatch.py` will reject the command with a message telling the user how to enable it. Commands not listed in `_FEATURE_GATES` (like `/status`, `/help`, `/kb`) are always available.
+
 ---
 
 ## Wiring the Agent

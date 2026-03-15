@@ -29,6 +29,12 @@ from adjutant.core.logging import adj_log
 _INFLIGHT: dict[str, asyncio.Task[None]] = {}
 
 _DEFAULT_RATE_LIMIT_WINDOW = 60  # seconds
+
+# Feature-gated commands: slash command prefix → config feature name
+_FEATURE_GATES: dict[str, str] = {
+    "/screenshot": "screenshot",
+    "/search": "search",
+}
 _PENDING_REFLECT_FILE_NAME = "pending_reflect"
 
 # Regex for natural-language model-switch intent.
@@ -211,6 +217,27 @@ async def dispatch_message(
             text, message_id, adj_dir, bot_token=bot_token, chat_id=chat_id, refine=True
         )
         return
+
+    # Feature gate check — reject commands for disabled features
+    config_path = adj_dir / "adjutant.yaml"
+    if config_path.is_file():
+        for cmd_prefix, feature_name in _FEATURE_GATES.items():
+            if text == cmd_prefix or text.startswith(f"{cmd_prefix} "):
+                try:
+                    from adjutant.core.config import load_typed_config
+
+                    config = load_typed_config(config_path)
+                    if not config.is_feature_enabled(feature_name):
+                        _send(
+                            f"{feature_name.title()} is not enabled. "
+                            f"Run `adjutant setup` or set "
+                            f"`features.{feature_name}.enabled: true` "
+                            f"in adjutant.yaml to enable it."
+                        )
+                        return
+                except Exception:
+                    pass  # If config can't be loaded, allow the command (fail open)
+                break
 
     # Command dispatch
     if text == "/status":

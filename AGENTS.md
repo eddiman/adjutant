@@ -45,8 +45,9 @@ adjutant/
 │   ├── setup/                      # install, repair, uninstall, wizard + steps/
 │   └── messaging/
 │       ├── adaptor.py, dispatch.py
-│       └── telegram/               # chat, commands, listener, notify, photos, reply, send, service
-├── tests/unit/                     # ~52 files, 1055 tests — pytest only
+│       └── telegram/               # chat, commands, listener, notify, photos, send, service
+├── tests/unit/                     # ~54 files, ~1139 tests
+├── tests/integration/              # lifecycle, feature gating, plist tests
 └── docs/                           # development/, architecture/, guides/
 ```
 
@@ -133,8 +134,10 @@ Full guide: `docs/guides/knowledge-bases.md`
 ## Testing
 
 ```bash
-.venv/bin/pytest tests/unit/ -q                    # full suite (~67s, 1055 tests)
-.venv/bin/pytest tests/unit/test_kb_manage.py -q   # single file
+.venv/bin/pytest tests/ -q                          # full suite (~80s, ~1160 tests)
+.venv/bin/pytest tests/unit/ -q                     # unit tests only (~75s, ~1139 tests)
+.venv/bin/pytest tests/integration/ -q              # integration tests only (~5s)
+.venv/bin/pytest tests/unit/test_kb_manage.py -q    # single file
 ```
 
 All tests must pass before release. No CI. Full guide: `docs/development/testing.md`
@@ -150,4 +153,5 @@ All tests must pass before release. No CI. Full guide: `docs/development/testing
 - `_resolve_command()` is private in `schedule/manage.py`
 - `dispatch_photo` arg order differs from `dispatch_message` — check signature
 - `NDJSONResult` vs `OpenCodeResult` — don't mix at call sites
-- `dispatch.py` auth + rate-limit block is security-critical — run full tests before refactoring
+- `dispatch.py` auth + rate-limit + feature-gate block is security-critical — run full tests before refactoring
+- Feature-gated commands (`/screenshot`, `/search`) are rejected at dispatch if disabled in config — add new gates to `_FEATURE_GATES` in `dispatch.py`

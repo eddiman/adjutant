@@ -30,8 +30,10 @@ messaging:
   telegram:
     session_timeout_seconds: 7200       # 2h window for conversational context
     default_model: "anthropic/claude-haiku-4-5"
+    chat_timeout_seconds: 240           # LLM response timeout per message
     rate_limit:
       messages_per_minute: 10
+      window_seconds: 60               # rolling window for rate limiting
       backoff_exponential: true
 
 llm:

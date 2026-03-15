@@ -11,7 +11,7 @@ Adjutant has three possible states:
 | State | What it means | How to enter | How to exit |
 |-------|--------------|-------------|------------|
 | **RUNNING** | Listener is active and polling for messages | `adjutant start` | `adjutant stop`, `adjutant pause`, or `adjutant kill` |
-| **PAUSED** | Listener is stopped; `PAUSED` lockfile exists | `adjutant pause` or `/pause` | `adjutant resume` or `/resume` |
+| **PAUSED** | Listener is running but ignores all messages; `PAUSED` lockfile exists | `adjutant pause` or `/pause` | `adjutant resume` or `/resume` |
 | **KILLED** | Hard stop; `KILLED` lockfile exists; nothing will start | `adjutant kill` or `/kill` | `adjutant startup` (interactive recovery, clears lockfile and restores crontab) |
 
 Check the current state at any time:
@@ -205,4 +205,4 @@ Checks that all required tools are installed (`bash`, `curl`, `jq`, `python3`, `
   adjutant resume ──► RUNNING
 ```
 
-Recovery from KILLED: `adjutant start` (clears lockfile, starts fresh).
+Recovery from KILLED: `adjutant startup` (interactive recovery — clears lockfile, restores crontab, starts fresh).

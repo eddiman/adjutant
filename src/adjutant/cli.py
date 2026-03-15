@@ -152,12 +152,20 @@ def rotate(ctx: click.Context, dry_run: bool, quiet: bool) -> None:
 @main.command()
 @click.argument("message")
 @click.option("--reply-to", type=int, default=None, help="Reply to this Telegram message ID.")
-def reply(message: str, reply_to: int | None) -> None:
+@click.pass_context
+def reply(ctx: click.Context, message: str, reply_to: int | None) -> None:
     """Send a Telegram reply (Markdown enabled)."""
-    from adjutant.messaging.telegram.reply import send_reply
+    from adjutant.core.env import require_telegram_credentials
+    from adjutant.messaging.telegram.send import msg_send_text
+
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
 
     try:
-        send_reply(message, reply_to_message_id=reply_to)
+        bot_token, chat_id = require_telegram_credentials(adj_dir / ".env")
+        msg_send_text(message, reply_to, bot_token=bot_token, chat_id=chat_id)
         click.echo("Replied.")
     except (RuntimeError, ValueError) as exc:
         click.echo(f"ERROR: {exc}", err=True)

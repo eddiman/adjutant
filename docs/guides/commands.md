@@ -34,6 +34,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | `/search <query>` | Searches the web via the Brave Search API and returns the top 5 results (title, URL, description). No browser automation — fast, token-efficient, and not subject to bot detection. Requires `BRAVE_API_KEY` in `.env`. |
 | `/kb` | Lists all registered knowledge bases |
 | `/kb query <name> <question>` | Queries a specific knowledge base with your question. Example: `/kb query my-project what's the current status?` |
+| `/kb write <name> <instruction>` | Writes to a read-write knowledge base. The sub-agent performs the requested update within the KB's sandbox. Only works for KBs with `access: read-write`. |
 | `/schedule` | Lists all registered scheduled jobs with enabled/disabled status and schedule |
 | `/schedule run <name>` | Runs a scheduled job immediately. Output is sent to chat. |
 | `/schedule enable <name>` | Enables a job and installs its crontab entry |
