@@ -1,17 +1,33 @@
 # 2026-03-15 — Codebase Audit & Architecture Hardening
 
-**Status**: Complete (commits `c9c8bec`, `85eef60`)
+**Status**: Complete (commits `1399151`, `c9c8bec`, `85eef60`, `75c254f`)
 
 ---
 
 ## What Changed
 
-A full codebase audit identified 23 issues across bugs, security, technical debt, and documentation. All were fixed in two rounds:
+A full codebase audit and feature push spanning 4 commits:
 
+- **Pre-audit fix** (`1399151`): Stuck typing indicator on hung opencode sessions — added timeouts, `try/finally` guards, and a `max_duration` safety ceiling
 - **Round 1** (`c9c8bec`): 16 critical/high/medium issues — broken HTTP client usage, double-encoded search queries, stale bash references, missing prompt injection guards
 - **Round 2** (`85eef60`): 7 remaining architecture issues — dropped messages, dead code, code duplication, missing tests, checksum verification, wizard globals, hardcoded timeouts
+- **Feature** (`75c254f`): Multi-image vision support and `HttpClient.get_text()` for raw RSS/XML fetches
 
 Test count went from 1055 (pre-audit baseline) to 1139 (post-fix).
+
+---
+
+## Pre-Audit Fix: Stuck Typing Indicator (`1399151`)
+
+Hung opencode sessions (e.g. an LLM that never responds) left the Telegram typing indicator running indefinitely. Three layers of defense added:
+
+| Change | File | Detail |
+|--------|------|--------|
+| Vision timeout | `vision.py` | Added 240s timeout to `run_vision()` matching chat timeout |
+| `try/finally` guards | `photos.py`, `commands.py` | `msg_typing_stop()` now always runs, even on unexpected exceptions in `/screenshot`, `/search`, `/kb`, and photo handling |
+| `max_duration` safety ceiling | `send.py` | `msg_typing_start()` accepts `max_duration` (default 300s) and auto-stops the typing thread after that limit, using `min(4.0, remaining)` sleep intervals for responsive wake-up |
+
+Also added the "Hard Rules" section to `AGENTS.md` enforcing the KB sub-agent access pattern (never read KB files directly).
 
 ---
 
@@ -180,9 +196,27 @@ Added `tests/unit/test_cli.py` with:
 
 ---
 
+## Feature: Multi-Image Vision & `get_text()` (`75c254f`)
+
+Uncommitted work from the same day, committed as part of this audit sweep.
+
+### Multi-image vision
+
+`run_vision()` was single-image only. Added `run_vision_multi()` that accepts a list of image paths and passes them all to one opencode invocation via multiple `-f` flags, so the model sees them together with shared context.
+
+- `run_vision()` becomes a convenience wrapper calling `run_vision_multi([image_path], ...)`
+- CLI updated: `vision.py <img1> [img2 ...] [--prompt PROMPT]`
+- Default prompt switches between singular/plural automatically
+
+### `HttpClient.get_text()`
+
+`fetch.py` was calling `client.get()` for RSS/XML blog feeds, which tries to JSON-parse the response. Added `get_text(url, ...)` to `HttpClient` that returns `response.text` directly.
+
+---
+
 ## Test Results
 
 - **Before audit**: 1055 tests (reported in AGENTS.md)
 - **After Round 1**: 1121 tests passed
-- **After Round 2**: 1139 tests passed
+- **After Round 2**: 1139 tests passed (includes multi-image vision tests, `get_text()` tests, blog RSS test)
 - **No regressions**: all pre-existing tests continue to pass
