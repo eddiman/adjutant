@@ -11,7 +11,7 @@ from adjutant.lib.http import HttpClient, HttpClientError, get_client, reset_cli
 
 
 class TestHttpClient:
-    """Tests for HttpClient.get() and .post()."""
+    """Tests for HttpClient.get(), .get_text(), and .post()."""
 
     def test_get_returns_parsed_json(self) -> None:
         with patch.object(httpx.Client, "get") as mock_get:
@@ -89,6 +89,40 @@ class TestHttpClient:
             with pytest.raises(HttpClientError) as exc_info:
                 client.get("https://example.com/api")
             assert exc_info.value.status_code is None
+
+    def test_get_text_returns_raw_string(self) -> None:
+        with patch.object(httpx.Client, "get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.text = "<rss><channel></channel></rss>"
+            mock_response.raise_for_status.return_value = None
+            mock_get.return_value = mock_response
+
+            client = HttpClient()
+            result = client.get_text("https://example.com/feed")
+            assert result == "<rss><channel></channel></rss>"
+
+    def test_get_text_http_error_raises_client_error(self) -> None:
+        with patch.object(httpx.Client, "get") as mock_get:
+            mock_response = MagicMock()
+            mock_response.status_code = 403
+            mock_response.text = "Forbidden"
+            mock_get.return_value = mock_response
+            mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+                "403", request=MagicMock(), response=mock_response
+            )
+
+            client = HttpClient()
+            with pytest.raises(HttpClientError) as exc_info:
+                client.get_text("https://example.com/feed")
+            assert exc_info.value.status_code == 403
+
+    def test_get_text_request_error_raises_client_error(self) -> None:
+        with patch.object(httpx.Client, "get") as mock_get:
+            mock_get.side_effect = httpx.ConnectError("timeout")
+
+            client = HttpClient()
+            with pytest.raises(HttpClientError):
+                client.get_text("https://example.com/feed")
 
     def test_context_manager(self) -> None:
         with HttpClient() as client:

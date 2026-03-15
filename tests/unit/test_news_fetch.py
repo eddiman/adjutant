@@ -290,6 +290,45 @@ class TestFetchNews:
         items = json.loads(Path(result[3:]).read_text())
         assert items == []
 
+    def test_blog_raw_fetch_uses_get_text(self, tmp_path: Path):
+        """RSS/blog feeds must use get_text(), not get()."""
+        rss_xml = """<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item><title>AI News</title><link>https://blog.example.com/ai</link></item>
+</channel></rss>"""
+        config = {
+            "keywords": ["AI"],
+            "sources": {
+                "hackernews": {"enabled": False},
+                "reddit": {"enabled": False},
+                "blogs": {
+                    "enabled": True,
+                    "feeds": [
+                        {"name": "TestBlog", "url": "https://blog.example.com/feed", "type": "rss"}
+                    ],
+                },
+            },
+            "analysis": {},
+        }
+        (tmp_path / "news_config.json").write_text(json.dumps(config))
+        (tmp_path / "state").mkdir(exist_ok=True)
+
+        mock_client = MagicMock()
+        mock_client.get_text.return_value = rss_xml
+
+        with (
+            patch("adjutant.core.lockfiles.check_killed", return_value=True),
+            patch("adjutant.core.logging.adj_log"),
+            patch("adjutant.lib.http.get_client", return_value=mock_client),
+        ):
+            result = fetch_news(tmp_path)
+
+        assert result.startswith("OK:")
+        mock_client.get_text.assert_called_once()
+        mock_client.get.assert_not_called()
+        items = json.loads(Path(result[3:]).read_text())
+        assert any(i["title"] == "AI News" for i in items)
+
 
 # ---------------------------------------------------------------------------
 # main (CLI)

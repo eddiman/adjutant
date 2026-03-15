@@ -275,10 +275,9 @@ def fetch_news(adj_dir: Path | None = None) -> str:
     client = get_client()
 
     def _http_get(url: str, headers: dict | None = None, raw: bool = False):
-        resp = client.get(url, headers=headers or {})
         if raw:
-            return resp if isinstance(resp, (str, bytes)) else json.dumps(resp)
-        return resp
+            return client.get_text(url, headers=headers or {})
+        return client.get(url, headers=headers or {})
 
     try:
         hn_items = _fetch_hackernews(config, _http_get)
