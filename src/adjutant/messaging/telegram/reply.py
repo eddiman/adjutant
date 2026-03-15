@@ -72,8 +72,7 @@ def send_reply(
         payload["reply_to_message_id"] = reply_to_message_id
 
     client = get_client()
-    response = client.post(url, json=payload)
-    response.raise_for_status()
+    client.post(url, json_data=payload)
 
 
 def main(argv: list[str] | None = None) -> int:

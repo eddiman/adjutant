@@ -38,7 +38,7 @@ adjutant start
 
 Starts the Telegram listener in the background. The listener polls the Telegram API in a continuous loop. Acquires a directory-based mutex (`state/listener.lock/`) to prevent duplicate instances.
 
-If a `KILLED` lockfile exists, `adjutant start` clears it before starting — this is the recovery path from an emergency shutdown.
+If a `KILLED` lockfile exists, use `adjutant startup` for full recovery (see below).
 
 ### Stop
 

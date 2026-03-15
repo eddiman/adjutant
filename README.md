@@ -50,7 +50,7 @@ After `adjutant kill`, run `adjutant startup` to recover.
 
 ```
 $ADJ_DIR/                       # Install directory (set by adjutant.yaml)
-├── .Claude/
+├── .opencode/
 │   └── agents/
 │       └── adjutant.md        # Agent definition (tracked)
 ├── adjutant                    # CLI shim

@@ -34,7 +34,7 @@ messaging:
       messages_per_minute: 10
       backoff_exponential: true
 
-  llm:
+llm:
   backend: "opencode"
   models:
     cheap: "anthropic/claude-haiku-4-5"     # routine chat and triage

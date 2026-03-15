@@ -34,26 +34,16 @@ def _marker(name: str) -> str:
 
 def _resolve_path(p: str, adj_dir: Path) -> str:
     """Absolute path stays as-is; relative is prepended with adj_dir."""
-    if p.startswith("/"):
-        return p
-    return str(adj_dir / p)
+    from adjutant.capabilities.schedule.manage import _resolve_path as _rp
+
+    return _rp(p, adj_dir)
 
 
 def _resolve_command(entry: dict, adj_dir: Path) -> str:
     """Resolve a schedule entry dict to a runnable command string."""
-    kb_name = entry.get("kb_name", "") or ""
-    kb_operation = entry.get("kb_operation", "") or ""
+    from adjutant.capabilities.schedule.manage import _resolve_command as _rc
 
-    if kb_name and kb_operation:
-        venv_py = adj_dir / ".venv" / "bin" / "python"
-        python = str(venv_py) if venv_py.exists() else "python3"
-        return f"{python} -m adjutant kb run {kb_name} {kb_operation}"
-
-    script = entry.get("script", "") or ""
-    if script:
-        return _resolve_path(script, adj_dir)
-
-    return ""
+    return _rc(entry, adj_dir)
 
 
 def _read_crontab() -> str:

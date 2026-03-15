@@ -23,6 +23,8 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
+import httpx
+
 from adjutant.core.logging import adj_log
 from adjutant.core.paths import get_adj_dir, init_adj_dir, AdjutantDirNotFoundError
 
@@ -93,16 +95,12 @@ def get_latest_version(repo: str = _DEFAULT_REPO) -> str:
     Raises:
         RuntimeError: If the API call fails or no release found.
     """
-    import json
-
     url = f"https://api.github.com/repos/{repo}/releases/latest"
     try:
         from adjutant.lib.http import get_client
 
         client = get_client()
-        resp = client.get(url, follow_redirects=True)
-        resp.raise_for_status()
-        data = resp.json()
+        data = client.get(url)
     except Exception as exc:
         raise RuntimeError(
             f"Could not reach GitHub API at {url}. Check your internet connection. ({exc})"
@@ -170,19 +168,17 @@ def download_and_apply(
     if not quiet:
         print(f"  → Downloading adjutant {version}...")
 
-    from adjutant.lib.http import get_client
-
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = Path(tmp_dir)
         tarball_path = tmp_path / "adjutant.tar.gz"
 
         try:
-            client = get_client()
-            with client.stream("GET", tarball_url, follow_redirects=True) as resp:
-                resp.raise_for_status()
-                with open(tarball_path, "wb") as f:
-                    for chunk in resp.iter_bytes():
-                        f.write(chunk)
+            with httpx.Client(timeout=120.0, follow_redirects=True) as http:
+                with http.stream("GET", tarball_url) as resp:
+                    resp.raise_for_status()
+                    with open(tarball_path, "wb") as f:
+                        for chunk in resp.iter_bytes():
+                            f.write(chunk)
         except Exception as exc:
             raise RuntimeError(f"Download failed from {tarball_url}: {exc}") from exc
 
@@ -327,33 +323,22 @@ def update(
 
 def _warn_if_listener_running(adj_dir: Path, *, quiet: bool = False) -> None:
     """Warn if telegram listener appears to be running."""
-    service_sh = adj_dir / "scripts" / "messaging" / "telegram" / "service.sh"
-    if not service_sh.exists():
-        return
     try:
-        result = subprocess.run(
-            ["bash", str(service_sh), "status"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if "running" in result.stdout.lower():
+        from adjutant.messaging.telegram.service import listener_status
+
+        status = listener_status(adj_dir)
+        if "running" in status.lower():
             if not quiet:
                 print("  ! Listener is currently running.")
-                print("  ! It will continue using the old scripts until restarted.")
+                print("  ! It will continue using the old code until restarted.")
                 print("  ! Run adjutant restart after the update completes.\n")
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+    except Exception:
         pass
 
 
 def _run_doctor(adj_dir: Path) -> None:
     """Run adjutant doctor in the adj_dir."""
-    adjutant_bin = adj_dir / "adjutant"
-    if adjutant_bin.is_file():
-        subprocess.run(["bash", str(adjutant_bin), "doctor"])
-    else:
-        # Fallback: try the installed Python CLI
-        subprocess.run([sys.executable, "-m", "adjutant", "doctor"])
+    subprocess.run([sys.executable, "-m", "adjutant", "doctor"])
 
 
 def main(argv: list[str] | None = None) -> int:

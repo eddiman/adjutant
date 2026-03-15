@@ -29,7 +29,7 @@ Based on the insight, read the relevant watched files from the project mentioned
 Based on soul.md decision frameworks:
 
 **If notification-worthy** (requires action within 48h, material status change, or risk):
-- Run `bash scripts/messaging/telegram/notify.sh "[Project] One-sentence insight."`
+- Run `.venv/bin/python -m adjutant notify "[Project] One-sentence insight."`
 - Move the insight file from `insights/pending/` to `insights/sent/`
 - Append to journal: `## HH:MM — Escalation (Sonnet)\n- [What was found]\n- **Notified via Telegram.**`
 

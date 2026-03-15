@@ -1045,21 +1045,10 @@ async def cmd_schedule(
         msg_typing_start(suffix, bot_token, chat_id)
 
         try:
-            script_raw = schedule_get_field(config_path, name, "script")
-            if script_raw.startswith("/"):
-                script_path = script_raw
-            else:
-                script_path = str(adj_dir / script_raw)
+            from adjutant.capabilities.schedule.install import run_now
 
-            proc = await asyncio.create_subprocess_exec(
-                "bash",
-                script_path,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout_b, _ = await asyncio.wait_for(proc.communicate(), timeout=120.0)
-            run_exit = proc.returncode or 0
-            result = stdout_b.decode(errors="replace").strip()
+            run_exit = await asyncio.to_thread(run_now, adj_dir, name)
+            result = f"Job completed (exit {run_exit})."
         except Exception as exc:
             adj_log("telegram", f"Schedule run error for '{name}': {exc}")
             result = ""

@@ -7,6 +7,40 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [2.0.1] — 2026-03-15 — Codebase Audit & Bug Fixes
+
+Full codebase audit identifying and fixing 16 issues across bugs, security,
+technical debt, and documentation.
+
+### Fixed
+
+- **update.py**: `get_latest_version()` called `follow_redirects`, `.raise_for_status()`, and `.json()` on a dict return from `HttpClient.get()` — entire self-update mechanism was broken
+- **update.py**: `download_and_apply()` used `client.stream()` which does not exist on `HttpClient` — replaced with direct `httpx.Client` streaming
+- **update.py**: `_warn_if_listener_running()` and `_run_doctor()` referenced legacy bash scripts — now use Python service module and `sys.executable`
+- **search.py**: manual `quote(query)` combined with httpx's automatic param encoding caused double-encoding (`%2520` for spaces)
+- **reply.py**: used `json=` instead of `json_data=` for `HttpClient.post()`, then called `.raise_for_status()` on the dict return
+- **notify.py**: daily notification budget counter incremented even when Telegram API returned `{"ok": false}` — now verifies response before counting
+- **commands.py**: `/schedule run` only handled script-based jobs, ignoring KB-operation-backed jobs — now delegates to `install.run_now()` which handles both
+- **control.py**: `emergency_kill` killed ALL processes matching "opencode" system-wide — now scoped to this Adjutant instance's ADJ_DIR
+- **chat.py**: session timeout was hardcoded to 7200s despite config field existing — now reads `messaging.telegram.session_timeout_seconds` from config
+- **http.py**: `get()` did not catch `json.JSONDecodeError` for non-JSON responses — now raises `HttpClientError` with response preview
+- **lifecycle.md**: contradicted itself about `adjutant start` behaviour with KILLED lockfile
+- **configuration.md**: YAML indentation error made `llm:` appear nested under `messaging:`
+- **VERSION**: was `0.0.2`, now `2.0.0` to match `pyproject.toml` and `cli.py`
+
+### Security
+
+- Added prompt injection guard to `pulse.md` and `review.md` (was only in `escalation.md`)
+
+### Changed
+
+- **prompts**: all bash script references (`scripts/capabilities/kb/query.sh`, `scripts/messaging/telegram/notify.sh`) updated to Python CLI equivalents (`.venv/bin/python -m adjutant kb query`, `.venv/bin/python -m adjutant notify`)
+- **install.py**: `_resolve_command()` and `_resolve_path()` now delegate to `manage.py` canonical implementations instead of maintaining duplicates
+- **http.py**: removed unused `import json` and false urllib-fallback docstring
+- **docs**: corrected `.Claude/agents/adjutant.md` references to `.opencode/agents/adjutant.md` in README, overview, identity, and plugin-guide docs
+
+---
+
 ## [0.1.0] — Autonomy & Self-Agency
 
 ### Added

@@ -56,10 +56,7 @@ class TestGetCurrentVersion:
 class TestGetLatestVersion:
     def test_returns_tag_name(self) -> None:
         mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"tag_name": "v3.0.0"}
-        mock_resp.raise_for_status = MagicMock()
-        mock_client.get.return_value = mock_resp
+        mock_client.get.return_value = {"tag_name": "v3.0.0"}
 
         with patch("adjutant.lib.http.get_client", return_value=mock_client):
             result = get_latest_version("owner/repo")
@@ -68,10 +65,7 @@ class TestGetLatestVersion:
 
     def test_raises_on_no_tag(self) -> None:
         mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {}
-        mock_resp.raise_for_status = MagicMock()
-        mock_client.get.return_value = mock_resp
+        mock_client.get.return_value = {}
 
         with (
             patch("adjutant.lib.http.get_client", return_value=mock_client),
@@ -153,10 +147,12 @@ class TestDownloadAndApply:
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
         mock_resp.iter_bytes = MagicMock(return_value=[tarball.read_bytes()])
-        mock_client = MagicMock()
-        mock_client.stream.return_value = mock_resp
+        mock_http = MagicMock()
+        mock_http.__enter__ = MagicMock(return_value=mock_http)
+        mock_http.__exit__ = MagicMock(return_value=False)
+        mock_http.stream.return_value = mock_resp
 
-        with patch("adjutant.lib.http.get_client", return_value=mock_client):
+        with patch("adjutant.lifecycle.update.httpx.Client", return_value=mock_http):
             download_and_apply("v1.1.0", adj_dir, quiet=True)
 
         assert (adj_dir / "scripts" / "foo.sh").is_file()

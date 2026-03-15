@@ -153,7 +153,7 @@ For long-running commands, use `msg_typing_start()`/`msg_typing_stop()` and run 
 
 ## Wiring the Agent
 
-The agent (OpenCode) can call any capability via the bash tool or Python tool. Document the capability in `.Claude/agents/adjutant.md` so the agent knows it exists:
+The agent (OpenCode) can call any capability via the bash tool or Python tool. Document the capability in `.opencode/agents/adjutant.md` so the agent knows it exists:
 
 ```markdown
 ## Available Tools
@@ -245,7 +245,7 @@ See [docs/guides/schedules.md](../guides/schedules.md) for the full guide.
 2. Add `async cmd_<name>()` handler in `src/adjutant/messaging/telegram/commands.py`
 3. Register in the `if/elif` dispatch chain in `src/adjutant/messaging/dispatch.py`
 4. Add the CLI command in `src/adjutant/cli.py`
-5. Document in `.Claude/agents/adjutant.md` so the agent knows it exists
+5. Document in `.opencode/agents/adjutant.md` so the agent knows it exists
 6. Add unit test at `tests/unit/test_<name>.py`
 7. Add to `docs/guides/commands.md`
 

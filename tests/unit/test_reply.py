@@ -47,10 +47,8 @@ class TestSendReply:
 
     def test_posts_to_telegram_api(self, tmp_path: Path) -> None:
         env_path = self._make_env(tmp_path)
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_response
+        mock_client.post.return_value = {"ok": True}
 
         with patch("adjutant.messaging.telegram.reply.get_client", return_value=mock_client):
             send_reply("Hello!", env_path=str(env_path))
@@ -58,7 +56,7 @@ class TestSendReply:
         mock_client.post.assert_called_once()
         call_kwargs = mock_client.post.call_args
         url = call_kwargs[0][0]
-        payload = call_kwargs[1]["json"]
+        payload = call_kwargs[1]["json_data"]
 
         assert "test-token" in url
         assert "sendMessage" in url
@@ -68,28 +66,24 @@ class TestSendReply:
 
     def test_includes_reply_to_when_set(self, tmp_path: Path) -> None:
         env_path = self._make_env(tmp_path)
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_response
+        mock_client.post.return_value = {"ok": True}
 
         with patch("adjutant.messaging.telegram.reply.get_client", return_value=mock_client):
             send_reply("Hi", reply_to_message_id=99, env_path=str(env_path))
 
-        payload = mock_client.post.call_args[1]["json"]
+        payload = mock_client.post.call_args[1]["json_data"]
         assert payload["reply_to_message_id"] == 99
 
     def test_omits_reply_to_when_none(self, tmp_path: Path) -> None:
         env_path = self._make_env(tmp_path)
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_response
+        mock_client.post.return_value = {"ok": True}
 
         with patch("adjutant.messaging.telegram.reply.get_client", return_value=mock_client):
             send_reply("Hi", env_path=str(env_path))
 
-        payload = mock_client.post.call_args[1]["json"]
+        payload = mock_client.post.call_args[1]["json_data"]
         assert "reply_to_message_id" not in payload
 
     def test_raises_on_empty_message_after_sanitise(self, tmp_path: Path) -> None:
@@ -103,17 +97,13 @@ class TestSendReply:
         with pytest.raises(RuntimeError):
             send_reply("Hello", env_path=str(env_path))
 
-    def test_calls_raise_for_status(self, tmp_path: Path) -> None:
-        """HTTP errors should propagate via raise_for_status."""
-        import httpx
+    def test_raises_on_http_error(self, tmp_path: Path) -> None:
+        """HTTP errors should propagate via HttpClientError."""
+        from adjutant.lib.http import HttpClientError
 
         env_path = self._make_env(tmp_path)
-        mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "400", request=MagicMock(), response=MagicMock()
-        )
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_response
+        mock_client.post.side_effect = HttpClientError("400 Bad Request", status_code=400)
 
         with (
             patch("adjutant.messaging.telegram.reply.get_client", return_value=mock_client),
@@ -130,10 +120,8 @@ class TestMain:
 
     def test_returns_0_on_success(self, tmp_path: Path) -> None:
         env_path = self._make_env(tmp_path)
-        mock_response = MagicMock()
-        mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
-        mock_client.post.return_value = mock_response
+        mock_client.post.return_value = {"ok": True}
 
         with patch("adjutant.messaging.telegram.reply.get_client", return_value=mock_client):
             with patch(

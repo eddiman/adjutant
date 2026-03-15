@@ -24,7 +24,7 @@ Loading context has a cost — both in tokens and latency. Splitting identity in
 
 ## Agent Definition — `.opencode/agents/adjutant.md`
 
-The agent definition loaded by `opencode run --agent adjutant`. This file specifies:
+The agent definition loaded by `opencode run --agent adjutant`. This file lives at `.opencode/agents/adjutant.md`. It specifies:
 - Which identity files to load
 - System prompt instructions for the AI
 - Behavioural constraints

@@ -259,11 +259,16 @@ def emergency_kill(adj_dir: Optional[Path] = None) -> str:
     set_killed(d)
     lines.append("KILLED lockfile created")
 
-    # Terminate OpenCode processes
+    # Terminate OpenCode processes (scoped to this Adjutant's ADJ_DIR)
+    adj_dir_str = str(d)
     lines.append("Terminating OpenCode processes...")
-    _kill_by_pattern("opencode", signal.SIGTERM)
+    _kill_by_pattern(f"opencode.*{adj_dir_str}", signal.SIGTERM)
     time.sleep(2)
-    _kill_by_pattern("opencode", signal.SIGKILL)
+    _kill_by_pattern(f"opencode.*{adj_dir_str}", signal.SIGKILL)
+    # Also kill any opencode processes launched by this Adjutant's listener
+    _kill_by_pattern(f"opencode.*adjutant", signal.SIGTERM)
+    time.sleep(1)
+    _kill_by_pattern(f"opencode.*adjutant", signal.SIGKILL)
     web_pid_file = d / "state" / "opencode_web.pid"
     web_pid_file.unlink(missing_ok=True)
     lines.append("OpenCode processes terminated")

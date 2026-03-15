@@ -25,7 +25,6 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from urllib.parse import quote
 
 
 _BRAVE_API_URL = "https://api.search.brave.com/res/v1/web/search"
@@ -81,9 +80,6 @@ def web_search(
 
     adj_log("search", f"Search requested: {query} (count={count})")
 
-    # URL-encode the query
-    encoded_query = quote(query)
-
     # Call Brave Search API
     try:
         from adjutant.lib.http import get_client, HttpClientError
@@ -92,7 +88,7 @@ def web_search(
         response = client.get(
             _BRAVE_API_URL,
             params={
-                "q": encoded_query,
+                "q": query,
                 "count": str(count),
                 "safesearch": "moderate",
             },

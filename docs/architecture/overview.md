@@ -44,7 +44,7 @@ Everything runs on your machine. There is no server, no cloud component, and no 
 | Lifecycle | `src/adjutant/lifecycle/` | Start, stop, pause, kill, restart, update |
 | Capabilities | `src/adjutant/capabilities/` | Screenshot, vision, knowledge base, schedule, search |
 | Identity | `identity/` | Three-layer agent persona loaded at chat time |
-| OpenCode | `.Claude/` | Agent definition, workspace config, permissions |
+| OpenCode | `.opencode/` | Agent definition, workspace config, permissions |
 
 ---
 

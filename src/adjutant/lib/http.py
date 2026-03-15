@@ -12,7 +12,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 from typing import Any, Optional
 
 import httpx
@@ -29,8 +28,7 @@ class HttpClientError(Exception):
 class HttpClient:
     """Synchronous HTTP client with connection pooling.
 
-    Uses httpx under the hood. Falls back to urllib.request if httpx is
-    somehow unavailable at runtime (defensive — httpx is a declared dep).
+    Uses httpx under the hood.
     """
 
     def __init__(self, timeout: float = 30.0) -> None:
@@ -51,8 +49,36 @@ class HttpClient:
         try:
             response = self._client.get(url, params=params, headers=headers)
             response.raise_for_status()
-            result: dict[str, Any] = response.json()
+            try:
+                result: dict[str, Any] = response.json()
+            except ValueError as e:
+                raise HttpClientError(
+                    f"Invalid JSON in response from {url}: {response.text[:200]}"
+                ) from e
             return result
+        except httpx.HTTPStatusError as e:
+            raise HttpClientError(
+                f"HTTP {e.response.status_code}: {e.response.text[:200]}",
+                status_code=e.response.status_code,
+            ) from e
+        except httpx.RequestError as e:
+            raise HttpClientError(f"Request error: {e}") from e
+
+    def get_text(
+        self,
+        url: str,
+        params: Optional[dict[str, Any]] = None,
+        headers: Optional[dict[str, str]] = None,
+    ) -> str:
+        """Make a GET request and return raw response text (for RSS/HTML feeds).
+
+        Raises:
+            HttpClientError: on any HTTP or network error.
+        """
+        try:
+            response = self._client.get(url, params=params, headers=headers)
+            response.raise_for_status()
+            return response.text
         except httpx.HTTPStatusError as e:
             raise HttpClientError(
                 f"HTTP {e.response.status_code}: {e.response.text[:200]}",

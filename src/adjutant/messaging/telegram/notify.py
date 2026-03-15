@@ -111,6 +111,11 @@ def send_notify(
     client = get_client()
     resp = client.post(url, json_data=payload)
 
+    # Verify Telegram accepted the message before counting it
+    if not resp.get("ok"):
+        error_desc = resp.get("description", "unknown error")
+        raise RuntimeError(f"Telegram API rejected notification: {error_desc}")
+
     new_count = count + 1
     _write_count(state_dir, new_count, today)
     return new_count, max_per_day

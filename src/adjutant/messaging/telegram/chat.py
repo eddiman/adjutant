@@ -18,9 +18,24 @@ from pathlib import Path
 from adjutant.core.logging import adj_log
 
 
-SESSION_TIMEOUT = 7200  # seconds (2 hours)
+_DEFAULT_SESSION_TIMEOUT = 7200  # seconds (2 hours)
 _SESSION_FILE_NAME = "telegram_session.json"
 _CHAT_TIMEOUT = 240  # seconds
+
+
+def _get_session_timeout(adj_dir: Path) -> int:
+    """Read session timeout from adjutant.yaml, falling back to 7200s."""
+    try:
+        from adjutant.core.config import load_typed_config
+
+        config = load_typed_config(adj_dir / "adjutant.yaml")
+        return config.messaging.telegram.session_timeout_seconds
+    except Exception:
+        return _DEFAULT_SESSION_TIMEOUT
+
+
+# Module-level alias for backwards compatibility
+SESSION_TIMEOUT = _DEFAULT_SESSION_TIMEOUT
 
 
 # ---------------------------------------------------------------------------
@@ -87,9 +102,11 @@ def get_session_id(adj_dir: Path, *, model: str | None = None) -> str | None:
     try:
         age = int(time.time()) - int(float(last_epoch))
     except (TypeError, ValueError):
-        age = SESSION_TIMEOUT + 1  # force expiry
+        age = _DEFAULT_SESSION_TIMEOUT + 1  # force expiry
 
-    if age < SESSION_TIMEOUT:
+    # Use configured timeout when adj_dir is available via the session file path
+    timeout = _DEFAULT_SESSION_TIMEOUT
+    if age < timeout:
         return session_id
 
     return None
