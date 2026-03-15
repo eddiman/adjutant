@@ -100,4 +100,13 @@ Append one line to `state/actions.jsonl` (create if it doesn't exist):
 {"ts":"<ISO-8601>","type":"review","kbs_checked":["<names>"],"insights_sent":<n>,"recommendations":["<list>"]}
 ```
 
+### 8. Update long-term memory
+
+If this review surfaced anything worth remembering long-term, update the appropriate memory files:
+- Recurring patterns across KBs → `memory/patterns/workflows.md` or `memory/patterns/exceptions.md`
+- Project facts learned from KB responses → `memory/facts/projects.md`
+- Corrections to previous assumptions → `memory/facts/corrections.md`
+
+Each entry should have a `## YYYY-MM-DD HH:MM` heading. Only write what has lasting value — skip routine "all clear" observations.
+
 Be thorough but concise. This is the one deep review — make it count.
