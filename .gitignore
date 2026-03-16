@@ -19,6 +19,9 @@ news_config.json
 # Knowledge bases — user data, not part of the framework
 knowledge_bases/
 
+# Persistent memory — user-specific
+memory/
+
 # Generated outputs
 journal/
 insights/pending/

@@ -52,7 +52,7 @@ from adjutant.core.paths import AdjutantDirNotFoundError, init_adj_dir
 
 
 @click.group()
-@click.version_option(version="2.0.0", prog_name="adjutant")
+@click.version_option(version="0.1.0", prog_name="adjutant")
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """Adjutant — autonomous agent framework."""
