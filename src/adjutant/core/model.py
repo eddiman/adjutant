@@ -17,8 +17,10 @@ Matches bash chat.sh:get_model() and query.sh:_resolve_model().
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 DEFAULT_MODEL = "anthropic/claude-haiku-4-5"
 

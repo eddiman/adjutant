@@ -10,7 +10,10 @@ and are no-ops for optional methods.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class MessagingAdaptor(ABC):
@@ -50,23 +53,21 @@ class MessagingAdaptor(ABC):
 
     # OPTIONAL (default no-ops)
 
-    async def react(self, message_id: int, emoji: str = "👀") -> None:
+    async def react(self, message_id: int, emoji: str = "👀") -> None:  # noqa: B027
         """Add a reaction emoji to a message. Default: no-op.
 
         Args:
             message_id: The message to react to.
             emoji: The emoji reaction to add.
         """
-        pass
 
-    async def typing(self, action: str, suffix: str = "default") -> None:
+    async def typing(self, action: str, suffix: str = "default") -> None:  # noqa: B027
         """Send a typing indicator. Default: no-op.
 
         Args:
             action: 'start' or 'stop'.
             suffix: Unique key to identify concurrent typing indicators.
         """
-        pass
 
     def authorize(self, from_id: str) -> bool:
         """Check if a sender is authorised. Default: allow all.

@@ -12,6 +12,7 @@ rather than calling the Telegram API directly.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import subprocess
@@ -19,9 +20,9 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from adjutant.core.logging import adj_log
-
 
 # ---------------------------------------------------------------------------
 # Model selection state
@@ -42,7 +43,7 @@ async def _fetch_available_models() -> list[str]:
         )
         stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
         return [line for line in stdout.decode(errors="replace").splitlines() if line.strip()]
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort model listing
         return []
 
 
@@ -99,15 +100,19 @@ def _save_pending_model(adj_dir: Path, matches: list[str], query: str) -> None:
     )
 
 
-def _load_pending_model(adj_dir: Path) -> dict | None:
+def _load_pending_model(adj_dir: Path) -> dict[str, Any] | None:
     state = adj_dir / "state" / _PENDING_MODEL_FILE
     if not state.is_file():
         return None
     try:
-        data = json.loads(state.read_text())
+        raw = json.loads(state.read_text())
     except (json.JSONDecodeError, OSError):
         _clear_pending_model(adj_dir)
         return None
+    if not isinstance(raw, dict):
+        _clear_pending_model(adj_dir)
+        return None
+    data: dict[str, Any] = raw
     # Auto-expire
     if int(time.time()) - data.get("timestamp", 0) > _PENDING_MODEL_TTL:
         _clear_pending_model(adj_dir)
@@ -117,10 +122,8 @@ def _load_pending_model(adj_dir: Path) -> dict | None:
 
 def _clear_pending_model(adj_dir: Path) -> None:
     state = adj_dir / "state" / _PENDING_MODEL_FILE
-    try:
+    with contextlib.suppress(OSError):
         state.unlink(missing_ok=True)
-    except OSError:
-        pass
 
 
 def _format_match_list(matches: list[str]) -> str:
@@ -198,7 +201,10 @@ async def _run_opencode_prompt(
     reply = parsed.text.strip()
 
     if not reply and result.returncode != 0:
-        return f"The operation ran into an error (exit {result.returncode}). Check adjutant.log for details."
+        return (
+            f"The operation ran into an error (exit {result.returncode}). "
+            "Check adjutant.log for details."
+        )
 
     return reply[:3800]
 
@@ -350,7 +356,8 @@ async def cmd_pulse(
         heartbeat_file = adj_dir / "state" / "last_heartbeat.json"
         if not heartbeat_file.is_file():
             _send(
-                "I don't have any pulse data yet. Run a pulse from inside OpenCode first and I'll have something to show you.",
+                "I don't have any pulse data yet. Run a pulse from inside "
+                "OpenCode first and I'll have something to show you.",
                 message_id,
                 bot_token=bot_token,
                 chat_id=chat_id,
@@ -373,7 +380,7 @@ async def cmd_pulse(
                 bot_token=bot_token,
                 chat_id=chat_id,
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 — non-fatal, send user fallback
             _send(
                 "I don't have any pulse data yet.",
                 message_id,
@@ -468,8 +475,10 @@ async def cmd_reflect_request(
     pending_reflect.parent.mkdir(parents=True, exist_ok=True)
     pending_reflect.touch()
     _send(
-        "Starting a full reflection — this goes deeper than a pulse and may take a couple of minutes. "
-        "Reply */confirm* if you'd like me to go ahead, or send anything else to cancel.",
+        "Starting a full reflection — this goes deeper than a pulse "
+        "and may take a couple of minutes. "
+        "Reply */confirm* if you'd like me to go ahead, "
+        "or send anything else to cancel.",
         message_id,
         bot_token=bot_token,
         chat_id=chat_id,
@@ -488,10 +497,8 @@ async def cmd_reflect_confirm(
     import shutil
 
     pending_reflect = adj_dir / "state" / "pending_reflect"
-    try:
+    with contextlib.suppress(FileNotFoundError):
         pending_reflect.unlink()
-    except FileNotFoundError:
-        pass
 
     _send(
         "Great, I'm starting the reflection now — this usually takes a minute or two.",
@@ -538,28 +545,42 @@ async def cmd_help(
     help_text = """\
 Here's what I can do for you:
 
-You can just talk to me naturally — ask about your projects, priorities, upcoming events, or anything in your files and I'll look it up and answer.
+You can just talk to me naturally — ask about your projects, \
+priorities, upcoming events, or anything in your files \
+and I'll look it up and answer.
 
 Or use a command:
-/status — I'll tell you if I'm running or paused, show registered scheduled jobs, and when I last checked in.
-/pulse — I'll run a quick check across your projects and summarise what I find.
+/status — I'll tell you if I'm running or paused, show \
+registered scheduled jobs, and when I last checked in.
+/pulse — I'll run a quick check across your projects \
+and summarise what I find.
 /restart — Restart all services (listener, opencode web).
-/reflect — I'll run a deep review using Sonnet (I'll ask you to confirm first).
-/screenshot <url> — Take a full-page screenshot of any website and send it here.
-/search <query> — Search the web via Brave Search and return top results.
-/kb — List knowledge bases or query one (/kb query <name> <question>).
-/schedule — List scheduled jobs or manage them (/schedule run <name>, /schedule enable <name>, /schedule disable <name>).
-/pause — I'll stop monitoring until you're ready for me to resume.
+/reflect — I'll run a deep review using Sonnet \
+(I'll ask you to confirm first).
+/screenshot <url> — Take a full-page screenshot of any \
+website and send it here.
+/search <query> — Search the web via Brave Search \
+and return top results.
+/kb — List knowledge bases or query one \
+(/kb query <name> <question>).
+/schedule — List scheduled jobs or manage them \
+(/schedule run|enable|disable <name>).
+/pause — I'll stop monitoring until you're ready \
+for me to resume.
 /resume — I'll pick back up where I left off.
 /model — Show current model, or switch with /model <name>.
-/remember <text> — Save something to long-term memory (auto-classified).
+/remember <text> — Save something to long-term memory \
+(auto-classified).
 /forget <topic> — Archive memory entries matching a topic.
-/recall [query] — Search long-term memory (or show the index).
-/digest — Compress recent journal entries into a weekly memory summary.
-/kill — Emergency shutdown. Terminates all Adjutant processes and locks system. Use `adjutant start` to recover.
+/recall [query] — Search long-term memory (or show index).
+/digest — Compress recent journal entries into a weekly \
+memory summary.
+/kill — Emergency shutdown. Terminates all Adjutant \
+processes and locks system. Use `adjutant start` to recover.
 /help — Shows this message.
 
-You can also send me a photo — I'll store it locally and tell you what I see.\
+You can also send me a photo — I'll store it locally \
+and tell you what I see.\
 """
     _send(help_text, message_id, bot_token=bot_token, chat_id=chat_id)
 
@@ -578,10 +599,8 @@ def _switch_model(adj_dir: Path, new_model: str) -> None:
     # Clear the chat session — opencode hangs when resuming a session with a
     # different model, so every model switch must start a fresh session.
     session_file = adj_dir / "state" / "telegram_session.json"
-    try:
+    with contextlib.suppress(OSError):
         session_file.unlink(missing_ok=True)
-    except OSError:
-        pass
 
     _clear_pending_model(adj_dir)
     adj_log("telegram", f"Model switched to {new_model} (session cleared)")
@@ -698,10 +717,7 @@ async def cmd_model(
     # --- /model (no arg) — show current + list ---
     if not arg:
         available = await _fetch_available_models()
-        if available:
-            model_list = "\n".join(available[:30])
-        else:
-            model_list = "(could not retrieve model list)"
+        model_list = "\n".join(available[:30]) if available else "(could not retrieve model list)"
 
         _send(
             f"Current model: *{current_model}*\n\n"
@@ -871,7 +887,7 @@ async def cmd_search(
     try:
         from adjutant.capabilities.search.search import run_search
 
-        result = await asyncio.to_thread(run_search, query, adj_dir)
+        result = await asyncio.to_thread(run_search, query, 5, adj_dir)
     except Exception as exc:
         adj_log("telegram", f"Search error for '{query}': {exc}")
         result = f"ERROR:{exc}"
@@ -1032,7 +1048,9 @@ async def cmd_kb(
 
     # Unknown action
     _send(
-        "Usage: /kb list — show knowledge bases\n/kb query <name> <question> — ask a KB\n/kb write <name> <instruction> — write to a KB (background)",
+        "Usage: /kb list — show knowledge bases\n"
+        "/kb query <name> <question> — ask a KB\n"
+        "/kb write <name> <instruction> — write to a KB (background)",
         message_id,
         bot_token=bot_token,
         chat_id=chat_id,
@@ -1056,7 +1074,6 @@ async def cmd_schedule(
     from adjutant.capabilities.schedule.manage import (
         schedule_count,
         schedule_exists,
-        schedule_get_field,
         schedule_list,
         schedule_set_enabled,
     )

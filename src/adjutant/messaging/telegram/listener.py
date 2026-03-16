@@ -20,13 +20,13 @@ Run as: python -m adjutant.messaging.telegram.listener
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import sys
-import time
 from pathlib import Path
+from typing import Any
 
 from adjutant.core.logging import adj_log
-
 
 _POLL_TIMEOUT = 10  # seconds — long-poll interval passed to Telegram
 _REAP_INTERVAL = 6  # poll cycles between opencode_reap calls
@@ -61,16 +61,14 @@ def _load_offset(adj_dir: Path) -> int:
 
 
 def _save_offset(adj_dir: Path, offset: int) -> None:
-    try:
+    with contextlib.suppress(OSError):
         (adj_dir / "state" / _OFFSET_FILE_NAME).write_text(str(offset) + "\n")
-    except OSError:
-        pass
 
 
 async def _poll_once(
     bot_token: str,
     offset: int,
-) -> list[dict] | None:
+) -> list[dict[str, Any]] | None:
     """Call getUpdates and return the result list, or None on error."""
     from adjutant.lib.http import get_client
 
@@ -118,10 +116,10 @@ async def _watchdog_check_web(adj_dir: Path) -> None:
 
     # Stale PID file — process is dead
     try:
-        stale_pid = int(web_pid_file.read_text().strip())
-    except (ValueError, OSError):
-        stale_pid = "?"
-    adj_log("telegram", f"Watchdog: opencode web (PID {stale_pid}) is dead — restarting")
+        stale_pid_str = web_pid_file.read_text().strip()
+    except OSError:
+        stale_pid_str = "?"
+    adj_log("telegram", f"Watchdog: opencode web (PID {stale_pid_str}) is dead — restarting")
     web_pid_file.unlink(missing_ok=True)
     result = await asyncio.to_thread(start_opencode_web, adj_dir)
     adj_log("telegram", f"Watchdog: {result}")

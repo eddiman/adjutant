@@ -18,7 +18,7 @@ import json
 import shutil
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adjutant.setup.wizard import (
     BOLD,
@@ -31,6 +31,9 @@ from adjutant.setup.wizard import (
     wiz_step,
     wiz_warn,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Module-level wizard state
 WIZARD_FEATURES_NEWS: bool = False
@@ -86,7 +89,7 @@ def _playwright_available() -> bool:
             timeout=15,
         )
         return result.returncode == 0
-    except Exception:
+    except Exception:  # noqa: BLE001 — graceful degradation on check failure
         return False
 
 
@@ -145,8 +148,8 @@ def _update_feature_in_yaml(adj_dir: Path, feature: str, enabled: bool) -> None:
             feat_block["enabled"] = enabled
         with open(config_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-    except Exception:
-        pass  # best-effort; don't crash wizard
+    except Exception:  # noqa: BLE001 — best-effort config write
+        pass
 
 
 def _update_config(adj_dir: Path, *, dry_run: bool = False) -> None:
@@ -166,7 +169,7 @@ def _update_config(adj_dir: Path, *, dry_run: bool = False) -> None:
 
         if schedule_exists(config_path, "news_briefing"):
             schedule_set_enabled(config_path, "news_briefing", WIZARD_FEATURES_NEWS)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort schedule toggle
         pass
 
 
@@ -280,7 +283,8 @@ def step_features(adj_dir: Path, *, dry_run: bool = False) -> bool:
             else:
                 WIZARD_FEATURES_SEARCH = False
                 wiz_info(
-                    "Web search disabled (no key provided — add BRAVE_API_KEY to .env later to enable)"
+                    "Web search disabled (no key provided"
+                    " — add BRAVE_API_KEY to .env later to enable)"
                 )
     else:
         WIZARD_FEATURES_SEARCH = False

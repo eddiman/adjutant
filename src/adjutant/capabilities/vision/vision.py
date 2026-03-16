@@ -21,7 +21,6 @@ import os
 import sys
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Model resolution
 # ---------------------------------------------------------------------------
@@ -40,7 +39,7 @@ def _get_vision_model_from_config(adj_dir: Path) -> str:
         config = load_typed_config(adj_dir / "adjutant.yaml")
         model = config.features.vision.model
         return model.strip() if model else ""
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to default model
         return ""
 
 

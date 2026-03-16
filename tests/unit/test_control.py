@@ -17,11 +17,6 @@ from adjutant.lifecycle.control import (
     restart,
     emergency_kill,
     startup,
-    main_pause,
-    main_resume,
-    main_restart,
-    main_emergency_kill,
-    main_startup,
     _adj_dir,
     _timestamp,
     _kill_by_pattern,
@@ -331,44 +326,42 @@ class TestRestart:
 
 
 # ---------------------------------------------------------------------------
-# main_* entrypoints
+# Direct function calls — error paths
 # ---------------------------------------------------------------------------
 
 
-class TestMainEntrypoints:
-    def test_main_pause(self, adj, monkeypatch, capsys):
+class TestDirectFunctionErrors:
+    def test_pause_returns_message(self, adj, monkeypatch):
         monkeypatch.setenv("ADJ_DIR", str(adj))
-        rc = main_pause()
-        assert rc == 0
-        assert "paused" in capsys.readouterr().out.lower()
+        result = pause(adj)
+        assert "paused" in result.lower()
 
-    def test_main_resume(self, adj, monkeypatch, capsys):
+    def test_resume_returns_message(self, adj, monkeypatch):
         monkeypatch.setenv("ADJ_DIR", str(adj))
-        rc = main_resume()
-        assert rc == 0
-        assert "resumed" in capsys.readouterr().out.lower()
+        result = resume(adj)
+        assert "resumed" in result.lower()
 
-    def test_main_pause_no_adj_dir(self, monkeypatch, capsys):
+    def test_pause_no_adj_dir_raises(self, monkeypatch):
         monkeypatch.delenv("ADJ_DIR", raising=False)
-        rc = main_pause()
-        assert rc == 1
+        with pytest.raises(RuntimeError):
+            pause()
 
-    def test_main_resume_no_adj_dir(self, monkeypatch, capsys):
+    def test_resume_no_adj_dir_raises(self, monkeypatch):
         monkeypatch.delenv("ADJ_DIR", raising=False)
-        rc = main_resume()
-        assert rc == 1
+        with pytest.raises(RuntimeError):
+            resume()
 
-    def test_main_restart_no_adj_dir(self, monkeypatch):
+    def test_restart_no_adj_dir_raises(self, monkeypatch):
         monkeypatch.delenv("ADJ_DIR", raising=False)
-        rc = main_restart()
-        assert rc == 1
+        with pytest.raises(RuntimeError):
+            restart()
 
-    def test_main_emergency_kill_no_adj_dir(self, monkeypatch):
+    def test_emergency_kill_no_adj_dir_raises(self, monkeypatch):
         monkeypatch.delenv("ADJ_DIR", raising=False)
-        rc = main_emergency_kill()
-        assert rc == 1
+        with pytest.raises(RuntimeError):
+            emergency_kill()
 
-    def test_main_startup_no_adj_dir(self, monkeypatch):
+    def test_startup_no_adj_dir_raises(self, monkeypatch):
         monkeypatch.delenv("ADJ_DIR", raising=False)
-        rc = main_startup()
-        assert rc == 1
+        with pytest.raises(RuntimeError):
+            startup()

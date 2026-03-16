@@ -36,9 +36,7 @@ dev = [
 screenshot = [
     "playwright>=1.40",
 ]
-news = [
-    "feedparser>=6.0",
-]
+news = []
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/adjutant"]

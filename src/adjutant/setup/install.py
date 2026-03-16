@@ -17,21 +17,19 @@ Environment variables (all optional):
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Optional
-from urllib.request import urlopen, Request
 from urllib.error import URLError
-import json
+from urllib.request import Request, urlopen
 
 # ---------------------------------------------------------------------------
 # Colour helpers — delegates to wizard.py for NO_COLOR compliance
 # ---------------------------------------------------------------------------
-
 from adjutant.setup.wizard import BOLD, CYAN, GREEN, RED, RESET, YELLOW  # noqa: E402
 
 
@@ -73,12 +71,12 @@ def check_prerequisites() -> None:
     info("Checking prerequisites...")
     failed = False
 
-    # python3 (we're already running in Python, but check it's ≥ 3.9)
+    # python3 (we're already running in Python, but check it's >= 3.11)
     py_ver = sys.version_info
-    if py_ver >= (3, 9):
-        ok(f"python3 {py_ver.major}.{py_ver.minor}.{py_ver.micro} (>= 3.9)")
+    if py_ver >= (3, 11):
+        ok(f"python3 {py_ver.major}.{py_ver.minor}.{py_ver.micro} (>= 3.11)")
     else:
-        warn(f"python3 3.9+ required (found {py_ver.major}.{py_ver.minor})")
+        warn(f"python3 3.11+ required (found {py_ver.major}.{py_ver.minor})")
         failed = True
 
     # curl (optional: used for display; urllib handles downloads)
@@ -172,9 +170,8 @@ def resolve_version() -> str:
             die(f"Could not fetch latest release from {api_url}: {exc}")
 
     if not version or version == "null":
-        die(
-            f"No releases found at https://api.github.com/repos/{os.environ.get('ADJUTANT_REPO', 'eddiman/adjutant')}."
-        )
+        repo = os.environ.get("ADJUTANT_REPO", "eddiman/adjutant")
+        die(f"No releases found at https://api.github.com/repos/{repo}.")
 
     return version
 

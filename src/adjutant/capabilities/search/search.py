@@ -25,7 +25,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-
+from typing import Any
 
 _BRAVE_API_URL = "https://api.search.brave.com/res/v1/web/search"
 _DEFAULT_COUNT = 5
@@ -82,7 +82,7 @@ def web_search(
 
     # Call Brave Search API
     try:
-        from adjutant.lib.http import get_client, HttpClientError
+        from adjutant.lib.http import get_client
 
         client = get_client()
         response = client.get(
@@ -103,7 +103,7 @@ def web_search(
         return f"ERROR: Brave Search API request failed — {error_str}"
 
     # Extract results
-    web_results = []
+    web_results: list[dict[str, Any]] = []
     if isinstance(response, dict):
         web_data = response.get("web", {})
         if isinstance(web_data, dict):

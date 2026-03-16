@@ -15,11 +15,13 @@ from __future__ import annotations
 import re
 import threading
 import time
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adjutant.core.logging import adj_log
 from adjutant.lib.http import get_client
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Telegram maximum message length
 _TELEGRAM_MAX_LEN = 4000
@@ -233,7 +235,7 @@ def msg_typing_start(
             try:
                 client = get_client()
                 client.post(url, json_data=payload)
-            except Exception:
+            except Exception:  # noqa: BLE001 — non-fatal typing indicator
                 pass
             stop_event.wait(min(4.0, remaining))
 

@@ -22,7 +22,7 @@ from pathlib import Path
 import psutil
 
 from adjutant.core.logging import adj_log
-from adjutant.core.process import kill_graceful, pid_is_alive, read_pid_file
+from adjutant.core.process import pid_is_alive, read_pid_file
 
 
 @dataclass
@@ -136,12 +136,12 @@ async def opencode_run(
             stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         else:
             stdout_bytes, stderr_bytes = await proc.communicate()
-    except asyncio.TimeoutError:
+    except TimeoutError:
         # Clean up the subprocess on timeout
         proc.terminate()
         try:
             await asyncio.wait_for(proc.wait(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
         timed_out = True
@@ -274,7 +274,7 @@ async def opencode_health_check(adj_dir: Path | None = None) -> bool:
             async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.get(base_url)
                 return resp.status_code == 200
-        except Exception:
+        except Exception:  # noqa: BLE001 — probe returns False on any error
             return False
 
     async def _api_probe() -> bool:

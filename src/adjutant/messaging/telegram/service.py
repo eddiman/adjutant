@@ -15,6 +15,7 @@ PID tracking (three-tier, priority order):
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import sys
 import time
@@ -22,7 +23,6 @@ from pathlib import Path
 
 from adjutant.core.logging import adj_log
 from adjutant.core.process import find_by_cmdline, kill_graceful, pid_is_alive, read_pid_file
-
 
 _LISTENER_MODULE = "adjutant.messaging.telegram.listener"
 _PIDFILE_NAME = "telegram.pid"
@@ -63,9 +63,9 @@ def _find_listener_pid(adj_dir: Path) -> int | None:
     # 2. telegram.pid
     pidfile, _, _, _ = _paths(adj_dir)
     if pidfile.is_file():
-        pid = read_pid_file(pidfile)
-        if pid is not None:
-            return pid
+        file_pid = read_pid_file(pidfile)
+        if file_pid is not None:
+            return file_pid
 
     # 3. psutil fallback
     procs = find_by_cmdline(_LISTENER_MODULE)
@@ -93,17 +93,13 @@ def listener_start(adj_dir: Path) -> str:
     existing_pid = _find_listener_pid(adj_dir)
     if existing_pid is not None:
         # Sync pidfile in case it drifted
-        try:
+        with contextlib.suppress(OSError):
             pidfile.write_text(str(existing_pid))
-        except OSError:
-            pass
         return f"Already running (PID {existing_pid})"
 
     # Clean up stale tracking files
-    try:
+    with contextlib.suppress(OSError):
         pidfile.unlink(missing_ok=True)
-    except OSError:
-        pass
     import shutil
 
     shutil.rmtree(lockdir, ignore_errors=True)
@@ -124,10 +120,8 @@ def listener_start(adj_dir: Path) -> str:
     log_fh.close()
 
     # Write launcher PID immediately
-    try:
+    with contextlib.suppress(OSError):
         pidfile.write_text(str(proc.pid))
-    except OSError:
-        pass
 
     adj_log("service", f"Listener launched (launcher PID {proc.pid})")
 
@@ -140,10 +134,8 @@ def listener_start(adj_dir: Path) -> str:
                 real_pid = int(lockpid.read_text().strip())
                 if pid_is_alive(real_pid):
                     # Sync pidfile to the real listener PID
-                    try:
+                    with contextlib.suppress(OSError):
                         pidfile.write_text(str(real_pid))
-                    except OSError:
-                        pass
                     adj_log("service", f"Listener confirmed (PID {real_pid})")
                     started = True
                     return f"Started (PID {real_pid})"
@@ -155,10 +147,8 @@ def listener_start(adj_dir: Path) -> str:
         if pid_is_alive(proc.pid):
             return f"Started (PID {proc.pid}) — but listener.lock not yet created"
         else:
-            try:
+            with contextlib.suppress(OSError):
                 pidfile.unlink(missing_ok=True)
-            except OSError:
-                pass
             return f"Failed to start (check {logfile})"
 
     return f"Started (PID {proc.pid})"
@@ -183,14 +173,12 @@ def listener_stop(adj_dir: Path) -> str:
     for proc in find_by_cmdline(_LISTENER_MODULE):
         try:
             kill_graceful(proc.pid, timeout=2.0)
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort orphan cleanup
             pass
 
     # Clean up tracking files
-    try:
+    with contextlib.suppress(OSError):
         pidfile.unlink(missing_ok=True)
-    except OSError:
-        pass
     import shutil
 
     shutil.rmtree(lockdir, ignore_errors=True)
@@ -222,17 +210,13 @@ def listener_status(adj_dir: Path) -> str:
     pid = _find_listener_pid(adj_dir)
     if pid is not None:
         # Sync pidfile if it drifted
-        try:
+        with contextlib.suppress(OSError):
             pidfile.write_text(str(pid))
-        except OSError:
-            pass
         return f"Running (PID {pid})"
     else:
         # Clean up stale files
-        try:
+        with contextlib.suppress(OSError):
             pidfile.unlink(missing_ok=True)
-        except OSError:
-            pass
         import shutil
 
         shutil.rmtree(lockdir, ignore_errors=True)
@@ -270,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     elif command == "status":
         print(listener_status(adj_dir))
     else:
-        print(f"Usage: service.py {{start|stop|restart|status}}", file=sys.stderr)
+        print("Usage: service.py {start|stop|restart|status}", file=sys.stderr)
         return 1
 
     return 0

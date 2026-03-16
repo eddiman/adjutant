@@ -11,9 +11,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 
 def _adj_dir() -> Path:
@@ -74,7 +74,7 @@ def _cron_human(expr: str) -> str:
 def _format_timestamp(raw: str) -> str:
     """Parse an ISO-8601 UTC timestamp and format as 'Mon 09 Mar at 14:00'."""
     try:
-        dt = datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        dt = datetime.strptime(raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
         return dt.strftime("%a %d %b at %H:%M")
     except (ValueError, TypeError):
         return raw or ""
@@ -93,7 +93,7 @@ def _live_crontab() -> str:
         return ""
 
 
-def _load_schedules(adj_dir: Path) -> list[dict]:
+def _load_schedules(adj_dir: Path) -> list[dict[str, Any]]:
     """Load schedule list from adjutant.yaml via the typed config."""
     try:
         from adjutant.core.config import load_typed_config
@@ -112,7 +112,7 @@ def _load_schedules(adj_dir: Path) -> list[dict]:
             for s in config.schedules
             if s.name
         ]
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to empty schedule list
         return []
 
 
@@ -210,7 +210,7 @@ def _notifications_section(adj_dir: Path) -> str:
 
         cfg = load_typed_config(adj_dir / "adjutant.yaml")
         max_per_day = cfg.notifications.max_per_day
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to default limit
         max_per_day = 3
 
     if count == 0:
@@ -225,7 +225,7 @@ def _actions_section(adj_dir: Path) -> str:
 
     lines = actions_file.read_text().splitlines()
     # last 5 non-empty lines
-    recent = [l for l in lines if l.strip()][-5:]
+    recent = [entry for entry in lines if entry.strip()][-5:]
     if not recent:
         return ""
 
@@ -245,7 +245,7 @@ def _actions_section(adj_dir: Path) -> str:
     return "\n".join(parts)
 
 
-def get_status(adj_dir: Optional[Path] = None) -> str:
+def get_status(adj_dir: Path | None = None) -> str:
     """Return a human-readable status report string.
 
     Args:

@@ -18,11 +18,10 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Optional
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -63,7 +62,7 @@ def _load_registry(registry_path: Path) -> list[KBEntry]:
         return []
 
     entries: list[KBEntry] = []
-    current: Optional[KBEntry] = None
+    current: KBEntry | None = None
 
     for line in registry_path.read_text().splitlines():
         m = _ENTRY_START.match(line)
@@ -209,7 +208,7 @@ def kb_register(
     description: str,
     model: str = "inherit",
     access: str = "read-only",
-    created: Optional[str] = None,
+    created: str | None = None,
 ) -> None:
     """Register a KB in the registry.
 
@@ -274,7 +273,7 @@ def _write_kb_opencode_json(kb_path: Path, access: str) -> None:
     Read-write KBs additionally get edit/write allowed (implicit by
     omitting deny rules for those tools). Read-only KBs get edit denied.
     """
-    permission: dict = {
+    permission: dict[str, Any] = {
         "external_directory": "deny",
         "read": {
             "*": "allow",

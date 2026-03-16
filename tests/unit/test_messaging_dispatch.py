@@ -325,3 +325,95 @@ class TestDispatchPhoto:
 
         assert len(handle_called) == 1
         assert handle_called[0] == (CHAT, "file123")
+
+
+# ---------------------------------------------------------------------------
+# dispatch_message — feature gate fail-closed
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchMessageFeatureGateFailClosed:
+    @pytest.mark.asyncio
+    async def test_rejects_gated_command_when_config_unparseable(self, tmp_path: Path) -> None:
+        """Feature gate must fail closed: corrupt config → defaults → features disabled."""
+        # Write invalid YAML — load_typed_config returns defaults (features disabled)
+        config = tmp_path / "adjutant.yaml"
+        config.write_text("{{invalid yaml!!")
+
+        sent: list[str] = []
+
+        def _fake_send(
+            msg: str, reply_to: int | None = None, *, bot_token: str, chat_id: str
+        ) -> None:
+            sent.append(msg)
+
+        with patch("adjutant.messaging.telegram.send.msg_send_text", _fake_send):
+            with patch("adjutant.messaging.dispatch._check_rate_limit", return_value=True):
+                await dispatch_message(
+                    "/screenshot https://example.com",
+                    1,
+                    CHAT,
+                    tmp_path,
+                    bot_token=BOT,
+                    chat_id=CHAT,
+                )
+
+        # Command should be rejected (feature disabled in defaults)
+        assert any("not enabled" in m.lower() for m in sent)
+
+    @pytest.mark.asyncio
+    async def test_rejects_gated_command_when_config_load_raises(self, tmp_path: Path) -> None:
+        """Feature gate must fail closed even if load_typed_config raises unexpectedly."""
+        config = tmp_path / "adjutant.yaml"
+        config.write_text("features:\n  screenshot:\n    enabled: true\n")
+
+        sent: list[str] = []
+
+        def _fake_send(
+            msg: str, reply_to: int | None = None, *, bot_token: str, chat_id: str
+        ) -> None:
+            sent.append(msg)
+
+        def _raise(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("simulated config load failure")
+
+        with patch("adjutant.messaging.telegram.send.msg_send_text", _fake_send):
+            with patch("adjutant.messaging.dispatch._check_rate_limit", return_value=True):
+                with patch("adjutant.core.config.load_typed_config", side_effect=_raise):
+                    await dispatch_message(
+                        "/screenshot https://example.com",
+                        1,
+                        CHAT,
+                        tmp_path,
+                        bot_token=BOT,
+                        chat_id=CHAT,
+                    )
+
+        # Command should be rejected, not allowed through
+        assert any("rejected" in m.lower() or "config error" in m.lower() for m in sent)
+
+    @pytest.mark.asyncio
+    async def test_rejects_search_when_config_unparseable(self, tmp_path: Path) -> None:
+        config = tmp_path / "adjutant.yaml"
+        config.write_text("not: [valid: yaml")
+
+        sent: list[str] = []
+
+        def _fake_send(
+            msg: str, reply_to: int | None = None, *, bot_token: str, chat_id: str
+        ) -> None:
+            sent.append(msg)
+
+        with patch("adjutant.messaging.telegram.send.msg_send_text", _fake_send):
+            with patch("adjutant.messaging.dispatch._check_rate_limit", return_value=True):
+                await dispatch_message(
+                    "/search test query",
+                    1,
+                    CHAT,
+                    tmp_path,
+                    bot_token=BOT,
+                    chat_id=CHAT,
+                )
+
+        # Corrupt config → defaults → features disabled → rejected
+        assert any("not enabled" in m.lower() for m in sent)

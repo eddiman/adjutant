@@ -12,7 +12,7 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -20,7 +20,7 @@ import httpx
 class HttpClientError(Exception):
     """Raised when an HTTP request fails."""
 
-    def __init__(self, message: str, status_code: Optional[int] = None) -> None:
+    def __init__(self, message: str, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
 
@@ -38,8 +38,8 @@ class HttpClient:
     def get(
         self,
         url: str,
-        params: Optional[dict[str, Any]] = None,
-        headers: Optional[dict[str, str]] = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Make a GET request and return parsed JSON.
 
@@ -67,8 +67,8 @@ class HttpClient:
     def get_text(
         self,
         url: str,
-        params: Optional[dict[str, Any]] = None,
-        headers: Optional[dict[str, str]] = None,
+        params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> str:
         """Make a GET request and return raw response text (for RSS/HTML feeds).
 
@@ -90,9 +90,9 @@ class HttpClient:
     def post(
         self,
         url: str,
-        json_data: Optional[dict[str, Any]] = None,
-        data: Optional[dict[str, Any]] = None,
-        headers: Optional[dict[str, str]] = None,
+        json_data: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Make a POST request and return parsed JSON.
 
@@ -120,7 +120,7 @@ class HttpClient:
         """Close the underlying connection pool."""
         self._client.close()
 
-    def __enter__(self) -> "HttpClient":
+    def __enter__(self) -> HttpClient:
         return self
 
     def __exit__(self, *args: Any) -> None:
@@ -131,7 +131,7 @@ class HttpClient:
 # Module-level singleton for connection reuse across requests
 # ---------------------------------------------------------------------------
 
-_client: Optional[HttpClient] = None
+_client: HttpClient | None = None
 
 
 def get_client() -> HttpClient:

@@ -18,9 +18,9 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
 # ANSI colour codes
 _GREEN = "\033[0;32m"
@@ -48,7 +48,7 @@ def _adj_dir() -> Path:
 
 
 def _iso_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _compute_cost(input_tokens: int, output_tokens: int, model: str) -> float:
@@ -92,8 +92,8 @@ def log_usage(
     input_tokens: int,
     output_tokens: int,
     model: str = "sonnet",
-    adj_dir: Optional[Path] = None,
-) -> dict:
+    adj_dir: Path | None = None,
+) -> dict[str, Any]:
     """Log a usage event and return a summary dict.
 
     Args:
@@ -137,7 +137,7 @@ def log_usage(
         session_cap = cfg.llm.caps.session_tokens
         session_window_hours = cfg.llm.caps.session_window_hours
         week_cap = cfg.llm.caps.weekly_tokens
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to default caps
         session_cap = _DEFAULT_SESSION_CAP
         session_window_hours = _DEFAULT_SESSION_WINDOW_HOURS
         week_cap = _DEFAULT_WEEKLY_CAP
@@ -168,7 +168,7 @@ def log_usage(
     }
 
 
-def format_report(summary: dict, colour: bool = True) -> str:
+def format_report(summary: dict[str, Any], colour: bool = True) -> str:
     """Format a usage summary dict as a human-readable report string."""
     g = _GREEN if colour else ""
     y = _YELLOW if colour else ""

@@ -44,7 +44,7 @@ Subcommands:
 
 from __future__ import annotations
 
-import sys
+import contextlib
 
 import click
 
@@ -355,9 +355,10 @@ def kb_query_cmd(
         click.echo("Adjutant directory not found.", err=True)
         raise SystemExit(1)
 
+    from pathlib import Path as _Path
+
     from adjutant.capabilities.kb.query import KBQueryError, kb_query, kb_query_by_path
     from adjutant.core.opencode import OpenCodeNotFoundError
-    from pathlib import Path as _Path
 
     try:
         if kb_path:
@@ -402,9 +403,10 @@ def kb_write_cmd(
         click.echo("Adjutant directory not found.", err=True)
         raise SystemExit(1)
 
+    from pathlib import Path as _Path
+
     from adjutant.capabilities.kb.query import KBQueryError, kb_write, kb_write_by_path
     from adjutant.core.opencode import OpenCodeNotFoundError
-    from pathlib import Path as _Path
 
     try:
         if kb_path:
@@ -630,10 +632,8 @@ def logs(ctx: click.Context) -> None:
         click.echo(f"No log file found in {adj_dir}/state/", err=True)
         raise SystemExit(1)
 
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         subprocess.run(["tail", "-f", str(log_file)], check=False)
-    except KeyboardInterrupt:
-        pass
 
 
 # ---------------------------------------------------------------------------
@@ -855,7 +855,7 @@ def schedule_run_cmd(ctx: click.Context, name: str) -> None:
         click.echo("Adjutant directory not found.", err=True)
         raise SystemExit(1)
 
-    from adjutant.capabilities.schedule.manage import _resolve_command, schedule_get
+    from adjutant.capabilities.schedule.manage import resolve_command, schedule_get
 
     config_path = Path(adj_dir) / "adjutant.yaml"
     entry = schedule_get(config_path, name)
@@ -865,7 +865,7 @@ def schedule_run_cmd(ctx: click.Context, name: str) -> None:
 
     import subprocess
 
-    cmd = _resolve_command(entry, adj_dir)
+    cmd = resolve_command(entry, adj_dir)
     click.echo(f"Running: {cmd}")
     subprocess.run(cmd, shell=True, check=False)
 
@@ -898,7 +898,7 @@ def kb_create_cmd(
         click.echo("Adjutant directory not found.", err=True)
         raise SystemExit(1)
 
-    from adjutant.setup.steps.kb_wizard import kb_wizard_interactive, kb_quick_create
+    from adjutant.setup.steps.kb_wizard import kb_quick_create, kb_wizard_interactive
 
     try:
         if quick:

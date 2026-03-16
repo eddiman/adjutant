@@ -21,7 +21,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -73,7 +72,7 @@ def analyze_news(adj_dir: Path | None = None) -> str:
     adj_log("news-analyze", f"Starting news analysis for {today}")
 
     try:
-        raw_items: list[dict] = json.loads(raw_file.read_text())
+        raw_items: list[dict[str, Any]] = json.loads(raw_file.read_text())
     except (json.JSONDecodeError, OSError) as exc:
         return f"ERROR:Failed to read raw file: {exc}"
 
@@ -131,7 +130,8 @@ def analyze_news(adj_dir: Path | None = None) -> str:
         f"Pick the top {top_n} most interesting/novel items. Prioritize: new models, "
         "frameworks, research papers, implementations, significant benchmarks.\n\n"
         "Return ONLY a JSON array (no other text):\n"
-        '[\n  {"rank": 1, "title": "...", "url": "...", "summary": "One sentence why it matters"}\n]'
+        '[\n  {"rank": 1, "title": "...", "url": "...", '
+        '"summary": "One sentence why it matters"}\n]'
     )
 
     adj_log("news-analyze", f"Calling {model}...")

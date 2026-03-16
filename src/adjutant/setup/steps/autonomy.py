@@ -16,7 +16,7 @@ Module-level state:
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adjutant.setup.wizard import (
     BOLD,
@@ -29,6 +29,9 @@ from adjutant.setup.wizard import (
     wiz_step,
     wiz_warn,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 WIZARD_HEARTBEAT_ENABLED: bool = False
 WIZARD_HEARTBEAT_MAX_PER_DAY: int = 3
@@ -66,7 +69,7 @@ def _update_config(adj_dir: Path, *, dry_run: bool = False) -> None:
 
         with open(config_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort config write
         pass
 
 
@@ -109,7 +112,7 @@ def _update_quiet_hours(
 
         with open(config_path, "w") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort config write
         pass
 
 
@@ -182,7 +185,8 @@ def step_autonomy(adj_dir: Path, *, dry_run: bool = False) -> bool:
         file=sys.stderr,
     )
     print(
-        f"  {DIM}Edit in adjutant.yaml schedules: or with: adjutant schedule disable autonomous_pulse{RESET}",
+        f"  {DIM}Edit in adjutant.yaml schedules: or with: "
+        f"adjutant schedule disable autonomous_pulse{RESET}",
         file=sys.stderr,
     )
     print("", file=sys.stderr)

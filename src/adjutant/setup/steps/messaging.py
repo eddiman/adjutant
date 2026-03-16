@@ -14,13 +14,10 @@ Sets module-level state:
 from __future__ import annotations
 
 import re
-import stat
 import sys
-from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any
 
 from adjutant.setup.wizard import (
-    CYAN,
     DIM,
     RESET,
     wiz_confirm,
@@ -28,10 +25,12 @@ from adjutant.setup.wizard import (
     wiz_info,
     wiz_input,
     wiz_ok,
-    wiz_secret,
     wiz_step,
     wiz_warn,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Module-level wizard state (populated by step_messaging)
 WIZARD_TELEGRAM_TOKEN: str = ""
@@ -54,19 +53,19 @@ def _read_env_cred(env_file: Path, key: str) -> str:
     return get_credential(key, env_file) or ""
 
 
-def _get_http_client():
-    """Return a requests.Session. Lazy import to keep module light."""
+def _get_http_client() -> Any:
+    """Return an HTTP client. Lazy import to keep module light."""
     try:
         from adjutant.lib.http import get_client
 
         return get_client()
-    except Exception:
-        import requests
+    except Exception:  # noqa: BLE001 — fallback to requests
+        import requests  # type: ignore[import-untyped]
 
         return requests.Session()
 
 
-def _validate_token(token: str) -> Optional[str]:
+def _validate_token(token: str) -> str | None:
     """Call Telegram getMe. Returns bot username on success or None."""
     try:
         client = _get_http_client()
@@ -74,15 +73,16 @@ def _validate_token(token: str) -> Optional[str]:
             f"https://api.telegram.org/bot{token}/getMe",
             timeout=10,
         )
-        data = resp.json()
+        data: dict[str, Any] = resp.json()
         if data.get("ok"):
-            return data["result"].get("username", "unknown")
-    except Exception:
+            username: str = data["result"].get("username", "unknown")
+            return username
+    except Exception:  # noqa: BLE001 — non-fatal token validation
         pass
     return None
 
 
-def _auto_detect_chat_id(token: str) -> Optional[str]:
+def _auto_detect_chat_id(token: str) -> str | None:
     """Call getUpdates and return the last message's chat ID."""
     try:
         client = _get_http_client()
@@ -90,14 +90,14 @@ def _auto_detect_chat_id(token: str) -> Optional[str]:
             f"https://api.telegram.org/bot{token}/getUpdates?limit=5",
             timeout=10,
         )
-        data = resp.json()
+        data: dict[str, Any] = resp.json()
         if data.get("ok") and data.get("result"):
-            result = data["result"]
+            result: list[dict[str, Any]] = data["result"]
             if result:
                 chat_id = result[-1].get("message", {}).get("chat", {}).get("id")
                 if chat_id is not None:
                     return str(chat_id)
-    except Exception:
+    except Exception:  # noqa: BLE001 — non-fatal chat ID detection
         pass
     return None
 
@@ -146,8 +146,8 @@ def _create_new_bot(dry_run: bool = False) -> bool:
     print("  Let me walk you through creating a Telegram bot:", file=sys.stderr)
     print("", file=sys.stderr)
     print(f"  {RESET}1.{RESET} Open Telegram and search for @BotFather", file=sys.stderr)
-    print(f"  2. Send /newbot and follow the prompts", file=sys.stderr)
-    print(f"  3. BotFather will give you a bot token", file=sys.stderr)
+    print("  2. Send /newbot and follow the prompts", file=sys.stderr)
+    print("  3. BotFather will give you a bot token", file=sys.stderr)
     print("", file=sys.stderr)
 
     token = wiz_input("Paste the bot token here")

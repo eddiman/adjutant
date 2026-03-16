@@ -24,7 +24,6 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-
 _TELEGRAM_CAPTION_MAX = 1024
 
 
@@ -46,7 +45,7 @@ def _domain_from_url(url: str) -> str:
         netloc = urlparse(url).netloc
         domain = netloc.replace("www.", "").replace(":", "-")
         return domain[:40] if domain else "page"
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to default filename
         return "page"
 
 
@@ -85,7 +84,7 @@ def _generate_vision_caption(outfile: Path, adj_dir: Path) -> str:
 
         result = run_vision(str(outfile), prompt, adj_dir)
         return result.strip()
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort vision analysis
         return ""
 
 

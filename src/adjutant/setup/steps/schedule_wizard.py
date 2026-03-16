@@ -16,13 +16,13 @@ import sys
 from pathlib import Path
 
 from adjutant.setup.wizard import (
+    expand_path,
     wiz_confirm,
     wiz_header,
     wiz_info,
     wiz_input,
     wiz_ok,
     wiz_warn,
-    expand_path,
 )
 
 _VALID_JOB_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -129,7 +129,7 @@ def schedule_wizard(adj_dir: Path) -> None:
     print("", file=sys.stderr)
 
     # Step 1: Name
-    print(f"  \033[1mName\033[0m", file=sys.stderr)
+    print("  \033[1mName\033[0m", file=sys.stderr)
     wiz_info("Lowercase alphanumeric with hyphens or underscores (e.g. portfolio-fetch)")
     print("", file=sys.stderr)
 
@@ -150,7 +150,7 @@ def schedule_wizard(adj_dir: Path) -> None:
     print("", file=sys.stderr)
 
     # Step 2: Description
-    print(f"  \033[1mDescription\033[0m", file=sys.stderr)
+    print("  \033[1mDescription\033[0m", file=sys.stderr)
     wiz_info("Shown in 'adjutant schedule list'. Free text.")
     print("", file=sys.stderr)
 
@@ -158,7 +158,7 @@ def schedule_wizard(adj_dir: Path) -> None:
     print("", file=sys.stderr)
 
     # Step 3: Script path
-    print(f"  \033[1mScript path\033[0m", file=sys.stderr)
+    print("  \033[1mScript path\033[0m", file=sys.stderr)
     wiz_info(f"Absolute path, or relative to your Adjutant directory ({adj_dir}).")
     wiz_info("The script must exit 0 on success.")
     print("", file=sys.stderr)
@@ -188,7 +188,7 @@ def schedule_wizard(adj_dir: Path) -> None:
     print("", file=sys.stderr)
 
     # Step 4: Schedule
-    print(f"  \033[1mSchedule (cron syntax)\033[0m", file=sys.stderr)
+    print("  \033[1mSchedule (cron syntax)\033[0m", file=sys.stderr)
     print(_CRON_EXAMPLES, file=sys.stderr)
     print("", file=sys.stderr)
 
@@ -207,7 +207,7 @@ def schedule_wizard(adj_dir: Path) -> None:
     print("", file=sys.stderr)
 
     # Step 5: Log file
-    print(f"  \033[1mLog file\033[0m", file=sys.stderr)
+    print("  \033[1mLog file\033[0m", file=sys.stderr)
     wiz_info("Where stdout/stderr from the job is written.")
     wiz_info(f"Relative paths are relative to {adj_dir}.")
     print("", file=sys.stderr)
@@ -244,7 +244,7 @@ def schedule_wizard(adj_dir: Path) -> None:
         wiz_warn(f"crontab install failed: {exc}. Add the entry manually.")
 
     print("", file=sys.stderr)
-    wiz_info(f"Verify with:  adjutant schedule list")
+    wiz_info("Verify with:  adjutant schedule list")
     wiz_info(f"Test now:     adjutant schedule run {job_name}")
     wiz_info(f"Disable:      adjutant schedule disable {job_name}")
     wiz_info(f"Remove:       adjutant schedule remove {job_name}")

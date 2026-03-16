@@ -28,14 +28,11 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 from adjutant.setup.wizard import (
     BOLD,
-    GREEN,
     RED,
     RESET,
-    YELLOW,
     wiz_confirm,
     wiz_fail,
     wiz_info,
@@ -195,7 +192,7 @@ def _check_path(
                         wiz_ok(f"  -> would add alias to {shell_rc}")
                     else:
                         with open(shell_rc, "a") as f:
-                            f.write(f"\n# Adjutant CLI (added by setup wizard)\n")
+                            f.write("\n# Adjutant CLI (added by setup wizard)\n")
                             f.write(f"alias adjutant='{adjutant_cli}'\n")
                         wiz_ok(f"  -> added alias to {shell_rc}")
                     issues_fixed += 1
@@ -295,10 +292,10 @@ def _check_listener(
 ) -> tuple[int, int]:
     listener_status = "Stopped"
     try:
-        from adjutant.messaging.telegram.service import get_status
+        from adjutant.messaging.telegram.service import listener_status as _listener_status
 
-        listener_status = get_status(adj_dir)
-    except Exception:
+        listener_status = _listener_status(adj_dir)
+    except Exception:  # noqa: BLE001 — fallback to shell status check
         # Fallback: check if service.sh exists and call it
         service_sh = adj_dir / "scripts" / "messaging" / "telegram" / "service.sh"
         if service_sh.is_file():
@@ -310,7 +307,7 @@ def _check_listener(
                     timeout=10,
                 )
                 listener_status = result.stdout.strip() or "Stopped"
-            except Exception:
+            except Exception:  # noqa: BLE001 — fallback to Stopped
                 listener_status = "Stopped"
 
     if listener_status.startswith("Running"):
@@ -327,13 +324,13 @@ def _check_listener(
                 started = False
                 # Try Python service module first
                 try:
-                    from adjutant.messaging.telegram.service import start_service
+                    from adjutant.messaging.telegram.service import listener_start
 
-                    start_service(adj_dir)
+                    listener_start(adj_dir)
                     wiz_ok("  -> started")
                     issues_fixed += 1
                     started = True
-                except Exception:
+                except Exception:  # noqa: BLE001 — fallback to shell start
                     pass
 
                 if not started:
@@ -363,11 +360,11 @@ def _check_scheduled_jobs(
     adj_dir: Path, dry_run: bool, issues_found: int, issues_fixed: int
 ) -> tuple[int, int]:
     try:
+        from adjutant.capabilities.schedule.install import install_all
         from adjutant.capabilities.schedule.manage import (
             schedule_count,
             schedule_list,
         )
-        from adjutant.capabilities.schedule.install import install_all
 
         count = schedule_count(adj_dir)
         if count == 0:
@@ -383,7 +380,7 @@ def _check_scheduled_jobs(
                 timeout=10,
             )
             crontab_text = crontab_result.stdout
-        except Exception:
+        except Exception:  # noqa: BLE001 — fallback to empty crontab
             crontab_text = ""
 
         schedules = schedule_list(adj_dir)

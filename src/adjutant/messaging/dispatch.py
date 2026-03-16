@@ -17,13 +17,16 @@ In-flight job tracking:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
 import time
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adjutant.core.logging import adj_log
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # In-flight chat tasks: message_id -> asyncio.Task
 _INFLIGHT: dict[str, asyncio.Task[None]] = {}
@@ -62,7 +65,7 @@ def _rate_limit_config(adj_dir: Path) -> tuple[int, int]:
         config = load_typed_config(adj_dir / "adjutant.yaml")
         max_msgs = config.messaging.telegram.rate_limit.messages_per_minute
         window = config.messaging.telegram.rate_limit.window_seconds
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to defaults
         pass
     # Env var override for max (backwards compat)
     try:
@@ -105,10 +108,8 @@ def _check_rate_limit(adj_dir: Path) -> bool:
     timestamps.append(now)
 
     # Rewrite pruned window
-    try:
+    with contextlib.suppress(OSError):
         rate_file.write_text("\n".join(str(t) for t in timestamps) + "\n")
-    except OSError:
-        pass
 
     count = len(timestamps)
     if count > max_msgs:
@@ -203,10 +204,8 @@ async def dispatch_message(
         if text == "/confirm":
             await cmd_reflect_confirm(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
         else:
-            try:
+            with contextlib.suppress(OSError):
                 pending_reflect.unlink(missing_ok=True)
-            except OSError:
-                pass
             _send("No problem — I've cancelled the reflection.")
             adj_log("messaging", "Reflect cancelled.")
         return
@@ -236,7 +235,15 @@ async def dispatch_message(
                         )
                         return
                 except Exception:
-                    pass  # If config can't be loaded, allow the command (fail open)
+                    adj_log(
+                        "messaging",
+                        f"Config parse failed — rejecting gated command {cmd_prefix}",
+                    )
+                    _send(
+                        f"Cannot verify whether {feature_name} is enabled "
+                        f"(config error). Command rejected."
+                    )
+                    return
                 break
 
     # Command dispatch
@@ -371,7 +378,6 @@ async def dispatch_photo(
         caption: Optional caption accompanying the photo.
     """
     from adjutant.messaging.telegram.photos import tg_handle_photo
-    from adjutant.messaging.telegram.send import msg_send_text
 
     # Authorization
     if str(from_id) != str(chat_id):

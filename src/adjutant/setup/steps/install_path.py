@@ -18,7 +18,6 @@ from adjutant.setup.wizard import (
     expand_path,
     wiz_confirm,
     wiz_fail,
-    wiz_info,
     wiz_input,
     wiz_ok,
     wiz_step,

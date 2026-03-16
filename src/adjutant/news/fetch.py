@@ -15,11 +15,10 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
-
 
 # ---------------------------------------------------------------------------
 # Types
@@ -33,17 +32,18 @@ NewsItem = dict[str, Any]
 # ---------------------------------------------------------------------------
 
 
-def _load_config(config_path: Path) -> dict:
+def _load_config(config_path: Path) -> dict[str, Any]:
     with config_path.open() as f:
-        return json.load(f)
+        result: dict[str, Any] = json.load(f)
+        return result
 
 
 def _epoch_lookback(hours: int) -> int:
     """Return a Unix timestamp `hours` ago from now."""
-    return int((datetime.now(timezone.utc) - timedelta(hours=hours)).timestamp())
+    return int((datetime.now(UTC) - timedelta(hours=hours)).timestamp())
 
 
-def _fetch_hackernews(config: dict, http_get) -> list[NewsItem]:
+def _fetch_hackernews(config: dict[str, Any], http_get: Any) -> list[NewsItem]:
     hn_cfg = config.get("sources", {}).get("hackernews", {})
     if not hn_cfg.get("enabled", False):
         return []
@@ -80,7 +80,7 @@ def _fetch_hackernews(config: dict, http_get) -> list[NewsItem]:
     return items
 
 
-def _fetch_reddit(config: dict, http_get) -> list[NewsItem]:
+def _fetch_reddit(config: dict[str, Any], http_get: Any) -> list[NewsItem]:
     reddit_cfg = config.get("sources", {}).get("reddit", {})
     if not reddit_cfg.get("enabled", False):
         return []
@@ -98,7 +98,7 @@ def _fetch_reddit(config: dict, http_get) -> list[NewsItem]:
         )
         try:
             data = http_get(url, headers={"User-Agent": "Adjutant/1.0"})
-        except Exception:
+        except Exception:  # noqa: BLE001 — skip single source on fetch error
             continue
 
         children = data.get("data", {}).get("children", []) if isinstance(data, dict) else []
@@ -111,7 +111,7 @@ def _fetch_reddit(config: dict, http_get) -> list[NewsItem]:
                     "score": post.get("ups") or 0,
                     "source": "reddit",
                     "timestamp": datetime.fromtimestamp(
-                        post.get("created_utc", 0), tz=timezone.utc
+                        post.get("created_utc", 0), tz=UTC
                     ).isoformat(),
                 }
             )
@@ -165,14 +165,14 @@ def _parse_rss(xml_text: str, name: str) -> list[NewsItem]:
     return items
 
 
-def _fetch_blogs(config: dict, http_get) -> list[NewsItem]:
+def _fetch_blogs(config: dict[str, Any], http_get: Any) -> list[NewsItem]:
     blog_cfg = config.get("sources", {}).get("blogs", {})
     if not blog_cfg.get("enabled", False):
         return []
 
     feeds = blog_cfg.get("feeds", [])
     items: list[NewsItem] = []
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
     for feed in feeds:
         name = feed.get("name", "unknown")
@@ -181,7 +181,7 @@ def _fetch_blogs(config: dict, http_get) -> list[NewsItem]:
 
         try:
             content = http_get(url, raw=True)
-        except Exception:
+        except Exception:  # noqa: BLE001 — skip single feed on fetch error
             continue
 
         if feed_type == "rss":
@@ -270,11 +270,11 @@ def fetch_news(adj_dir: Path | None = None) -> str:
 
     adj_log("news-fetch", f"Starting news fetch for {today}")
 
-    from adjutant.lib.http import get_client, HttpClientError
+    from adjutant.lib.http import get_client
 
     client = get_client()
 
-    def _http_get(url: str, headers: dict | None = None, raw: bool = False):
+    def _http_get(url: str, headers: dict[str, str] | None = None, raw: bool = False) -> Any:
         if raw:
             return client.get_text(url, headers=headers or {})
         return client.get(url, headers=headers or {})

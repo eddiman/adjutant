@@ -25,7 +25,7 @@ import os
 import shutil
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from adjutant.core.config import load_typed_config
@@ -42,7 +42,7 @@ class RotateConfig:
     log_rotations: int = 3
 
     @classmethod
-    def from_adj_dir(cls, adj_dir: Path) -> "RotateConfig":
+    def from_adj_dir(cls, adj_dir: Path) -> RotateConfig:
         """Load from adjutant.yaml in adj_dir."""
         cfg = load_typed_config(adj_dir / "adjutant.yaml")
         j = cfg.journal

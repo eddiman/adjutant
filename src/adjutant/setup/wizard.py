@@ -14,14 +14,16 @@ that wizards can be safely invoked inside $() subshells if needed.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import platform
-import shutil
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 # ---------------------------------------------------------------------------
 # Wizard state — passed through setup steps instead of global variables
@@ -333,10 +335,8 @@ def _show_completion(adj_dir: Path, *, news_enabled: bool = False) -> None:
     if wiz_confirm("Would you like to create a knowledge base now?", "N"):
         from adjutant.setup.steps.kb_wizard import kb_wizard_interactive
 
-        try:
+        with contextlib.suppress(KeyboardInterrupt, SystemExit):
             kb_wizard_interactive(adj_dir)
-        except (KeyboardInterrupt, SystemExit):
-            pass
 
 
 def run_wizard(adj_dir: Path | None = None, *, dry_run: bool = False, repair: bool = False) -> None:
@@ -373,6 +373,10 @@ def run_wizard(adj_dir: Path | None = None, *, dry_run: bool = False, repair: bo
 
 def _run_repair(adj_dir: Path | None) -> None:
     """Delegate to repair module."""
+    if adj_dir is None:
+        wiz_warn("No adjutant directory found — running fresh setup instead.")
+        _run_fresh_setup(adj_dir)
+        return
     try:
         from adjutant.setup.repair import run_repair
 
@@ -476,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
         from adjutant.core.paths import init_adj_dir
 
         adj_dir = init_adj_dir()
-    except Exception:
+    except Exception:  # noqa: BLE001 — best-effort dir init
         pass
 
     try:

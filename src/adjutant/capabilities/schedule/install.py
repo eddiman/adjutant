@@ -17,11 +17,11 @@ Backwards compatibility: lines containing ".adjutant" but without
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -51,11 +51,11 @@ def _resolve_path(p: str, adj_dir: Path) -> str:
     return _rp(p, adj_dir)
 
 
-def _resolve_command(entry: dict, adj_dir: Path) -> str:
+def _resolve_command(entry: dict[str, Any], adj_dir: Path) -> str:
     """Resolve a schedule entry dict to a runnable command string."""
-    from adjutant.capabilities.schedule.manage import _resolve_command as _rc
+    from adjutant.capabilities.schedule.manage import resolve_command
 
-    return _rc(entry, adj_dir)
+    return resolve_command(entry, adj_dir)
 
 
 def _read_crontab() -> str:
@@ -140,10 +140,8 @@ def install_one(adj_dir: Path, name: str) -> None:
         raise ValueError(f"Job '{name}' has no runnable script or KB operation configured.")
 
     # Ensure log directory exists
-    try:
+    with contextlib.suppress(OSError):
         Path(log_path).parent.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
 
     marker = _marker(name)
     path_env = _snapshot_path()
@@ -152,7 +150,11 @@ def install_one(adj_dir: Path, name: str) -> None:
         wrap_py = adj_dir / "src" / "adjutant" / "capabilities" / "schedule" / "notify_wrap.py"
         venv_py = adj_dir / ".venv" / "bin" / "python"
         python = str(venv_py) if venv_py.exists() else "python3"
-        cron_line = f"{sched} PATH={path_env} ADJ_DIR={adj_dir} {python} {wrap_py} {name} {script_path} >> {log_path} 2>&1  {marker}"
+        cron_line = (
+            f"{sched} PATH={path_env} ADJ_DIR={adj_dir} "
+            f"{python} {wrap_py} {name} {script_path} "
+            f">> {log_path} 2>&1  {marker}"
+        )
     else:
         cron_line = (
             f"{sched} PATH={path_env} ADJ_DIR={adj_dir} {script_path} >> {log_path} 2>&1  {marker}"
@@ -160,7 +162,7 @@ def install_one(adj_dir: Path, name: str) -> None:
 
     # Remove any existing entry for this job, then append new one
     existing = _read_crontab()
-    lines = [l for l in existing.splitlines() if marker not in l]
+    lines = [line for line in existing.splitlines() if marker not in line]
     lines.append(cron_line)
     _write_crontab("\n".join(lines) + "\n")
 
@@ -176,7 +178,7 @@ def uninstall_one(adj_dir: Path, name: str) -> None:
     if marker not in existing:
         return
 
-    lines = [l for l in existing.splitlines() if marker not in l]
+    lines = [line for line in existing.splitlines() if marker not in line]
     _write_crontab("\n".join(lines) + "\n" if lines else "")
 
 
@@ -193,11 +195,12 @@ def run_now(adj_dir: Path, name: str) -> int:
         Exit code of the job script.
 
     Raises:
-        ValueError: If the job is not registered, has no command, or script is missing/not executable.
+        ValueError: If the job is not registered, has no command,
+            or script is missing/not executable.
     """
-    from adjutant.capabilities.schedule.manage import schedule_exists, schedule_get
-
     import os
+
+    from adjutant.capabilities.schedule.manage import schedule_exists, schedule_get
 
     config = _config_path(adj_dir)
 

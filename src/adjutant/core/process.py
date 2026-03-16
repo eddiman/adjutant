@@ -10,13 +10,17 @@ Replaces bash patterns from opencode.sh, emergency_kill.sh, and listener.sh:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import psutil
 
 from adjutant.core.logging import adj_log
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class PidLock:
@@ -100,17 +104,13 @@ def kill_process_tree(pid: int, timeout: float = 2.0) -> None:
         children = parent.children(recursive=True)
         # TERM parent + children
         for p in children + [parent]:
-            try:
+            with contextlib.suppress(psutil.NoSuchProcess):
                 p.terminate()
-            except psutil.NoSuchProcess:
-                pass
         # Wait, then KILL survivors
         _, alive = psutil.wait_procs(children + [parent], timeout=timeout)
         for p in alive:
-            try:
+            with contextlib.suppress(psutil.NoSuchProcess):
                 p.kill()
-            except psutil.NoSuchProcess:
-                pass
     except psutil.NoSuchProcess:
         pass
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -22,7 +23,7 @@ class NDJSONResult:
     text: str = ""
     session_id: str | None = None
     error_type: str | None = None
-    events: list[dict] = field(default_factory=list)
+    events: list[dict[str, Any]] = field(default_factory=list)
 
 
 def parse_ndjson(output: str) -> NDJSONResult:
@@ -115,7 +116,4 @@ def check_model_not_found(output: str, stderr: str = "") -> bool:
         return True
 
     # Check raw stderr
-    if "Model not found" in stderr or "ProviderModelNotFoundError" in stderr:
-        return True
-
-    return False
+    return bool("Model not found" in stderr or "ProviderModelNotFoundError" in stderr)

@@ -13,11 +13,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Typed config models
@@ -72,8 +71,8 @@ class LLMConfig(BaseModel):
 
 class FeatureConfig(BaseModel):
     enabled: bool = False
-    config_path: Optional[str] = None
-    model: Optional[str] = None
+    config_path: str | None = None
+    model: str | None = None
 
 
 class FeaturesConfig(BaseModel):
@@ -150,7 +149,7 @@ class AdjutantConfig(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
     heartbeat: HeartbeatConfig = Field(default_factory=HeartbeatConfig)
-    schedules: List[ScheduleConfig] = Field(default_factory=list)
+    schedules: list[ScheduleConfig] = Field(default_factory=list)
     platform: PlatformConfig = Field(default_factory=PlatformConfig)
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
@@ -158,7 +157,7 @@ class AdjutantConfig(BaseModel):
     debug: DebugConfig = Field(default_factory=DebugConfig)
 
     @classmethod
-    def load(cls, path: Path) -> "AdjutantConfig":
+    def load(cls, path: Path) -> AdjutantConfig:
         """Load config from a YAML file. Returns defaults if file is missing."""
         if not path.exists():
             return cls()
@@ -176,7 +175,7 @@ class AdjutantConfig(BaseModel):
         model = getattr(self.llm.models, tier, None)
         return model if model is not None else self.llm.models.cheap
 
-    def get_schedule(self, name: str) -> Optional[ScheduleConfig]:
+    def get_schedule(self, name: str) -> ScheduleConfig | None:
         """Return a ScheduleConfig by name, or None if not found."""
         for schedule in self.schedules:
             if schedule.name == name:

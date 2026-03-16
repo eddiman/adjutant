@@ -12,7 +12,7 @@ from adjutant.capabilities.schedule.manage import (
     _save_yaml_raw,
     _get_schedules,
     _resolve_path,
-    _resolve_command,
+    resolve_command,
     _schedule_append,
     schedule_count,
     schedule_exists,
@@ -115,18 +115,18 @@ class TestResolvePath:
 
 
 # ---------------------------------------------------------------------------
-# _resolve_command
+# resolve_command
 # ---------------------------------------------------------------------------
 
 
 class TestResolveCommand:
     def test_resolves_script(self, tmp_path: Path) -> None:
         entry = {"script": "/path/to/run.sh"}
-        assert _resolve_command(entry, tmp_path) == "/path/to/run.sh"
+        assert resolve_command(entry, tmp_path) == "/path/to/run.sh"
 
     def test_resolves_kb_command(self, tmp_path: Path) -> None:
         entry = {"kb_name": "mydb", "kb_operation": "fetch"}
-        result = _resolve_command(entry, tmp_path)
+        result = resolve_command(entry, tmp_path)
         # Should use Python CLI: python -m adjutant kb run <name> <op>
         assert "adjutant" in result
         assert "kb" in result
@@ -135,7 +135,7 @@ class TestResolveCommand:
         assert "fetch" in result
 
     def test_returns_empty_when_no_command(self, tmp_path: Path) -> None:
-        assert _resolve_command({}, tmp_path) == ""
+        assert resolve_command({}, tmp_path) == ""
 
 
 # ---------------------------------------------------------------------------

@@ -51,11 +51,10 @@ def _fix_permissions(adj_dir: Path, *, dry_run: bool = False) -> None:
 
     # Make all scripts executable
     scripts_dir = adj_dir / "scripts"
-    if scripts_dir.is_dir():
-        if not dry_run:
-            for sh in scripts_dir.rglob("*.sh"):
-                if not os.access(str(sh), os.X_OK):
-                    sh.chmod(sh.stat().st_mode | 0o111)
+    if scripts_dir.is_dir() and not dry_run:
+        for sh in scripts_dir.rglob("*.sh"):
+            if not os.access(str(sh), os.X_OK):
+                sh.chmod(sh.stat().st_mode | 0o111)
     wiz_ok("Script permissions OK")
 
     # Restrict .env
@@ -121,7 +120,7 @@ def _setup_cli(adj_dir: Path, *, dry_run: bool = False) -> None:
             f.write(f"\nalias adjutant '{adjutant_cli}'\n")
     else:
         with open(shell_rc, "a") as f:
-            f.write(f"\n# Adjutant CLI (added by setup wizard)\n")
+            f.write("\n# Adjutant CLI (added by setup wizard)\n")
             f.write(f"alias adjutant='{adjutant_cli}'\n")
 
     wiz_ok(f"Added alias to {shell_rc}")
@@ -275,11 +274,11 @@ def _install_systemd(adj_dir: Path, *, dry_run: bool = False) -> None:
 def _install_schedules(adj_dir: Path, *, dry_run: bool = False) -> None:
     config_path = adj_dir / "adjutant.yaml"
     try:
-        from adjutant.capabilities.schedule.manage import schedule_count, schedule_list
         from adjutant.capabilities.schedule.install import install_all
+        from adjutant.capabilities.schedule.manage import schedule_count, schedule_list
 
         count = schedule_count(config_path)
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to zero schedules
         count = 0
 
     if count == 0:

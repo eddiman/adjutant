@@ -9,14 +9,17 @@ Provides:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import random
 import time
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adjutant.core.logging import adj_log
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Deduplication helpers
@@ -32,10 +35,8 @@ def _photo_dedup_cleanup(dedup_dir: Path) -> None:
     try:
         for marker in dedup_dir.iterdir():
             if marker.is_file() and marker.stat().st_mtime < cutoff:
-                try:
+                with contextlib.suppress(FileNotFoundError):
                     marker.unlink()
-                except FileNotFoundError:
-                    pass
     except OSError:
         pass
 
@@ -126,18 +127,14 @@ def tg_download_photo(
             local_path.write_bytes(response.content)
     except Exception as exc:
         adj_log("telegram", f"Download failed for {file_path_str}: {exc}")
-        try:
+        with contextlib.suppress(FileNotFoundError):
             local_path.unlink()
-        except FileNotFoundError:
-            pass
         return None
 
     if not local_path.exists() or local_path.stat().st_size == 0:
         adj_log("telegram", f"Downloaded file is empty: {local_path}")
-        try:
+        with contextlib.suppress(FileNotFoundError):
             local_path.unlink()
-        except FileNotFoundError:
-            pass
         return None
 
     file_size = local_path.stat().st_size

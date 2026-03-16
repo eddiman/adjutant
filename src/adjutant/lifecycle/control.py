@@ -10,16 +10,14 @@ Replaces five bash scripts:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import signal
 import subprocess
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -55,8 +53,10 @@ def _adj_log(component: str, message: str) -> None:
         from adjutant.core.logging import adj_log
 
         adj_log(component, message)
-    except Exception:
-        pass  # non-fatal if logging unavailable
+    except Exception:  # noqa: BLE001 — last-resort: logging itself failed
+        import sys
+
+        print(f"[{component}] {message}", file=sys.stderr)
 
 
 def _send_notify(adj_dir: Path, text: str) -> None:
@@ -65,25 +65,17 @@ def _send_notify(adj_dir: Path, text: str) -> None:
         from adjutant.messaging.telegram.notify import send_notify
 
         send_notify(text, adj_dir)
-    except Exception:
-        # Non-fatal — matches bash `|| true`
+    except Exception:  # noqa: BLE001 — non-fatal, matches bash `|| true`
         pass
 
 
 def _kill_by_pattern(pattern: str, sig: signal.Signals = signal.SIGTERM) -> None:
     """Send signal to all processes matching the pattern. Silently ignores errors."""
-    try:
-        result = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True)
-        for pid_str in result.stdout.splitlines():
-            pid_str = pid_str.strip()
-            if not pid_str.isdigit():
-                continue
-            try:
-                os.kill(int(pid_str), sig)
-            except (ProcessLookupError, PermissionError):
-                pass
-    except OSError:
-        pass
+    from adjutant.core.process import find_by_cmdline
+
+    for proc in find_by_cmdline(pattern):
+        with contextlib.suppress(ProcessLookupError, PermissionError, OSError):
+            os.kill(proc.pid, sig)
 
 
 def _kill_pidfile(pid_file: Path, sig: signal.Signals = signal.SIGTERM) -> None:
@@ -96,34 +88,21 @@ def _kill_pidfile(pid_file: Path, sig: signal.Signals = signal.SIGTERM) -> None:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Return True if process with PID is running.
+    """Check if PID is running. Delegates to core.process.pid_is_alive."""
+    from adjutant.core.process import pid_is_alive
 
-    PermissionError means the process exists but we can't signal it — still alive.
-    Matches core/process.py:pid_is_alive semantics.
-    """
-    try:
-        os.kill(pid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True  # Process exists, we just can't signal it
+    return pid_is_alive(pid)
 
 
-def _pgrep_first(pattern: str) -> Optional[int]:
+def _pgrep_first(pattern: str) -> int | None:
     """Return first PID matching pattern, or None."""
-    try:
-        result = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True)
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if line.isdigit():
-                return int(line)
-    except OSError:
-        pass
-    return None
+    from adjutant.core.process import find_by_cmdline
+
+    procs = find_by_cmdline(pattern)
+    return procs[0].pid if procs else None
 
 
-def _read_pid(path: Path) -> Optional[int]:
+def _read_pid(path: Path) -> int | None:
     """Read integer PID from file, or return None."""
     try:
         return int(path.read_text().strip())
@@ -136,7 +115,7 @@ def _read_pid(path: Path) -> Optional[int]:
 # ---------------------------------------------------------------------------
 
 
-def pause(adj_dir: Optional[Path] = None) -> str:
+def pause(adj_dir: Path | None = None) -> str:
     """Create the PAUSED lockfile.
 
     Returns:
@@ -154,7 +133,7 @@ def pause(adj_dir: Optional[Path] = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def resume(adj_dir: Optional[Path] = None) -> str:
+def resume(adj_dir: Path | None = None) -> str:
     """Remove the PAUSED lockfile.
 
     Returns:
@@ -172,7 +151,7 @@ def resume(adj_dir: Optional[Path] = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def restart(adj_dir: Optional[Path] = None) -> str:
+def restart(adj_dir: Path | None = None) -> str:
     """Stop all services and start fresh via startup().
 
     Returns:
@@ -195,10 +174,8 @@ def restart(adj_dir: Optional[Path] = None) -> str:
     web_pid_file = d / "state" / "opencode_web.pid"
     web_pid = _read_pid(web_pid_file)
     if web_pid and _pid_alive(web_pid):
-        try:
+        with contextlib.suppress(ProcessLookupError, PermissionError):
             os.kill(web_pid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            pass
         web_pid_file.unlink(missing_ok=True)
         lines.append("OpenCode web server stopped")
     else:
@@ -228,7 +205,7 @@ def restart(adj_dir: Optional[Path] = None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def emergency_kill(adj_dir: Optional[Path] = None) -> str:
+def emergency_kill(adj_dir: Path | None = None) -> str:
     """Nuclear shutdown of all systems.
 
     Creates KILLED lockfile, terminates all processes, backs up and removes
@@ -237,8 +214,8 @@ def emergency_kill(adj_dir: Optional[Path] = None) -> str:
     Returns:
         Human-readable output string.
     """
-    from adjutant.core.lockfiles import set_killed
     from adjutant.core.config import load_typed_config
+    from adjutant.core.lockfiles import set_killed
 
     d = adj_dir or _adj_dir()
     ts = _timestamp()
@@ -272,9 +249,9 @@ def emergency_kill(adj_dir: Optional[Path] = None) -> str:
     time.sleep(2)
     _kill_by_pattern(f"opencode.*{adj_dir_str}", signal.SIGKILL)
     # Also kill any opencode processes launched by this Adjutant's listener
-    _kill_by_pattern(f"opencode.*adjutant", signal.SIGTERM)
+    _kill_by_pattern("opencode.*adjutant", signal.SIGTERM)
     time.sleep(1)
-    _kill_by_pattern(f"opencode.*adjutant", signal.SIGKILL)
+    _kill_by_pattern("opencode.*adjutant", signal.SIGKILL)
     web_pid_file = d / "state" / "opencode_web.pid"
     web_pid_file.unlink(missing_ok=True)
     lines.append("OpenCode processes terminated")
@@ -311,7 +288,7 @@ def emergency_kill(adj_dir: Optional[Path] = None) -> str:
                 script_path = str(d / script_path)
             _kill_by_pattern(script_path, signal.SIGTERM)
         lines.append("Scheduled job processes terminated (registry-driven)")
-    except Exception:
+    except Exception:  # noqa: BLE001 — graceful degradation on schedule term
         lines.append(
             "Could not load schedule registry — scheduled job processes may still be running"
         )
@@ -327,10 +304,8 @@ def emergency_kill(adj_dir: Optional[Path] = None) -> str:
     except OSError:
         pass
 
-    try:
+    with contextlib.suppress(OSError):
         subprocess.run(["crontab", "-r"], capture_output=True)
-    except OSError:
-        pass
     lines.append("Crontab disabled (backed up to state/crontab.backup)")
 
     # Log the event
@@ -428,7 +403,7 @@ def _sync_schedule_crontab(adj_dir: Path) -> str:
         from adjutant.capabilities.schedule.install import install_all
 
         install_all(adj_dir)
-    except Exception:
+    except Exception:  # noqa: BLE001 — graceful degradation on crontab sync
         return "Could not load schedule registry — crontab not synced"
 
     try:
@@ -442,7 +417,7 @@ def _sync_schedule_crontab(adj_dir: Path) -> str:
 
 
 def startup(
-    adj_dir: Optional[Path] = None,
+    adj_dir: Path | None = None,
     interactive: bool = True,
 ) -> str:
     """Unified startup: handles both normal start and emergency recovery.
@@ -455,7 +430,7 @@ def startup(
     Returns:
         Human-readable output string.
     """
-    from adjutant.core.lockfiles import is_killed, is_paused, clear_killed
+    from adjutant.core.lockfiles import clear_killed, is_killed, is_paused
 
     d = adj_dir or _adj_dir()
     ts = _timestamp()
@@ -586,54 +561,3 @@ def startup(
         ]
 
     return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# CLI entrypoints
-# ---------------------------------------------------------------------------
-
-
-def main_pause(argv: list[str] | None = None) -> int:
-    try:
-        print(pause())
-        return 0
-    except RuntimeError as e:
-        print(f"ERROR:{e}")
-        return 1
-
-
-def main_resume(argv: list[str] | None = None) -> int:
-    try:
-        print(resume())
-        return 0
-    except RuntimeError as e:
-        print(f"ERROR:{e}")
-        return 1
-
-
-def main_restart(argv: list[str] | None = None) -> int:
-    try:
-        print(restart())
-        return 0
-    except RuntimeError as e:
-        print(f"ERROR:{e}")
-        return 1
-
-
-def main_emergency_kill(argv: list[str] | None = None) -> int:
-    try:
-        print(emergency_kill())
-        return 0
-    except RuntimeError as e:
-        print(f"ERROR:{e}")
-        return 1
-
-
-def main_startup(argv: list[str] | None = None) -> int:
-    interactive = "--non-interactive" not in (argv or sys.argv)
-    try:
-        print(startup(interactive=interactive))
-        return 0
-    except RuntimeError as e:
-        print(f"ERROR:{e}")
-        return 1

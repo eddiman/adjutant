@@ -10,20 +10,18 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from adjutant.setup.wizard import (
+    DIM,
+    RESET,
     wiz_fail,
     wiz_info,
     wiz_ok,
     wiz_step,
     wiz_warn,
-    DIM,
-    RESET,
 )
-
-import sys
 
 
 @dataclass
@@ -57,7 +55,7 @@ def _get_version(cmd: str) -> str:
             # Return just the first meaningful line, trimmed
             return output[0].strip()[:60]
         return "found"
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to generic found
         return "found"
 
 
@@ -73,7 +71,7 @@ def _check_playwright() -> bool:
             timeout=15,
         )
         return result.returncode == 0
-    except Exception:
+    except Exception:  # noqa: BLE001 — graceful degradation on check failure
         return False
 
 
@@ -88,7 +86,7 @@ def _playwright_version() -> str:
         )
         v = (result.stdout or result.stderr or "").strip().splitlines()
         return v[0].strip()[:60] if v else "found"
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to generic found
         return "found"
 
 

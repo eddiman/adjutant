@@ -16,18 +16,19 @@ kb_name/kb_operation fields — these are accessed via the raw dict API
 from __future__ import annotations
 
 import re
-from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Raw YAML helpers — read/write the schedules: block without losing other keys
 # ---------------------------------------------------------------------------
 
 
-def _load_yaml_raw(config_path: Path) -> dict:
+def _load_yaml_raw(config_path: Path) -> dict[str, Any]:
     """Load adjutant.yaml as a raw dict. Returns {} if missing/invalid."""
     if not config_path.is_file():
         return {}
@@ -39,13 +40,13 @@ def _load_yaml_raw(config_path: Path) -> dict:
         return {}
 
 
-def _save_yaml_raw(config_path: Path, data: dict) -> None:
+def _save_yaml_raw(config_path: Path, data: dict[str, Any]) -> None:
     """Write dict back to YAML, preserving key order."""
     with open(config_path, "w") as f:
         yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
-def _get_schedules(data: dict) -> list[dict]:
+def _get_schedules(data: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract the schedules list from the raw config dict."""
     raw = data.get("schedules")
     if not isinstance(raw, list):
@@ -65,7 +66,7 @@ def _resolve_path(p: str, adj_dir: Path) -> str:
     return str(adj_dir / p)
 
 
-def _resolve_command(entry: dict, adj_dir: Path) -> str:
+def resolve_command(entry: dict[str, Any], adj_dir: Path) -> str:
     """Resolve an entry to a runnable command string.
 
     Supports:
@@ -104,13 +105,13 @@ def schedule_exists(config_path: Path, name: str) -> bool:
     return any(s.get("name") == name for s in _get_schedules(data))
 
 
-def schedule_list(config_path: Path) -> list[dict]:
+def schedule_list(config_path: Path) -> list[dict[str, Any]]:
     """Return all registered schedule entries as raw dicts."""
     data = _load_yaml_raw(config_path)
     return _get_schedules(data)
 
 
-def schedule_get(config_path: Path, name: str) -> Optional[dict]:
+def schedule_get(config_path: Path, name: str) -> dict[str, Any] | None:
     """Return the raw dict for a schedule entry, or None if not found."""
     data = _load_yaml_raw(config_path)
     for s in _get_schedules(data):
@@ -143,7 +144,7 @@ def _schedule_append(
     description: str,
     schedule: str,
     script: str,
-    logpath: Optional[str] = None,
+    logpath: str | None = None,
     enabled: bool = True,
     notify: bool = False,
 ) -> None:
@@ -155,7 +156,7 @@ def _schedule_append(
     if "schedules" not in data or not isinstance(data.get("schedules"), list):
         data["schedules"] = []
 
-    entry: dict = {
+    entry: dict[str, Any] = {
         "name": name,
         "description": description,
         "schedule": schedule,
@@ -179,8 +180,8 @@ def schedule_add(
     description: str,
     schedule: str,
     script: str,
-    logpath: Optional[str] = None,
-    adj_dir: Optional[Path] = None,
+    logpath: str | None = None,
+    adj_dir: Path | None = None,
 ) -> None:
     """Register a job and install its crontab entry.
 
@@ -218,7 +219,7 @@ def schedule_add(
 def schedule_remove(
     config_path: Path,
     name: str,
-    adj_dir: Optional[Path] = None,
+    adj_dir: Path | None = None,
 ) -> None:
     """Remove a job from the registry and uninstall its crontab entry.
 
@@ -244,7 +245,7 @@ def schedule_set_enabled(
     config_path: Path,
     name: str,
     enabled: bool,
-    adj_dir: Optional[Path] = None,
+    adj_dir: Path | None = None,
 ) -> None:
     """Enable or disable a job.
 

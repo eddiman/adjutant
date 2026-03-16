@@ -15,7 +15,7 @@ import json
 import shutil
 import sys
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adjutant.setup.wizard import (
     BOLD,
@@ -29,6 +29,9 @@ from adjutant.setup.wizard import (
     wiz_warn,
 )
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 # ---------------------------------------------------------------------------
 # Meta-prompts (match identity.sh exactly)
 # ---------------------------------------------------------------------------
@@ -36,7 +39,8 @@ from adjutant.setup.wizard import (
 _SOUL_META_PROMPT = """\
 You are generating a soul.md file for an autonomous agent called Adjutant.
 
-The soul.md defines the agent's identity, personality, values, escalation rules, and behavioral constraints.
+The soul.md defines the agent's identity, personality, values, \
+escalation rules, and behavioral constraints.
 
 Based on the user's description of what they need, generate a soul.md that follows this structure:
 
@@ -59,14 +63,18 @@ Based on the user's description of what they need, generate a soul.md that follo
 
 **Telegram format**: `[Project] One sentence.` No greetings, no emoji, no sign-offs.
 
-**Never**: [list of things the agent must never do — always include: edit project files autonomously, message anyone but the commander, notify > 3x/day without emergency, auto-restart after KILLED lockfile]
+**Never**: [list of things the agent must never do — always include: \
+edit project files autonomously, message anyone but the commander, \
+notify > 3x/day without emergency, auto-restart after KILLED lockfile]
 
 Keep it concise. The soul.md should be under 40 lines. Match the user's domain and concerns."""
 
 _HEART_META_PROMPT = """\
 You are generating a heart.md file for an autonomous agent called Adjutant.
 
-The heart.md defines the agent's current priorities and active concerns. It changes frequently — the user edits it whenever their focus shifts.
+The heart.md defines the agent's current priorities and active \
+concerns. It changes frequently — the user edits it whenever \
+their focus shifts.
 
 Based on the user's description, generate a heart.md that follows this structure:
 
@@ -104,7 +112,8 @@ Nothing muted right now.
 - [Planning horizon, cadence, constraints]
 - Keep it to 1-3 priorities. If this list grows beyond 3, something needs to be deferred.
 
-Keep it concise. Heart.md should be under 30 lines of content. Extract priorities from the user's description."""
+Keep it concise. Heart.md should be under 30 lines of content. \
+Extract priorities from the user's description."""
 
 # ---------------------------------------------------------------------------
 # Token estimation (rough: 1 token ≈ 4 chars)
@@ -157,14 +166,13 @@ def _run_opencode(prompt: str, adj_dir: Path) -> str | None:
         result = asyncio.run(
             opencode_run(
                 ["--model", "anthropic/claude-haiku-4-5", "--format", "json", prompt],
-                cwd=adj_dir,
             )
         )
         if result.returncode != 0 or result.timed_out:
             return None
         text = _extract_opencode_text(result.stdout)
         return text if text.strip() else None
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to template on LLM error
         return None
 
 
@@ -185,14 +193,17 @@ _SOUL_TEMPLATE = """\
 3. Sustainable pace — 1-3 priorities, not 10
 4. Accuracy over speed — don't guess, cite sources
 
-**Escalate when**: watched file changed + relates to active concern, or deadline < 2 weeks with TBD items
+**Escalate when**: watched file changed + relates to active concern, \
+or deadline < 2 weeks with TBD items
 **Notify when**: action needed within 48h, or material status change on a priority
 **Stay silent when**: routine changes, low-priority projects, weekends (unless urgent)
 **Max notifications**: 2-3/day, batch minor items
 
 **Telegram format**: `[Project] One sentence.` No greetings, no emoji, no sign-offs.
 
-**Never**: edit project files autonomously, message anyone but the commander, notify > 3x/day without emergency, auto-restart after KILLED lockfile
+**Never**: edit project files autonomously, message anyone but \
+the commander, notify > 3x/day without emergency, \
+auto-restart after KILLED lockfile
 """
 
 _REGISTRY_TEMPLATE = """\

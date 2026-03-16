@@ -19,11 +19,12 @@ Output format:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -42,8 +43,8 @@ def run_briefing(adj_dir: Path | None = None) -> str:
 
     from adjutant.core.lockfiles import check_operational
     from adjutant.core.logging import adj_log
-    from adjutant.news.fetch import fetch_news
     from adjutant.news.analyze import analyze_news
+    from adjutant.news.fetch import fetch_news
 
     today_display = datetime.now().strftime("%d.%m.%Y")
     today_file = datetime.now().strftime("%Y-%m-%d")
@@ -74,7 +75,7 @@ def run_briefing(adj_dir: Path | None = None) -> str:
         return "OK:no analysis results"
 
     try:
-        items: list[dict] = json.loads(analyzed_file.read_text())
+        items: list[dict[str, Any]] = json.loads(analyzed_file.read_text())
     except (json.JSONDecodeError, OSError) as exc:
         return f"ERROR:Failed to read analyzed file: {exc}"
 
@@ -100,12 +101,10 @@ def run_briefing(adj_dir: Path | None = None) -> str:
 
     # ── Step 5: write to journal (optional) ───────────────────────────────
     config_path = adj_dir / "news_config.json"
-    config: dict = {}
+    config: dict[str, Any] = {}
     if config_path.exists():
-        try:
+        with contextlib.suppress(json.JSONDecodeError, OSError):
             config = json.loads(config_path.read_text())
-        except (json.JSONDecodeError, OSError):
-            pass
 
     if config.get("delivery", {}).get("journal", False):
         adj_log("news", "Writing to journal...")
@@ -127,19 +126,19 @@ def run_briefing(adj_dir: Path | None = None) -> str:
         dedup_file.write_text('{"urls":[]}')
 
     try:
-        cache_data: dict = json.loads(dedup_file.read_text())
+        cache_data: dict[str, Any] = json.loads(dedup_file.read_text())
     except (json.JSONDecodeError, OSError):
         cache_data = {"urls": []}
 
     # Find raw items whose titles match the analyzed items
     raw_file = state_dir / "news_raw" / f"{today_file}.json"
     analyzed_titles = {item.get("title", "") for item in items}
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
-    new_entries: list[dict] = []
+    new_entries: list[dict[str, Any]] = []
     if raw_file.exists():
         try:
-            raw_items: list[dict] = json.loads(raw_file.read_text())
+            raw_items: list[dict[str, Any]] = json.loads(raw_file.read_text())
             for raw_item in raw_items:
                 if raw_item.get("title", "") in analyzed_titles:
                     new_entries.append({"url": raw_item.get("url", ""), "first_seen": now_iso})
@@ -150,7 +149,7 @@ def run_briefing(adj_dir: Path | None = None) -> str:
 
     # Prune entries outside window
     window_days = int(config.get("deduplication", {}).get("window_days", 30))
-    cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+    cutoff = datetime.now(UTC) - timedelta(days=window_days)
 
     def _parse_iso(ts: str) -> datetime | None:
         try:

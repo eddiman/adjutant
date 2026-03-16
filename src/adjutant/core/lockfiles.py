@@ -14,6 +14,7 @@ Matches bash lockfiles.sh behavior exactly:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 from pathlib import Path
@@ -89,9 +90,7 @@ def check_operational(adj_dir: Path | None = None) -> bool:
     d = adj_dir or _adj_dir()
     if not check_killed(d):
         return False
-    if not check_paused(d):
-        return False
-    return True
+    return check_paused(d)
 
 
 # --- State mutation ---
@@ -112,16 +111,12 @@ def set_killed(adj_dir: Path | None = None) -> None:
 def clear_paused(adj_dir: Path | None = None) -> None:
     """Remove the PAUSED lockfile if it exists."""
     d = adj_dir or _adj_dir()
-    try:
+    with contextlib.suppress(FileNotFoundError):
         (d / "PAUSED").unlink()
-    except FileNotFoundError:
-        pass
 
 
 def clear_killed(adj_dir: Path | None = None) -> None:
     """Remove the KILLED lockfile if it exists."""
     d = adj_dir or _adj_dir()
-    try:
+    with contextlib.suppress(FileNotFoundError):
         (d / "KILLED").unlink()
-    except FileNotFoundError:
-        pass

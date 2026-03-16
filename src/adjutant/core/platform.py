@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def detect_os() -> str:
@@ -66,7 +69,7 @@ def date_subtract(amount: int, unit: str) -> str:
         raise ValueError(f"Unknown unit: {unit}")
 
     delta = timedelta(**{normalized: amount})
-    result = datetime.now(timezone.utc) - delta
+    result = datetime.now(UTC) - delta
     return result.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -96,7 +99,7 @@ def date_subtract_epoch(amount: int, unit: str) -> int:
         raise ValueError(f"Unknown unit: {unit}")
 
     delta = timedelta(**{normalized: amount})
-    result = datetime.now(timezone.utc) - delta
+    result = datetime.now(UTC) - delta
     return int(result.timestamp())
 
 

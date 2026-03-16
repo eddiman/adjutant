@@ -14,13 +14,13 @@ import sys
 from pathlib import Path
 
 from adjutant.setup.wizard import (
+    expand_path,
     wiz_confirm,
     wiz_header,
     wiz_info,
     wiz_input,
     wiz_ok,
     wiz_warn,
-    expand_path,
 )
 
 _VALID_KB_NAME = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
@@ -57,9 +57,9 @@ def _kb_create(
     adj_dir: Path, name: str, kb_path: Path, description: str, model: str, access: str
 ) -> None:
     """Scaffold a new KB directory and register it."""
-    from adjutant.capabilities.kb.manage import kb_create  # type: ignore[import]
+    from adjutant.capabilities.kb.manage import kb_create
 
-    kb_create(str(adj_dir), name, str(kb_path), description, model, access)
+    kb_create(adj_dir, name, kb_path, description, model, access)
 
 
 def _kb_create_simple(
@@ -249,7 +249,7 @@ def kb_wizard_interactive(adj_dir: Path) -> None:
     wiz_info("Next steps:")
     wiz_info(f"  1. Fill in {kb_path}/data/current.md — live status snapshot")
     wiz_info(f"  2. Add reference docs to {kb_path}/knowledge/")
-    wiz_info(f"  3. Update README.md with what questions this KB can answer")
+    wiz_info("  3. Update README.md with what questions this KB can answer")
     wiz_info("  4. Ask Adjutant a question — it will auto-detect this KB by description.")
 
 
@@ -298,7 +298,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 i += 1
         try:
-            kb_quick_create(adj_dir, **kw)  # type: ignore[arg-type]
+            kb_quick_create(adj_dir, **kw)
             return 0
         except (ValueError, RuntimeError, TypeError) as exc:
             sys.stderr.write(f"ERROR: {exc}\n")

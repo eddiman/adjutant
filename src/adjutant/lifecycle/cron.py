@@ -16,7 +16,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from adjutant.core.paths import get_adj_dir, init_adj_dir, AdjutantDirNotFoundError
+from adjutant.core.paths import AdjutantDirNotFoundError, init_adj_dir
 
 
 def _find_opencode() -> str:

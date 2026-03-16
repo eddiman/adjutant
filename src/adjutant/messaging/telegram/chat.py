@@ -10,13 +10,16 @@ Session continuity:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from datetime import datetime
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adjutant.core.logging import adj_log
 
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _DEFAULT_SESSION_TIMEOUT = 7200  # seconds (2 hours)
 _DEFAULT_CHAT_TIMEOUT = 240  # seconds
@@ -37,7 +40,7 @@ def _get_config_timeouts(adj_dir: Path) -> tuple[int, int]:
             config.messaging.telegram.session_timeout_seconds,
             config.messaging.telegram.chat_timeout_seconds,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 — fallback to defaults
         return _DEFAULT_SESSION_TIMEOUT, _DEFAULT_CHAT_TIMEOUT
 
 
@@ -91,7 +94,8 @@ def get_session_id(adj_dir: Path, *, model: str | None = None) -> str | None:
     except (json.JSONDecodeError, OSError):
         return None
 
-    session_id = data.get("session_id")
+    session_id_raw = data.get("session_id")
+    session_id: str | None = str(session_id_raw) if session_id_raw else None
     last_epoch = data.get("last_message_epoch", 0)
 
     if not session_id:
@@ -153,10 +157,8 @@ def touch_session(adj_dir: Path) -> None:
     data["last_message_epoch"] = now_epoch
     data["last_message_at"] = now_human
 
-    try:
+    with contextlib.suppress(OSError):
         session_file.write_text(json.dumps(data))
-    except OSError:
-        pass
 
 
 # ---------------------------------------------------------------------------

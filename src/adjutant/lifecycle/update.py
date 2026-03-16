@@ -27,7 +27,7 @@ from pathlib import Path
 import httpx
 
 from adjutant.core.logging import adj_log
-from adjutant.core.paths import get_adj_dir, init_adj_dir, AdjutantDirNotFoundError
+from adjutant.core.paths import AdjutantDirNotFoundError, init_adj_dir
 
 _DEFAULT_REPO = "eddiman/adjutant"
 
@@ -150,10 +150,7 @@ def backup_current(adj_dir: Path, *, quiet: bool = False) -> Path:
 
 def _should_exclude(rel_path: str) -> bool:
     """Return True if rel_path matches an update exclusion."""
-    for excl in _UPDATE_EXCLUDES:
-        if rel_path == excl or rel_path.startswith(excl + "/"):
-            return True
-    return False
+    return any(rel_path == excl or rel_path.startswith(excl + "/") for excl in _UPDATE_EXCLUDES)
 
 
 def download_and_apply(
@@ -242,10 +239,10 @@ def download_and_apply(
         for src_file in extract_dir.rglob("*"):
             if not src_file.is_file():
                 continue
-            rel = src_file.relative_to(extract_dir)
-            if _should_exclude(str(rel)):
+            rel_path = src_file.relative_to(extract_dir)
+            if _should_exclude(str(rel_path)):
                 continue
-            dest = adj_dir / rel
+            dest = adj_dir / rel_path
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src_file, dest)
 
@@ -355,12 +352,11 @@ def _warn_if_listener_running(adj_dir: Path, *, quiet: bool = False) -> None:
         from adjutant.messaging.telegram.service import listener_status
 
         status = listener_status(adj_dir)
-        if "running" in status.lower():
-            if not quiet:
-                print("  ! Listener is currently running.")
-                print("  ! It will continue using the old code until restarted.")
-                print("  ! Run adjutant restart after the update completes.\n")
-    except Exception:
+        if "running" in status.lower() and not quiet:
+            print("  ! Listener is currently running.")
+            print("  ! It will continue using the old code until restarted.")
+            print("  ! Run adjutant restart after the update completes.\n")
+    except Exception:  # noqa: BLE001 — non-fatal listener status check
         pass
 
 

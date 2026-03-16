@@ -109,15 +109,22 @@ async def kb_query_by_path(
     if result.returncode != 0 or result.timed_out:
         adj_log(
             "kb",
-            f"Query exited non-zero rc={result.returncode} (kb='{kb_name}', timed_out={result.timed_out})",
+            f"Query exited non-zero rc={result.returncode} "
+            f"(kb='{kb_name}', timed_out={result.timed_out})",
         )
 
     parsed = parse_ndjson(result.stdout)
     reply = parsed.text
 
     if not reply:
-        adj_log("kb", f"Query returned empty reply (kb='{kb_name}', rc={result.returncode})")
-        return "The knowledge base did not return an answer. It may not contain relevant information for this query."
+        adj_log(
+            "kb",
+            f"Query returned empty reply (kb='{kb_name}', rc={result.returncode})",
+        )
+        return (
+            "The knowledge base did not return an answer. "
+            "It may not contain relevant information for this query."
+        )
 
     adj_log("kb", f"Query complete: kb='{kb_name}' reply_len={len(reply)}")
     return reply
@@ -147,7 +154,7 @@ async def kb_query(
     Raises:
         KBQueryError: If KB not found or query fails.
     """
-    from adjutant.capabilities.kb.run import _get_kb, KBNotFoundError
+    from adjutant.capabilities.kb.run import KBNotFoundError, _get_kb
 
     try:
         entry = _get_kb(adj_dir, kb_name)
@@ -228,7 +235,8 @@ def kb_write_by_path(
         f'if [ "$RC" -eq 0 ]; then '
         f"  echo \"[$TS] [kb] Write complete: kb='{kb_name}'\" >> {_shell_quote(str(log_path))}; "
         f"else "
-        f"  echo \"[$TS] [kb] Write failed: kb='{kb_name}' rc=$RC\" >> {_shell_quote(str(log_path))}; "
+        f"  echo \"[$TS] [kb] Write failed: kb='{kb_name}' rc=$RC\""
+        f" >> {_shell_quote(str(log_path))}; "
         f"fi"
     )
 
@@ -274,7 +282,7 @@ def kb_write(
     Raises:
         KBQueryError: If KB not found or instruction fails validation.
     """
-    from adjutant.capabilities.kb.run import _get_kb, KBNotFoundError
+    from adjutant.capabilities.kb.run import KBNotFoundError, _get_kb
 
     try:
         entry = _get_kb(adj_dir, kb_name)

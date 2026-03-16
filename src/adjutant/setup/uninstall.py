@@ -12,6 +12,7 @@ Interactive removal:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import platform
 import re
@@ -23,7 +24,6 @@ import time
 from pathlib import Path
 
 from adjutant.setup.wizard import wiz_info, wiz_ok, wiz_warn
-
 
 # ---------------------------------------------------------------------------
 # Banner / confirm
@@ -81,16 +81,12 @@ def _kill_pid_file(pid_file: Path) -> None:
         pid = int(pid_file.read_text().strip())
         os.kill(pid, signal.SIGTERM)
         time.sleep(1)
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
     except (ValueError, ProcessLookupError, PermissionError, OSError):
         pass
-    try:
+    with contextlib.suppress(OSError):
         pid_file.unlink()
-    except OSError:
-        pass
 
 
 def stop_processes(adj_dir: Path) -> None:
@@ -181,10 +177,8 @@ def _remove_launchd() -> None:
 
     print("\033[1mRemoving LaunchAgent...\033[0m", file=sys.stderr)
     print("", file=sys.stderr)
-    try:
+    with contextlib.suppress(FileNotFoundError):
         subprocess.run(["launchctl", "unload", str(found)], capture_output=True)
-    except FileNotFoundError:
-        pass
     found.unlink(missing_ok=True)
     wiz_ok(f"LaunchAgent removed: {found}")
     print("", file=sys.stderr)
@@ -207,10 +201,8 @@ def _remove_systemd() -> None:
         except FileNotFoundError:
             break
     svc_file.unlink(missing_ok=True)
-    try:
+    with contextlib.suppress(FileNotFoundError):
         subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
-    except FileNotFoundError:
-        pass
     wiz_ok(f"systemd service removed: {svc_file}")
     print("", file=sys.stderr)
 
@@ -319,7 +311,7 @@ def _remove_adjutant_crontab_entries() -> None:
         if result.returncode != 0 or "# adjutant:" not in result.stdout:
             return
         print("  Removing crontab entries...", file=sys.stderr)
-        lines = [l for l in result.stdout.splitlines() if "# adjutant:" not in l]
+        lines = [line for line in result.stdout.splitlines() if "# adjutant:" not in line]
         subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n", text=True, check=True)
         wiz_ok("Crontab entries removed")
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -351,18 +343,18 @@ def uninstall(adj_dir: Path) -> None:
     else:
         print("\033[1m  Adjutant processes stopped.\033[0m", file=sys.stderr)
         print("", file=sys.stderr)
-        print(f"\033[1m\033[33m  Your Adjutant files are intact.\033[0m", file=sys.stderr)
+        print("\033[1m\033[33m  Your Adjutant files are intact.\033[0m", file=sys.stderr)
         print(f"  Location: \033[1m{adj_dir}\033[0m", file=sys.stderr)
         print("", file=sys.stderr)
         print("  To fully remove Adjutant, run:", file=sys.stderr)
-        print(f"    \033[1madjutant uninstall\033[0m", file=sys.stderr)
+        print("    \033[1madjutant uninstall\033[0m", file=sys.stderr)
     print("\033[1m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m", file=sys.stderr)
     print("", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
-    from adjutant.core.paths import init_adj_dir, AdjutantDirNotFoundError
+    from adjutant.core.paths import AdjutantDirNotFoundError, init_adj_dir
 
     try:
         adj_dir = init_adj_dir()
