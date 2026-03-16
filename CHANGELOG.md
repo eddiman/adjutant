@@ -7,6 +7,45 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased] — Post-0.1.0 Hardening
+
+Comprehensive code quality, type safety, and security hardening pass driven by full deployment readiness audit.
+
+### Security
+
+- Feature gate in dispatch now fails closed — rejects gated commands when config is unparseable
+- Installer Python version check corrected from `>=3.9` to `>=3.11` to match `pyproject.toml`
+
+### Fixed
+
+- 4 real type bugs: `Path` passed as `int` in search command, `str`/`int` mismatch in listener watchdog, `Path`/`str` variable shadow in self-updater, nonexistent `cwd` kwarg in identity setup
+- Wrong function names in repair module (`get_status` → `listener_status`, `start_service` → `listener_start`)
+- Wrong argument types in KB wizard (`str` where `Path` expected)
+
+### Improved
+
+- **mypy --strict: 51 → 0 errors** — full type annotations across all 72 source files
+- **ruff: 0 critical errors** — 24 unused imports removed, 23 line-length violations fixed, import sorting, `Optional[X]` → `X | None` modernization
+- Removed dead `feedparser` optional dependency (declared but never imported)
+- Removed 5 vestigial `main_*` CLI wrappers from `lifecycle/control.py`
+- Renamed `_resolve_command` → `resolve_command` (was private but imported publicly in CLI)
+- Refactored `control.py` to delegate PID/process operations to `core/process.py` (eliminated `pgrep` subprocess duplication)
+- Annotated 36 silent exception swallows with `# noqa: BLE001` and rationale comments
+- Added stderr fallback to `_adj_log` when logging infrastructure itself fails
+- Fixed ambiguous variable names (`l` → `line`/`entry` in list comprehensions)
+
+### Tests
+
+- 1,260 tests passing (up from 1,257)
+- 3 new tests for fail-closed feature gate behavior
+
+### Docs
+
+- Updated deployment readiness evaluation prompt to reflect Python architecture
+- Generated full deployment readiness assessment (`docs/reference/2026-03-16-deployment-readiness.md`)
+
+---
+
 ## [0.1.0] — 2026-03-16 — Python Rewrite
 
 Complete rewrite from bash to Python. New architecture, new capabilities, comprehensive test suite.
