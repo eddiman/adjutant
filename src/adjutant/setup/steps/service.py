@@ -213,7 +213,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart={listener}
+ExecStart={python} -m adjutant.messaging.telegram.listener
+WorkingDirectory={adj_dir}
 Restart=on-failure
 RestartSec=10
 Environment=ADJUTANT_HOME={adj_dir}
@@ -231,7 +232,10 @@ def _install_systemd(adj_dir: Path, *, dry_run: bool = False) -> None:
 
     service_dir = Path.home() / ".config" / "systemd" / "user"
     service_file = service_dir / "adjutant-telegram.service"
-    listener = adj_dir / "scripts" / "messaging" / "telegram" / "listener.sh"
+
+    # Resolve Python interpreter — prefer the project venv, fall back to sys.executable
+    venv_python = adj_dir / ".venv" / "bin" / "python"
+    python = str(venv_python) if venv_python.is_file() else sys.executable
 
     if dry_run:
         wiz_ok(f"[DRY RUN] Would create {service_file}")
@@ -239,7 +243,7 @@ def _install_systemd(adj_dir: Path, *, dry_run: bool = False) -> None:
         return
 
     service_dir.mkdir(parents=True, exist_ok=True)
-    service_file.write_text(_SYSTEMD_UNIT.format(listener=listener, adj_dir=adj_dir))
+    service_file.write_text(_SYSTEMD_UNIT.format(python=python, adj_dir=adj_dir))
     wiz_ok(f"Created {service_file}")
 
     if wiz_confirm("Enable and start the service now?", "Y"):

@@ -89,26 +89,39 @@ jobs:
             ## Install
 
             ```bash
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/setup/install.sh | bash
+            git clone https://github.com/${{ github.repository }}.git /path/to/adjutant
+            cd /path/to/adjutant
+            python3 -m venv .venv
+            .venv/bin/pip install -e .
+            .venv/bin/adjutant setup
+            ```
+
+            Or download the tarball:
+
+            ```bash
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.version.outputs.tarball }} -o adjutant.tar.gz
+            tar xzf adjutant.tar.gz
+            cd adjutant-${{ steps.version.outputs.tag }}
+            python3 -m venv .venv
+            .venv/bin/pip install -e .
+            .venv/bin/adjutant setup
             ```
 
             ## What's included
 
-            This release contains the Adjutant framework — scripts, wizard, templates, and tests.
+            This release contains the Adjutant framework — Python source, setup wizard, templates, and tests.
             It does **not** include any personal identity files, journals, or configuration.
             The setup wizard will create those for you.
 
             ## Requirements
 
-            - bash 4+
-            - curl
-            - jq
+            - Python 3.11+
             - [opencode](https://opencode.ai)
+            - Telegram bot token (optional — CLI-only mode supported)
 
             See [README](https://github.com/${{ github.repository }}#readme) for full documentation.
           files: |
             ${{ steps.version.outputs.tarball }}
             ${{ steps.version.outputs.tarball }}.sha256
-            scripts/setup/install.sh
           draft: false
           prerelease: ${{ contains(steps.version.outputs.tag, '-') }}

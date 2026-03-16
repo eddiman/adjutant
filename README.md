@@ -133,4 +133,4 @@ Full docs in `docs/` — start with [Getting Started](docs/guides/getting-starte
 
 ## License
 
-License TBD — see repository for current status.
+MIT — see [LICENSE](LICENSE) for details.
