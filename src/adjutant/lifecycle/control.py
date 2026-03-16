@@ -96,12 +96,18 @@ def _kill_pidfile(pid_file: Path, sig: signal.Signals = signal.SIGTERM) -> None:
 
 
 def _pid_alive(pid: int) -> bool:
-    """Return True if process with PID is running."""
+    """Return True if process with PID is running.
+
+    PermissionError means the process exists but we can't signal it — still alive.
+    Matches core/process.py:pid_is_alive semantics.
+    """
     try:
         os.kill(pid, 0)
         return True
-    except (ProcessLookupError, PermissionError):
+    except ProcessLookupError:
         return False
+    except PermissionError:
+        return True  # Process exists, we just can't signal it
 
 
 def _pgrep_first(pattern: str) -> Optional[int]:
@@ -375,7 +381,7 @@ def _start_telegram_service(adj_dir: Path) -> str:
     return listener_start(adj_dir)
 
 
-def _start_opencode_web(adj_dir: Path) -> str:
+def start_opencode_web(adj_dir: Path) -> str:
     """Start the OpenCode web server. Returns status line."""
     web_pid_file = adj_dir / "state" / "opencode_web.pid"
     owned_pid = _read_pid(web_pid_file)
@@ -511,7 +517,7 @@ def startup(
     lines.append(_start_telegram_service(d))
 
     # OpenCode web server
-    lines.append(_start_opencode_web(d))
+    lines.append(start_opencode_web(d))
 
     # Post-startup PID sync
     sync_pid = _pgrep_first("messaging/telegram/listener")

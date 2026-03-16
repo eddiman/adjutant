@@ -124,6 +124,46 @@ Full guide: `docs/guides/knowledge-bases.md`
 
 ---
 
+## Documentation
+
+Adjutant has a **separate documentation site repository**: `eddiman/adjutant-docs` (Docusaurus, deployed to GitHub Pages).
+
+A clone of the docs site repo lives at **`adjutant-docs/`** in this project root (gitignored). This allows you to update both repos in the same session without external directory permission issues.
+
+When making changes that affect user-facing behavior, **update docs in both places**:
+
+1. **This repo** (`docs/`) — the source-of-truth markdown files
+2. **`adjutant-docs/`** (local clone) — the published documentation site
+
+The docs site clone mirrors the same structure: `adjutant-docs/docs/guides/`, `adjutant-docs/docs/architecture/`, `adjutant-docs/docs/development/`, etc.
+
+### Workflow for docs changes
+
+1. Edit the file in `docs/` (source of truth)
+2. Apply the same change to `adjutant-docs/docs/` (the site repo clone)
+3. Commit and push the adjutant-docs changes separately:
+   ```bash
+   cd adjutant-docs && git add -A && git commit -m "docs: ..." && git push
+   ```
+
+### If the clone is missing
+
+```bash
+git clone git@github.com:eddiman/adjutant-docs.git adjutant-docs
+```
+
+### Changes that require docs updates
+
+- New or modified CLI commands → `docs/guides/commands.md`
+- New capabilities → `docs/guides/` (dedicated guide) + `docs/development/plugin-guide.md`
+- Config changes → `docs/guides/configuration.md`
+- Architecture changes → `docs/architecture/`
+- New slash commands → `docs/guides/commands.md`
+
+The docs site plan is at `docs/reference/documentation-site-plan.md`.
+
+---
+
 ## Agent Prompt
 
 `.opencode/agents/adjutant.md` is tracked — edit when capabilities, routing, or tool patterns change.

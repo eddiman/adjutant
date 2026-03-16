@@ -1,11 +1,13 @@
 """Tests for src/adjutant/messaging/telegram/listener.py
 
-Focus on unit-testable helpers: _load_offset, _save_offset, _poll_once.
+Focus on unit-testable helpers: _load_offset, _save_offset, _poll_once,
+_watchdog_check_web.
 The main() polling loop is integration-level and not covered here.
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -15,6 +17,7 @@ from adjutant.messaging.telegram.listener import (
     _load_offset,
     _poll_once,
     _save_offset,
+    _watchdog_check_web,
 )
 
 
@@ -150,3 +153,105 @@ class TestPollOnce:
         assert params.get("offset") == 500 or (
             len(call_args[0]) > 1 and call_args[0][1].get("offset") == 500
         )
+
+
+# ---------------------------------------------------------------------------
+# _watchdog_check_web
+# ---------------------------------------------------------------------------
+
+
+class TestWatchdogCheckWeb:
+    """Test the opencode web server watchdog."""
+
+    @pytest.mark.asyncio
+    async def test_restarts_when_pid_file_missing(self, tmp_path: Path) -> None:
+        """No PID file → watchdog starts the web server."""
+        adj = tmp_path / ".adjutant"
+        adj.mkdir()
+        (adj / "state").mkdir()
+
+        started = []
+
+        def fake_start(d):
+            started.append(d)
+            return "OpenCode web server started (PID 12345)"
+
+        with patch(
+            "adjutant.lifecycle.control.start_opencode_web",
+            side_effect=fake_start,
+        ):
+            await _watchdog_check_web(adj)
+
+        assert len(started) == 1
+        assert started[0] == adj
+
+    @pytest.mark.asyncio
+    async def test_restarts_when_pid_is_stale(self, tmp_path: Path) -> None:
+        """PID file exists but process is dead → watchdog restarts."""
+        adj = tmp_path / ".adjutant"
+        adj.mkdir()
+        state = adj / "state"
+        state.mkdir()
+        pid_file = state / "opencode_web.pid"
+        pid_file.write_text("99999999")  # Almost certainly dead
+
+        started = []
+
+        def fake_start(d):
+            started.append(d)
+            return "OpenCode web server started (PID 12345)"
+
+        with (
+            patch("adjutant.core.process.read_pid_file", return_value=None),
+            patch(
+                "adjutant.lifecycle.control.start_opencode_web",
+                side_effect=fake_start,
+            ),
+        ):
+            await _watchdog_check_web(adj)
+
+        assert len(started) == 1
+        # Stale PID file should be removed
+        assert not pid_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_does_nothing_when_process_alive(self, tmp_path: Path) -> None:
+        """PID file exists and process is alive → watchdog does nothing."""
+        adj = tmp_path / ".adjutant"
+        adj.mkdir()
+        state = adj / "state"
+        state.mkdir()
+        pid_file = state / "opencode_web.pid"
+        pid_file.write_text(str(os.getpid()))  # Use our own PID — definitely alive
+
+        started = []
+
+        def fake_start(d):
+            started.append(d)
+            return "started"
+
+        with (
+            patch("adjutant.core.process.read_pid_file", return_value=os.getpid()),
+            patch(
+                "adjutant.lifecycle.control.start_opencode_web",
+                side_effect=fake_start,
+            ),
+        ):
+            await _watchdog_check_web(adj)
+
+        assert len(started) == 0  # No restart attempted
+
+    @pytest.mark.asyncio
+    async def test_exception_does_not_propagate(self, tmp_path: Path) -> None:
+        """Errors in watchdog should be catchable by the caller."""
+        adj = tmp_path / ".adjutant"
+        adj.mkdir()
+        (adj / "state").mkdir()
+
+        with patch(
+            "adjutant.lifecycle.control.start_opencode_web",
+            side_effect=OSError("disk full"),
+        ):
+            # The watchdog itself raises — caller (listener loop) catches it
+            with pytest.raises(OSError, match="disk full"):
+                await _watchdog_check_web(adj)

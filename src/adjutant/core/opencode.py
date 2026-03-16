@@ -40,7 +40,20 @@ class OpenCodeNotFoundError(Exception):
 
 
 def _find_opencode() -> str:
-    """Find the opencode binary on PATH."""
+    """Find the opencode binary.
+
+    Resolution order:
+      1. OPENCODE_BIN environment variable (explicit override)
+      2. shutil.which("opencode") (standard PATH lookup)
+
+    The env var is useful in cron or other minimal-PATH environments
+    where /opt/homebrew/bin (or similar) is not in PATH.
+    """
+    env_bin = os.environ.get("OPENCODE_BIN")
+    if env_bin:
+        if os.path.isfile(env_bin) and os.access(env_bin, os.X_OK):
+            return env_bin
+        raise OpenCodeNotFoundError(f"OPENCODE_BIN={env_bin} is set but is not an executable file")
     path = shutil.which("opencode")
     if path is None:
         raise OpenCodeNotFoundError("opencode not found on PATH")
@@ -282,16 +295,14 @@ async def opencode_health_check(adj_dir: Path | None = None) -> bool:
 
     adj_log("opencode", "Health check failed — restarting opencode web server")
 
-    # Attempt restart via lifecycle restart script
-    restart_sh = adj_dir / "scripts" / "lifecycle" / "restart.sh"
-    if restart_sh.exists():
-        restart_proc = await asyncio.create_subprocess_exec(
-            "bash",
-            str(restart_sh),
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        # Don't await — poll for recovery instead
+    # Restart via Python lifecycle control (replaces deleted restart.sh)
+    try:
+        from adjutant.lifecycle.control import start_opencode_web
+
+        result = await asyncio.to_thread(start_opencode_web, adj_dir)
+        adj_log("opencode", f"Health check restart: {result}")
+    except Exception as exc:
+        adj_log("opencode", f"Health check restart error: {exc}")
 
     # Wait up to 20s for recovery via HTTP polling
     for _ in range(20):

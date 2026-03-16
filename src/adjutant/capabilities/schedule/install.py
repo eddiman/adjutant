@@ -17,6 +17,7 @@ Backwards compatibility: lines containing ".adjutant" but without
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -30,6 +31,17 @@ from typing import Optional
 def _marker(name: str) -> str:
     """Return the crontab marker string for a job name."""
     return f"# adjutant:{name}"
+
+
+def _snapshot_path() -> str:
+    """Capture the current PATH for embedding in cron entries.
+
+    Cron runs with a minimal PATH (/usr/bin:/bin) which typically excludes
+    directories like /opt/homebrew/bin where tools such as opencode live.
+    Snapshotting at install time ensures cron jobs see the same binaries
+    as the interactive shell that installed them.
+    """
+    return os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")
 
 
 def _resolve_path(p: str, adj_dir: Path) -> str:
@@ -134,14 +146,17 @@ def install_one(adj_dir: Path, name: str) -> None:
         pass
 
     marker = _marker(name)
+    path_env = _snapshot_path()
 
     if notify:
         wrap_py = adj_dir / "src" / "adjutant" / "capabilities" / "schedule" / "notify_wrap.py"
         venv_py = adj_dir / ".venv" / "bin" / "python"
         python = str(venv_py) if venv_py.exists() else "python3"
-        cron_line = f"{sched} ADJ_DIR={adj_dir} {python} {wrap_py} {name} {script_path} >> {log_path} 2>&1  {marker}"
+        cron_line = f"{sched} PATH={path_env} ADJ_DIR={adj_dir} {python} {wrap_py} {name} {script_path} >> {log_path} 2>&1  {marker}"
     else:
-        cron_line = f"{sched} ADJ_DIR={adj_dir} {script_path} >> {log_path} 2>&1  {marker}"
+        cron_line = (
+            f"{sched} PATH={path_env} ADJ_DIR={adj_dir} {script_path} >> {log_path} 2>&1  {marker}"
+        )
 
     # Remove any existing entry for this job, then append new one
     existing = _read_crontab()

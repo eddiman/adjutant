@@ -402,33 +402,48 @@ async def cmd_restart(
     bot_token: str,
     chat_id: str,
 ) -> None:
-    """Restart all services."""
-    _send("Restarting all services...", message_id, bot_token=bot_token, chat_id=chat_id)
-    adj_log("telegram", "Restart triggered via Telegram.")
+    """Restart all services.
 
-    restart_sh = adj_dir / "scripts" / "lifecycle" / "restart.sh"
-
-    def _do_restart() -> None:
-        try:
-            subprocess.Popen(
-                ["bash", str(restart_sh)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception as exc:
-            adj_log("telegram", f"cmd_restart: error spawning restart: {exc}")
-
-    await asyncio.sleep(0.1)  # allow send to complete
-    await asyncio.to_thread(_do_restart)
-
-    await asyncio.sleep(2)
+    Spawns a detached ``adjutant restart`` subprocess that outlives the
+    current listener process.  The old approach ran restart() in-process,
+    but restart() kills the Telegram listener — which *is* this process —
+    so startup() never ran and the system stayed down.
+    """
     _send(
-        "Services restarted. If I don't respond, I'm still restarting — try again in 10 seconds.",
+        "Restarting all services — I'll be back in ~15 seconds.",
         message_id,
         bot_token=bot_token,
         chat_id=chat_id,
     )
-    adj_log("telegram", "Restart completed via Telegram.")
+    adj_log("telegram", "Restart triggered via Telegram — spawning detached restart process.")
+
+    # Give the Telegram send a moment to flush
+    await asyncio.sleep(0.5)
+
+    # Spawn a detached process that will:
+    #   1. Kill this listener (and opencode web)
+    #   2. Start fresh instances of both
+    # Using start_new_session=True so it survives our death.
+    log_file = adj_dir / "state" / "restart.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(log_file, "a") as lf:
+            subprocess.Popen(
+                [sys.executable, "-m", "adjutant", "restart"],
+                stdout=lf,
+                stderr=lf,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        adj_log("telegram", "Detached restart process spawned.")
+    except Exception as exc:
+        adj_log("telegram", f"cmd_restart: failed to spawn restart process: {exc}")
+        _send(
+            f"Restart failed: {exc}",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
 
 
 # ---------------------------------------------------------------------------

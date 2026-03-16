@@ -12,7 +12,7 @@ Adjutant has three possible states:
 |-------|--------------|-------------|------------|
 | **RUNNING** | Listener is active and polling for messages | `adjutant start` | `adjutant stop`, `adjutant pause`, or `adjutant kill` |
 | **PAUSED** | Listener is running but ignores all messages; `PAUSED` lockfile exists | `adjutant pause` or `/pause` | `adjutant resume` or `/resume` |
-| **KILLED** | Hard stop; `KILLED` lockfile exists; nothing will start | `adjutant kill` or `/kill` | `adjutant startup` (interactive recovery, clears lockfile and restores crontab) |
+| **KILLED** | Hard stop; `KILLED` lockfile exists; nothing will start until explicit recovery | `adjutant kill` or `/kill` | `adjutant startup` (clears lockfile, restores crontab, starts fresh) |
 
 Check the current state at any time:
 
@@ -127,7 +127,7 @@ Note: `adjutant start` (without `startup`) will refuse to start if a `KILLED` lo
 |-|--------|--------|
 | Listener still runs | Yes | No |
 | New messages processed | No | No |
-| Auto-recovers on next start | No (stays paused) | Yes (lockfile cleared) |
+| Requires explicit recovery | `adjutant resume` | `adjutant startup` (will not auto-recover) |
 | Severity | Low — routine use | High — emergency only |
 
 ---
@@ -187,7 +187,7 @@ Checks that all required tools are installed (`bash`, `curl`, `jq`, `python3`, `
 ## Lifecycle State Machine
 
 ```
-          adjutant start / adjutant startup
+          adjutant start
                │
                ▼
          ┌─────────────┐
@@ -200,9 +200,12 @@ Checks that all required tools are installed (`bash`, `curl`, `jq`, `python3`, `
       │                 │
       ▼                 ▼
   PAUSED            KILLED
-      │
-      ▼
-  adjutant resume ──► RUNNING
+      │                 │
+      ▼                 ▼
+  adjutant resume   adjutant startup
+      │                 │
+      ▼                 ▼
+    RUNNING           RUNNING
 ```
 
-Recovery from KILLED: `adjutant startup` (interactive recovery — clears lockfile, restores crontab, starts fresh).
+Recovery from KILLED requires `adjutant startup` -- not `adjutant start`. `adjutant start` will refuse if a `KILLED` lockfile is present.

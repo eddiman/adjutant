@@ -270,6 +270,51 @@ class TestInstallOne:
         assert "notify_wrap.py" in written
         assert "python3" in written
 
+    def test_cron_line_includes_path(self, tmp_path: Path) -> None:
+        """Cron entries must include PATH= so subprocesses can find binaries."""
+        _write_adjutant_yaml(
+            tmp_path,
+            [
+                {
+                    "name": "job1",
+                    "schedule": "0 9 * * *",
+                    "script": "/run.sh",
+                    "log": "state/job1.log",
+                    "enabled": True,
+                }
+            ],
+        )
+        with (
+            patch("adjutant.capabilities.schedule.install._read_crontab", return_value=""),
+            patch("adjutant.capabilities.schedule.install._write_crontab") as mock_write,
+        ):
+            install_one(tmp_path, "job1")
+        written = mock_write.call_args[0][0]
+        assert "PATH=" in written
+
+    def test_cron_line_includes_path_with_notify(self, tmp_path: Path) -> None:
+        """Notify-wrapped cron entries must also include PATH=."""
+        _write_adjutant_yaml(
+            tmp_path,
+            [
+                {
+                    "name": "job1",
+                    "schedule": "0 9 * * *",
+                    "script": "/run.sh",
+                    "notify": True,
+                    "log": "state/job1.log",
+                    "enabled": True,
+                }
+            ],
+        )
+        with (
+            patch("adjutant.capabilities.schedule.install._read_crontab", return_value=""),
+            patch("adjutant.capabilities.schedule.install._write_crontab") as mock_write,
+        ):
+            install_one(tmp_path, "job1")
+        written = mock_write.call_args[0][0]
+        assert "PATH=" in written
+
 
 # ---------------------------------------------------------------------------
 # uninstall_one

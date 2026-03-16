@@ -230,13 +230,17 @@ cli_module: "src.cli"
 
 This causes `adjutant kb run <name> <op>` to run:
 ```
-<kb-path>/.venv/bin/python -m <cli_module> --kb-dir <kb-path> <cli_flags> <op>
+<kb-path>/.venv/bin/python -m <cli_module> <cli_flags> <op>
 ```
+
+The KB receives its directory via the `KB_DIR` environment variable and the
+process working directory (`cwd`). If the KB registry entry has a `model`
+field, the resolved model ID is passed via the `KB_MODEL` environment variable.
 
 **Optional: `cli_flags`**
 
 If the KB's `kb.yaml` declares a `cli_flags` field, those flags are inserted
-between `--kb-dir` and the operation name. This is useful for KBs that support
+before the operation name. This is useful for KBs that support
 different operating modes (e.g. mock vs real API access).
 
 ```yaml

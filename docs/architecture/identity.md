@@ -10,8 +10,8 @@ The agent's personality and knowledge are split across three files in `identity/
 
 | File | Role | Mutability |
 |------|------|-----------|
-| `identity/soul.md` | Core values, principles, long-term goals. Who the agent fundamentally is. | Rarely changes |
-| `identity/heart.md` | Personality, communication style, emotional tone. | Occasionally updated |
+| `identity/soul.md` | Core values, principles, personality, communication style. Who the agent fundamentally is. | Rarely changes |
+| `identity/heart.md` | Current priorities, active concerns, focus areas. What matters right now. | Occasionally updated |
 | `identity/registry.md` | Operational facts: current projects, people, preferences, schedule. | Frequently updated |
 
 All three files are user-specific and gitignored. Example templates (`*.example`) are tracked in the repo. The setup wizard creates your personal copies from these templates.
@@ -51,8 +51,8 @@ Three model tiers are configured in `adjutant.yaml`:
 
 | Tier | Use case |
 |------|---------|
-| `cheap` | Fast classification, simple replies |
-| `medium` | Standard chat (default) |
+| `cheap` | Routine chat, triage, classification (default for standard chat) |
+| `medium` | Escalations, deeper analysis |
 | `expensive` | Complex reasoning (`/confirm` only) |
 
 The active model for Telegram chat is stored in `state/telegram_model.txt` and can be switched at runtime via `/model <model-name>`.

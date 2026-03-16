@@ -74,7 +74,7 @@ These are plain files — their presence/absence is the entire state. Managed by
 - **OPERATIONAL → PAUSED**: `adjutant pause` or `/pause`. Creates `PAUSED` file. Listener keeps polling but drops messages.
 - **PAUSED → OPERATIONAL**: `adjutant resume` or `/resume`. Removes `PAUSED` file.
 - **OPERATIONAL → KILLED**: `adjutant kill` or `/kill`. Terminates all processes, creates `KILLED` file, disables cron.
-- **KILLED → OPERATIONAL**: `adjutant start`. Detects and clears `KILLED` lockfile, then starts the listener fresh.
+- **KILLED → OPERATIONAL**: `adjutant startup`. Detects and clears `KILLED` lockfile, restores crontab, then starts the listener fresh. Note: `adjutant start` will refuse if a `KILLED` lockfile is present.
 
 ---
 

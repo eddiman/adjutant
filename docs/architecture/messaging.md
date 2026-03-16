@@ -63,7 +63,7 @@ Telegram API
     ▼
 listener.py (async loop)
     │
-    ├─► dispatch_photo()  ─► tg_handle_photo ─► vision ─► chat.py ─► claude_run
+    ├─► dispatch_photo()  ─► tg_handle_photo ─► vision ─► chat.py ─► opencode_run
     └─► dispatch_message()
             │
             ├─ auth check (chat_id match)
@@ -73,14 +73,14 @@ listener.py (async loop)
             ├─ /command  ─► cmd_* (commands.py)  [async]
             │                  │
             │                  ├─ inline response (msg_send_text)
-            │                  └─ complex tasks (claude_run)
+            │                  └─ complex tasks (opencode_run)
             │
             ├─ model-switch intent ─► cmd_model()
             │
             └─ text  ─► chat.py (asyncio.Task)
                             │
                             ▼
-                        claude_run
+                        opencode_run
                             │
                             ▼
                         msg_send_text (reply)
@@ -115,7 +115,7 @@ The only currently implemented backend.
 | `send.py` | Implements `msg_send_text`, `msg_send_photo`, `msg_react`, `msg_typing_start`, `msg_typing_stop` with real Telegram API calls. |
 | `photos.py` | `tg_download_photo` (downloads from Telegram CDN) + `tg_handle_photo` (vision analysis → chat response). |
 | `commands.py` | `async cmd_*` functions for every slash command. |
-| `chat.py` | Invokes `claude_run` with the user message and returns the agent reply. Manages session continuity (reuses session ID within a configured window). |
+| `chat.py` | Invokes `opencode_run` with the user message and returns the agent reply. Manages session continuity (reuses session ID within a configured window). |
 | `notify.py` | Standalone notifier — sends a message without requiring the listener to be running. |
 | `reply.py` | Reply helper used by scheduled job results and KB operation output. |
 | `service.py` | Process manager: `start` (fork listener to background), `stop` (kill by PID), `status`. |

@@ -100,6 +100,7 @@ Each capability is an isolated subdirectory. Capability functions accept argumen
 | `screenshot/` | `screenshot/screenshot.py` | Playwright screenshot + vision caption + Telegram send |
 | `vision/` | `vision/vision.py` | LLM image analysis via OpenCode |
 | `search/` | `search/search.py` | Brave Search API integration |
+| `memory/` | `memory/memory.py`, `memory/classify.py` | Persistent long-term memory with auto-classification |
 
 ---
 

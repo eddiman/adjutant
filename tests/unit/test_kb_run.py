@@ -360,8 +360,25 @@ class TestKbRunPython:
 
         cmd = mock_run.call_args[0][0]
         assert "--real" in cmd
-        assert "--kb-dir" in cmd
-        assert str(kb_path) in cmd
+
+    def test_does_not_inject_kb_dir_flag(self, tmp_path: Path) -> None:
+        """KB path is passed via KB_DIR env var and cwd, not --kb-dir flag."""
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "fetch")
+
+        cmd = mock_run.call_args[0][0]
+        assert "--kb-dir" not in cmd
+        # But KB_DIR env var and cwd must still be set
+        env = mock_run.call_args[1]["env"]
+        assert env["KB_DIR"] == str(kb_path)
+        assert mock_run.call_args[1]["cwd"] == str(kb_path)
 
     def test_passes_mock_flag_when_cli_flags_set(self, tmp_path: Path) -> None:
         """cli_flags: --mock in kb.yaml replaces the default --real."""
@@ -378,6 +395,30 @@ class TestKbRunPython:
         cmd = mock_run.call_args[0][0]
         assert "--mock" in cmd
         assert "--real" not in cmd
+
+    def test_command_order_is_module_flags_operation(self, tmp_path: Path) -> None:
+        """Command must be: python -m <module> <flags> <operation> [extra_args].
+
+        KB CLIs (e.g. Click groups) expect flags before the subcommand.
+        Injecting unexpected flags like --kb-dir breaks this contract.
+        """
+        kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli", cli_flags="--mock")
+        _make_venv_python(kb_path)
+        _make_registry(tmp_path, [{"name": "mydb", "path": str(kb_path)}])
+
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = type(
+                "R", (), {"returncode": 0, "stdout": "ok\n", "stderr": ""}
+            )()
+            kb_run(tmp_path, "mydb", "news", ["--days", "3"])
+
+        cmd = mock_run.call_args[0][0]
+        # Verify exact order: python -m src.cli --mock news --days 3
+        module_idx = cmd.index("src.cli")
+        mock_idx = cmd.index("--mock")
+        news_idx = cmd.index("news")
+        days_idx = cmd.index("--days")
+        assert module_idx < mock_idx < news_idx < days_idx
 
     def test_passes_operation_and_extra_args(self, tmp_path: Path) -> None:
         kb_path = _make_kb(tmp_path, "mydb", cli_module="src.cli")

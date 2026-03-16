@@ -245,7 +245,7 @@ class TestStartup:
             lambda d: "Telegram listener started (PID 12345)",
         )
         monkeypatch.setattr(
-            "adjutant.lifecycle.control._start_opencode_web",
+            "adjutant.lifecycle.control.start_opencode_web",
             lambda d: "OpenCode web server started (PID 99999)",
         )
         monkeypatch.setattr(
@@ -282,7 +282,7 @@ class TestStartup:
             lambda d: "started",
         )
         monkeypatch.setattr(
-            "adjutant.lifecycle.control._start_opencode_web",
+            "adjutant.lifecycle.control.start_opencode_web",
             lambda d: "started",
         )
         monkeypatch.setattr(

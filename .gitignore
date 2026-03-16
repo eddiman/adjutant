@@ -49,3 +49,6 @@ tmp/
 
 # Local planning docs — not for tracking
 docs/reference/portfolio-kb-plan.md
+
+# Cloned docs site repo (temporary, for making cross-repo doc updates)
+adjutant-docs/

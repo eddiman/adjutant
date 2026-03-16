@@ -11,7 +11,8 @@ Responsibilities (and nothing else):
   6. Advance offset past ALL updates
   7. Route to dispatch_message / dispatch_photo
   8. Run opencode_reap every 6 cycles (~1 minute)
-  9. Release lock and clean up on exit
+  9. Check opencode web server liveness every 30 cycles (~5 min)
+  10. Release lock and clean up on exit
 
 Run as: python -m adjutant.messaging.telegram.listener
 """
@@ -29,6 +30,7 @@ from adjutant.core.logging import adj_log
 
 _POLL_TIMEOUT = 10  # seconds — long-poll interval passed to Telegram
 _REAP_INTERVAL = 6  # poll cycles between opencode_reap calls
+_WEB_WATCHDOG_INTERVAL = 30  # poll cycles between web server liveness checks (~5 min)
 _OFFSET_FILE_NAME = "telegram_offset"
 _LOCKDIR_NAME = "listener.lock"
 
@@ -89,6 +91,42 @@ async def _poll_once(
         return None
 
 
+async def _watchdog_check_web(adj_dir: Path) -> None:
+    """Check if the opencode web server is alive; restart if dead.
+
+    Uses the PID file as the liveness signal.  If the file exists but the
+    process is gone, the stale file is removed and the server is restarted.
+    If no PID file exists at all (server was never started or file was
+    cleaned up), a start is also attempted.
+    """
+    from adjutant.core.process import read_pid_file
+    from adjutant.lifecycle.control import start_opencode_web
+
+    web_pid_file = adj_dir / "state" / "opencode_web.pid"
+
+    if not web_pid_file.exists():
+        # No PID file — server was never started or file was cleaned up
+        adj_log("telegram", "Watchdog: no opencode web PID file — starting server")
+        result = await asyncio.to_thread(start_opencode_web, adj_dir)
+        adj_log("telegram", f"Watchdog: {result}")
+        return
+
+    # PID file exists — check if the process is alive
+    live_pid = read_pid_file(web_pid_file)
+    if live_pid is not None:
+        return  # Process is alive, nothing to do
+
+    # Stale PID file — process is dead
+    try:
+        stale_pid = int(web_pid_file.read_text().strip())
+    except (ValueError, OSError):
+        stale_pid = "?"
+    adj_log("telegram", f"Watchdog: opencode web (PID {stale_pid}) is dead — restarting")
+    web_pid_file.unlink(missing_ok=True)
+    result = await asyncio.to_thread(start_opencode_web, adj_dir)
+    adj_log("telegram", f"Watchdog: {result}")
+
+
 async def main() -> None:  # noqa: C901 — complexity is inherent to a polling loop
     adj_dir = _adj_dir()
     adj_dir.joinpath("state").mkdir(parents=True, exist_ok=True)
@@ -128,6 +166,7 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
     offset = _load_offset(adj_dir)
     last_processed_id = 0
     reap_counter = 0
+    watchdog_counter = 0
 
     adj_log("telegram", f"Listener started (offset={offset})")
 
@@ -148,6 +187,15 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                     await opencode_reap()
                 except Exception as exc:
                     adj_log("telegram", f"opencode_reap error: {exc}")
+
+            # Periodic opencode web server watchdog (~5 min)
+            watchdog_counter += 1
+            if watchdog_counter >= _WEB_WATCHDOG_INTERVAL:
+                watchdog_counter = 0
+                try:
+                    await _watchdog_check_web(adj_dir)
+                except Exception as exc:
+                    adj_log("telegram", f"Watchdog error: {exc}")
 
             # Poll Telegram
             updates = await _poll_once(bot_token, offset)

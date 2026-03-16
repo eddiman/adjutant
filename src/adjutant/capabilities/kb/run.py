@@ -6,9 +6,10 @@ Two invocation modes are supported:
    ``cli_module`` field (e.g. ``cli_module: "src.cli"``), ``kb_run``
    invokes the KB's own venv Python directly::
 
-       <kb-path>/.venv/bin/python -m <cli_module> --kb-dir <kb-path> --real <operation> [args...]
+       <kb-path>/.venv/bin/python -m <cli_module> <cli_flags> <operation> [args...]
 
-   No bash shim is needed. The KB's ``.venv`` must exist.
+   The KB receives its directory via the ``KB_DIR`` environment variable
+   and ``cwd``.  No bash shim is needed. The KB's ``.venv`` must exist.
 
 2. **Bash script** (legacy fallback): If ``cli_module`` is absent or empty,
    ``kb_run`` resolves ``<kb-path>/scripts/<operation>.sh`` and runs it via
@@ -83,8 +84,8 @@ def _read_kb_cli_module(kb_path: Path) -> str:
 def _read_kb_cli_flags(kb_path: Path) -> list[str]:
     """Read the ``cli_flags`` field from a KB's ``kb.yaml``.
 
-    Returns a list of flag tokens to insert between ``--kb-dir <path>`` and
-    the operation name when invoking the KB's Python CLI.  Defaults to
+    Returns a list of flag tokens to insert before the operation name
+    when invoking the KB's Python CLI.  Defaults to
     ``["--real"]`` if the field is absent or empty, so existing KBs that do
     not set ``cli_flags`` continue to run with real-API mode.
 
@@ -246,32 +247,32 @@ def kb_run(
     env["KB_DIR"] = str(kb_path)
 
     # Resolve model from registry tier → concrete model ID.
-    # If the registry entry has a model field (e.g. "cheap") and the
-    # caller did not already pass --model in args, resolve the tier and
-    # append --model <resolved> so the KB CLI uses the intended model.
+    # Passed via KB_MODEL env var so KB CLIs can read it if they care,
+    # without requiring every KB to accept a --model CLI flag.
     extra_args: list[str] = list(args or [])
     kb_model_raw = entry.get("model", "")
-    if kb_model_raw and "--model" not in extra_args:
+    if kb_model_raw:
         from adjutant.core.config import load_config
         from adjutant.core.model import resolve_kb_model
 
         config = load_config(adj_dir / "adjutant.yaml")
         resolved_model = resolve_kb_model(kb_model_raw, adj_dir / "state", config)
         if resolved_model:
-            extra_args = ["--model", resolved_model] + extra_args
+            env["KB_MODEL"] = resolved_model
 
     cli_module = _read_kb_cli_module(kb_path)
 
     if cli_module:
         # Python CLI path — invoke the KB's own venv Python directly.
+        # The KB receives its path via KB_DIR env var and cwd (both set
+        # above), so we do NOT inject --kb-dir on the command line —
+        # KB CLIs are not required to accept that flag.
         python = _resolve_kb_python(kb_path)
         cli_flags = _read_kb_cli_flags(kb_path)
         cmd = [
             str(python),
             "-m",
             cli_module,
-            "--kb-dir",
-            str(kb_path),
             *cli_flags,
             operation,
         ] + extra_args
