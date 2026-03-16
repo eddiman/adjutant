@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 import time
@@ -426,6 +427,8 @@ async def cmd_restart(
     # Using start_new_session=True so it survives our death.
     log_file = adj_dir / "state" / "restart.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
+    # Pass adj_dir so the subprocess can resolve it without relying on cwd.
+    env = {**os.environ, "ADJUTANT_HOME": str(adj_dir)}
     try:
         with open(log_file, "a") as lf:
             subprocess.Popen(
@@ -434,6 +437,8 @@ async def cmd_restart(
                 stderr=lf,
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
+                cwd=str(adj_dir),
+                env=env,
             )
         adj_log("telegram", "Detached restart process spawned.")
     except Exception as exc:
