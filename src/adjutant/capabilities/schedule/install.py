@@ -34,14 +34,28 @@ def _marker(name: str) -> str:
 
 
 def _snapshot_path() -> str:
-    """Capture the current PATH for embedding in cron entries.
+    """Build a minimal PATH for cron entries.
 
     Cron runs with a minimal PATH (/usr/bin:/bin) which typically excludes
     directories like /opt/homebrew/bin where tools such as opencode live.
-    Snapshotting at install time ensures cron jobs see the same binaries
-    as the interactive shell that installed them.
+    Instead of dumping the full shell PATH (which can exceed cron's line-
+    length limits), we include only essential directories: system paths,
+    Homebrew, and ~/.local/bin.
     """
-    return os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin")
+    essential = [
+        "/opt/homebrew/bin",
+        "/opt/homebrew/sbin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ]
+    # Add ~/.local/bin if it exists (user-installed tools)
+    local_bin = Path.home() / ".local" / "bin"
+    if local_bin.is_dir():
+        essential.insert(0, str(local_bin))
+    return ":".join(essential)
 
 
 def _resolve_path(p: str, adj_dir: Path) -> str:
