@@ -190,8 +190,9 @@ All tests must pass before release. No CI. Full guide: `docs/development/testing
 - `kb_info()` / `kb_remove()` raise `ValueError`, not `KBNotFoundError`
 - `kb_quick_create()` takes `kb_path` as `str`, not `Path`
 - `schedule_get()` returns `None` when not found — does not raise
-- `_resolve_command()` is private in `schedule/manage.py`
+- `resolve_command()` is public in `schedule/manage.py` (was `_resolve_command` before v0.2.0)
 - `dispatch_photo` arg order differs from `dispatch_message` — check signature
 - `NDJSONResult` vs `OpenCodeResult` — don't mix at call sites
 - `dispatch.py` auth + rate-limit + feature-gate block is security-critical — run full tests before refactoring
 - Feature-gated commands (`/screenshot`, `/search`) are rejected at dispatch if disabled in config — add new gates to `_FEATURE_GATES` in `dispatch.py`
+- **Cron line length**: macOS cron silently skips lines over ~1,024 chars. `_snapshot_path()` in `schedule/install.py` must build a minimal PATH — never dump the full `$PATH` from the shell. After `schedule sync`, verify with `crontab -l | wc -c` per line.
