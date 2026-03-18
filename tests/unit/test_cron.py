@@ -1,6 +1,7 @@
 """Tests for src/adjutant/lifecycle/cron.py
 
-Tests run_cron_prompt(), pulse_cron(), review_cron().
+Tests run_cron_prompt(), pulse_cron(), review_cron(), _notify_completion(),
+_format_heartbeat().
 No real opencode or filesystem I/O outside of tmp_path.
 """
 
@@ -14,7 +15,13 @@ from unittest.mock import patch
 
 import pytest
 
-from adjutant.lifecycle.cron import pulse_cron, review_cron, run_cron_prompt
+from adjutant.lifecycle.cron import (
+    _format_heartbeat,
+    _notify_completion,
+    pulse_cron,
+    review_cron,
+    run_cron_prompt,
+)
 
 
 def _mock_run_ok() -> subprocess.CompletedProcess[bytes]:
@@ -306,3 +313,185 @@ class TestReviewCron:
             review_cron(adj_dir=tmp_path)
 
         mock_run.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _format_heartbeat
+# ---------------------------------------------------------------------------
+
+
+class TestFormatHeartbeat:
+    def test_pulse_with_issues(self) -> None:
+        data = {
+            "kbs_checked": ["ixda", "portfolio"],
+            "issues_found": ["IxDA: deadline Friday", "Portfolio: high concentration"],
+            "escalated": False,
+        }
+        result = _format_heartbeat(data, "pulse", "cron")
+        assert "Pulse completed" in result
+        assert "ixda, portfolio" in result
+        assert "IxDA: deadline Friday" in result
+        assert "Source: cron" in result
+        assert "Escalated" not in result
+
+    def test_review_with_escalation(self) -> None:
+        data = {
+            "kbs_checked": ["portfolio"],
+            "issues_found": [],
+            "escalated": True,
+        }
+        result = _format_heartbeat(data, "review", "telegram")
+        assert "Review completed" in result
+        assert "Escalated" in result
+        assert "Source: telegram" in result
+
+    def test_no_issues(self) -> None:
+        data = {"kbs_checked": ["ixda"], "issues_found": [], "escalated": False}
+        result = _format_heartbeat(data, "pulse", "mariposa")
+        assert "Issues:" not in result
+        assert "Source: mariposa" in result
+
+    def test_truncates_many_issues(self) -> None:
+        data = {
+            "kbs_checked": ["ixda"],
+            "issues_found": [f"issue {i}" for i in range(12)],
+            "escalated": False,
+        }
+        result = _format_heartbeat(data, "pulse", "cron")
+        assert "issue 7" in result  # 8th issue (0-indexed) is included
+        assert "issue 8" not in result  # 9th is truncated
+        assert "and 4 more" in result
+
+    def test_empty_data(self) -> None:
+        result = _format_heartbeat({}, "pulse", "cron")
+        assert "Pulse completed" in result
+        assert "Source: cron" in result
+
+
+# ---------------------------------------------------------------------------
+# _notify_completion
+# ---------------------------------------------------------------------------
+
+
+class TestNotifyCompletion:
+    def test_sends_notification_on_heartbeat(self, tmp_path: Path) -> None:
+        """Should read heartbeat and call send_notify."""
+        state_dir = tmp_path / "state"
+        state_dir.mkdir()
+        (state_dir / "last_heartbeat.json").write_text(
+            json.dumps(
+                {
+                    "type": "pulse",
+                    "kbs_checked": ["ixda"],
+                    "issues_found": [],
+                    "escalated": False,
+                }
+            )
+        )
+
+        with patch(
+            "adjutant.messaging.telegram.notify.send_notify",
+        ) as mock_notify:
+            _notify_completion(tmp_path, "pulse", "cron")
+
+        mock_notify.assert_called_once()
+        msg = mock_notify.call_args[0][0]
+        assert "Pulse completed" in msg
+        assert "ixda" in msg
+
+    def test_silent_when_no_heartbeat(self, tmp_path: Path) -> None:
+        """Should not crash when heartbeat file is missing."""
+        (tmp_path / "state").mkdir()
+        _notify_completion(tmp_path, "pulse", "cron")  # Should not raise
+
+    def test_silent_on_budget_exceeded(self, tmp_path: Path) -> None:
+        """Should swallow BudgetExceededError."""
+        from adjutant.messaging.telegram.notify import BudgetExceededError
+
+        state_dir = tmp_path / "state"
+        state_dir.mkdir()
+        (state_dir / "last_heartbeat.json").write_text(
+            json.dumps(
+                {
+                    "type": "pulse",
+                    "kbs_checked": [],
+                    "issues_found": [],
+                    "escalated": False,
+                }
+            )
+        )
+
+        with patch(
+            "adjutant.messaging.telegram.notify.send_notify",
+            side_effect=BudgetExceededError(3, 3),
+        ):
+            _notify_completion(tmp_path, "pulse", "cron")  # Should not raise
+
+    def test_silent_on_missing_credentials(self, tmp_path: Path) -> None:
+        """Should swallow RuntimeError from missing credentials."""
+        state_dir = tmp_path / "state"
+        state_dir.mkdir()
+        (state_dir / "last_heartbeat.json").write_text(
+            json.dumps(
+                {
+                    "type": "pulse",
+                    "kbs_checked": [],
+                    "issues_found": [],
+                    "escalated": False,
+                }
+            )
+        )
+
+        with patch(
+            "adjutant.messaging.telegram.notify.send_notify",
+            side_effect=RuntimeError("no credentials"),
+        ):
+            _notify_completion(tmp_path, "pulse", "cron")  # Should not raise
+
+    def test_not_called_on_nonzero_exit(self, tmp_path: Path) -> None:
+        """run_cron_prompt should NOT notify when opencode fails."""
+        prompt = tmp_path / "pulse.md"
+        prompt.write_text("fail test")
+
+        fail_result = subprocess.CompletedProcess(args=[], returncode=1)
+        with (
+            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
+            patch("subprocess.run", return_value=fail_result),
+            patch("adjutant.lifecycle.cron._notify_completion") as mock_notify,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            run_cron_prompt(prompt, adj_dir=tmp_path, action="pulse", source="cron")
+
+        assert exc_info.value.code == 1
+        mock_notify.assert_not_called()
+
+    def test_called_on_success(self, tmp_path: Path) -> None:
+        """run_cron_prompt should notify on exit code 0."""
+        prompt = tmp_path / "pulse.md"
+        prompt.write_text("success test")
+
+        with (
+            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
+            patch("subprocess.run", return_value=_mock_run_ok()),
+            patch("adjutant.lifecycle.cron._notify_completion") as mock_notify,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            run_cron_prompt(prompt, adj_dir=tmp_path, action="pulse", source="mariposa")
+
+        assert exc_info.value.code == 0
+        mock_notify.assert_called_once_with(tmp_path, "pulse", "mariposa")
+
+    def test_not_called_for_unknown_action(self, tmp_path: Path) -> None:
+        """run_cron_prompt should skip notification for action='unknown'."""
+        prompt = tmp_path / "test.md"
+        prompt.write_text("unknown")
+
+        with (
+            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
+            patch("subprocess.run", return_value=_mock_run_ok()),
+            patch("adjutant.lifecycle.cron._notify_completion") as mock_notify,
+            pytest.raises(SystemExit),
+        ):
+            run_cron_prompt(prompt, adj_dir=tmp_path, action="unknown", source="cron")
+
+        mock_notify.assert_not_called()

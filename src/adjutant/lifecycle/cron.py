@@ -8,10 +8,14 @@ Both are thin wrappers called by crontab.  They read a prompt file,
 write an active-operation marker, run opencode as a subprocess, and
 clean up the marker when done.  The opencode exit code is propagated
 via sys.exit so cron sees the real result.
+
+After a successful pulse or review, a Telegram notification is sent
+with a summary of what was found (budget-guarded, best-effort).
 """
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -30,6 +34,60 @@ def _find_opencode() -> str:
     return path
 
 
+def _format_heartbeat(data: dict, action: str, source: str) -> str:  # noqa: C901
+    """Format last_heartbeat.json into a human-readable notification."""
+    lines: list[str] = []
+
+    # Header
+    emoji = "\U0001f4e1" if action == "pulse" else "\U0001f4dd"  # 📡 or 📝
+    lines.append(f"{emoji} {action.title()} completed")
+
+    # KBs checked
+    kbs = data.get("kbs_checked", [])
+    if kbs:
+        lines.append(f"\nChecked: {', '.join(kbs)}")
+
+    # Issues found
+    issues = data.get("issues_found", [])
+    if issues:
+        lines.append("\nIssues:")
+        for issue in issues[:8]:  # Cap at 8 to stay under Telegram limit
+            lines.append(f"\u2022 {issue}")
+        if len(issues) > 8:
+            lines.append(f"  ... and {len(issues) - 8} more")
+
+    # Escalation
+    if data.get("escalated"):
+        lines.append("\n\u26a0\ufe0f Escalated — check insights/pending/")
+
+    # Source tag
+    lines.append(f"\nSource: {source}")
+
+    return "\n".join(lines)
+
+
+def _notify_completion(adj_dir: Path, action: str, source: str) -> None:
+    """Send a Telegram notification with the pulse/review results.
+
+    Reads state/last_heartbeat.json, formats a summary, and sends via
+    send_notify.  Best-effort: silently swallows all errors (missing
+    heartbeat, budget exceeded, missing credentials, network errors).
+    """
+    try:
+        heartbeat_file = adj_dir / "state" / "last_heartbeat.json"
+        if not heartbeat_file.is_file():
+            return
+
+        data = json.loads(heartbeat_file.read_text())
+        message = _format_heartbeat(data, action, source)
+
+        from adjutant.messaging.telegram.notify import send_notify
+
+        send_notify(message, adj_dir)
+    except Exception:  # noqa: BLE001 — best-effort, never crash the cron job
+        pass
+
+
 def run_cron_prompt(
     prompt_file: Path,
     *,
@@ -40,7 +98,8 @@ def run_cron_prompt(
     """Read a prompt file and run opencode as a subprocess.
 
     Writes state/active_operation.json before starting and removes it
-    when done (success or failure).  Propagates the opencode exit code
+    when done (success or failure).  On success, sends a Telegram
+    notification with the results.  Propagates the opencode exit code
     via sys.exit so cron sees the real result.
 
     Args:
@@ -71,6 +130,8 @@ def run_cron_prompt(
         result = subprocess.run(
             [opencode, "run", "--dir", str(adj_dir), prompt_text],
         )
+        if result.returncode == 0 and action != "unknown":
+            _notify_completion(adj_dir, action, source)
         sys.exit(result.returncode)
     except KeyboardInterrupt:
         sys.exit(130)
