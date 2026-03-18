@@ -389,9 +389,15 @@ async def cmd_pulse(
             )
         return
 
+    from adjutant.core.lockfiles import clear_active_operation, set_active_operation
+
     pulse_prompt = adj_dir / "prompts" / "pulse.md"
     model = _get_model(adj_dir)
-    result = await _run_opencode_prompt(pulse_prompt, 240.0, adj_dir, model)
+    set_active_operation("pulse", "telegram", adj_dir=adj_dir)
+    try:
+        result = await _run_opencode_prompt(pulse_prompt, 240.0, adj_dir, model)
+    finally:
+        clear_active_operation(adj_dir=adj_dir)
     if not result:
         result = "The pulse check completed but returned no output."
     adj_log("telegram", f"Pulse completed via Telegram ({len(result.split())} words).")
@@ -518,11 +524,16 @@ async def cmd_reflect_confirm(
         )
         return
 
+    from adjutant.core.lockfiles import clear_active_operation, set_active_operation
     from adjutant.core.model import TIER_DEFAULTS
 
     reflect_prompt = adj_dir / "prompts" / "review.md"
     model = TIER_DEFAULTS["medium"]
-    result = await _run_opencode_prompt(reflect_prompt, 300.0, adj_dir, model)
+    set_active_operation("review", "telegram", adj_dir=adj_dir)
+    try:
+        result = await _run_opencode_prompt(reflect_prompt, 300.0, adj_dir, model)
+    finally:
+        clear_active_operation(adj_dir=adj_dir)
     if not result:
         result = "The reflection completed but returned no output."
     adj_log("telegram", f"Reflect completed via Telegram ({len(result.split())} words).")

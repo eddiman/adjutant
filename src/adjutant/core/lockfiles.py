@@ -1,10 +1,14 @@
-"""KILLED/PAUSED state management via lockfiles.
+"""KILLED/PAUSED state management via lockfiles and active operation tracking.
 
 Two lockfile types:
   - KILLED: Hard stop — system is shut down. Created by emergency_kill.
   - PAUSED: Soft stop — system is temporarily paused. Created by pause command.
 
 Stored as $ADJ_DIR/KILLED and $ADJ_DIR/PAUSED (empty files).
+
+Active operation tracking:
+  - state/active_operation.json — written when a pulse/review starts, removed when done.
+  - Allows any client (Mariposa, Telegram, CLI) to observe running state.
 
 Matches bash lockfiles.sh behavior exactly:
   - check_* functions emit stderr messages and return False if locked
@@ -15,9 +19,12 @@ Matches bash lockfiles.sh behavior exactly:
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 
 def _adj_dir() -> Path:
@@ -120,3 +127,91 @@ def clear_killed(adj_dir: Path | None = None) -> None:
     d = adj_dir or _adj_dir()
     with contextlib.suppress(FileNotFoundError):
         (d / "KILLED").unlink()
+
+
+# --- Active operation tracking ---
+
+_STALE_SECONDS = 1800  # 30 minutes
+
+
+def _pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID exists."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        # EPERM — process exists but we can't signal it
+        return True
+    return True
+
+
+def get_active_operation(adj_dir: Path | None = None) -> dict[str, Any] | None:
+    """Read state/active_operation.json if it exists and is not stale.
+
+    Returns the parsed dict, or None if no operation is running.
+    A marker is considered stale if started_at is older than 30 minutes
+    AND the recorded PID is no longer alive.  Stale markers are removed.
+    """
+    d = adj_dir or _adj_dir()
+    op_file = d / "state" / "active_operation.json"
+    if not op_file.is_file():
+        return None
+
+    try:
+        data = json.loads(op_file.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    # Staleness check
+    raw_ts = data.get("started_at", "")
+    try:
+        started = datetime.fromisoformat(raw_ts)
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=UTC)
+        age = (datetime.now(UTC) - started).total_seconds()
+    except (ValueError, TypeError):
+        age = _STALE_SECONDS + 1  # unparseable timestamp → treat as stale
+
+    if age > _STALE_SECONDS:
+        pid = data.get("pid")
+        if not pid or not _pid_alive(int(pid)):
+            with contextlib.suppress(FileNotFoundError):
+                op_file.unlink()
+            return None
+
+    return data
+
+
+def set_active_operation(
+    action: str,
+    source: str,
+    adj_dir: Path | None = None,
+) -> None:
+    """Write state/active_operation.json to mark an operation as in-progress.
+
+    Args:
+        action: The operation type (e.g. "pulse", "review").
+        source: Where the trigger came from ("cron", "telegram", "mariposa").
+        adj_dir: Adjutant root directory.
+    """
+    d = adj_dir or _adj_dir()
+    op_file = d / "state" / "active_operation.json"
+    op_file.parent.mkdir(parents=True, exist_ok=True)
+    op_file.write_text(
+        json.dumps(
+            {
+                "action": action,
+                "started_at": datetime.now(UTC).isoformat(),
+                "pid": os.getpid(),
+                "source": source,
+            },
+        ),
+    )
+
+
+def clear_active_operation(adj_dir: Path | None = None) -> None:
+    """Remove state/active_operation.json if it exists."""
+    d = adj_dir or _adj_dir()
+    with contextlib.suppress(FileNotFoundError):
+        (d / "state" / "active_operation.json").unlink()
