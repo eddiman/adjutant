@@ -11,6 +11,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Comprehensive code quality, type safety, and security hardening pass driven by full deployment readiness audit.
 
+### Added
+
+- **Active operation tracking** — pulse and review write `state/active_operation.json` while running, allowing external clients to observe operation state without holding open connections. Staleness detection auto-cleans markers older than 30 minutes with dead PIDs. (`core/lockfiles.py`, `lifecycle/cron.py`)
+- **Post-completion notifications** — after a successful pulse or review, a Telegram notification is sent with a summary of KBs checked, issues found, and escalation status. Budget-guarded, best-effort. (`lifecycle/cron.py`)
+- Active operation markers for Telegram `/pulse` and `/reflect` → `/confirm` paths (`messaging/telegram/commands.py`)
+
+### Changed
+
+- `lifecycle/cron.py`: replaced `os.execvp` with `subprocess.run` so Python keeps control for marker management and notification dispatch. Exit code propagated via `sys.exit()`. New `action` and `source` kwargs on `run_cron_prompt()`, `pulse_cron()`, `review_cron()`.
+
 ### Security
 
 - Feature gate in dispatch now fails closed — rejects gated commands when config is unparseable
@@ -36,8 +46,10 @@ Comprehensive code quality, type safety, and security hardening pass driven by f
 
 ### Tests
 
-- 1,260 tests passing (up from 1,257)
+- 1,289 tests passing (up from 1,257)
 - 3 new tests for fail-closed feature gate behavior
+- 12 new tests for active operation tracking (`test_lockfiles.py`)
+- 12 new tests for cron notification and marker lifecycle (`test_cron.py`)
 
 ### Docs
 

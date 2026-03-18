@@ -209,3 +209,48 @@ Checks that all required tools are installed (`bash`, `curl`, `jq`, `python3`, `
 ```
 
 Recovery from KILLED requires `adjutant startup` -- not `adjutant start`. `adjutant start` will refuse if a `KILLED` lockfile is present.
+
+---
+
+## Active Operation Tracking
+
+When a pulse or review is running, Adjutant writes a marker file at `state/active_operation.json`. This allows external clients (like the Mariposa dashboard) to observe the running state without holding open an HTTP connection.
+
+```json
+{
+  "action": "pulse",
+  "started_at": "2026-03-18T21:30:00+00:00",
+  "pid": 12345,
+  "source": "cron"
+}
+```
+
+The marker is created before the operation starts and removed when it finishes (in a `finally` block, so it's cleaned up even on failure).
+
+### Source values
+
+| Source | Meaning |
+|--------|---------|
+| `cron` | Triggered from CLI (`adjutant pulse`) or crontab |
+| `telegram` | Triggered via `/pulse` or `/reflect` → `/confirm` in Telegram |
+| `mariposa` | Triggered from the Mariposa dashboard (spawns `adjutant pulse`) |
+
+### Staleness detection
+
+If the marker is older than 30 minutes and the recorded PID is no longer alive, it is treated as stale and automatically cleaned up. This handles edge cases like SIGKILL or power loss.
+
+---
+
+## Post-Operation Notifications
+
+After a successful pulse or review, Adjutant sends a Telegram notification with a summary of results. This happens automatically regardless of how the operation was triggered (CLI, crontab, Mariposa, or Telegram).
+
+The notification includes:
+- Which KBs were checked
+- Any issues found
+- Whether the findings were escalated
+- Where the trigger came from
+
+Notifications use the daily budget system (`notifications.max_per_day` in `adjutant.yaml`, default 3). If the budget is exhausted, the notification is silently skipped. The pulse/review itself still completes normally.
+
+Note: when triggered from Telegram via `/pulse`, the notification is redundant since the results are already sent as a chat reply. Both are sent, but the daily budget prevents excess.

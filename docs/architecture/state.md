@@ -22,6 +22,7 @@ All runtime state lives under `ADJ_DIR/state/`. These files are gitignored and u
 | `last_heartbeat.json` | Timestamp and summary of the last `/pulse` or `/reflect` run. |
 | `usage_log.jsonl` | Rolling token usage log for session and weekly estimates. |
 | `actions.jsonl` | JSONL audit log — one record per autonomous cycle or notification. |
+| `active_operation.json` | Marker for a currently running pulse or review. Written before opencode starts, removed when it finishes. Used by external clients (Mariposa, Telegram) to observe running state. |
 | `notify_count_YYYY-MM-DD.txt` | Today's notification send counter. Enforces the daily budget. Resets at midnight automatically (date-scoped filename). |
 
 ---
@@ -47,6 +48,54 @@ These are plain files — their presence/absence is the entire state. Managed by
 | `check_killed` | Returns silently when not killed; raises when killed |
 | `check_paused` | Returns silently when not paused; raises when paused |
 | `check_operational` | Composite check — `KILLED` takes precedence over `PAUSED` |
+
+---
+
+## Active Operation Tracking
+
+When a pulse or review starts, Adjutant writes `state/active_operation.json`:
+
+```json
+{
+  "action": "pulse",
+  "started_at": "2026-03-18T21:30:00+00:00",
+  "pid": 12345,
+  "source": "cron"
+}
+```
+
+| Field | Values |
+|-------|--------|
+| `action` | `"pulse"`, `"review"` |
+| `source` | `"cron"` (CLI/crontab), `"telegram"`, `"mariposa"` |
+| `pid` | Process ID of the Python wrapper |
+| `started_at` | ISO-8601 UTC timestamp |
+
+The file is removed in a `finally` block when the operation completes (success or failure). This allows any client to observe whether an operation is running by reading a single file — no need to hold open an HTTP connection or track in-memory state.
+
+**Staleness detection**: If the marker is older than 30 minutes AND the recorded PID is dead, `get_active_operation()` treats it as stale and deletes it. This handles SIGKILL or other unclean shutdowns.
+
+Managed by `src/adjutant/core/lockfiles.py`:
+
+| Function | What it does |
+|----------|-------------|
+| `set_active_operation(action, source, adj_dir)` | Write the marker |
+| `get_active_operation(adj_dir)` | Read it, with staleness check |
+| `clear_active_operation(adj_dir)` | Delete it |
+
+### Entry points that write the marker
+
+| Trigger | Code path | Source value |
+|---------|-----------|-------------|
+| `adjutant pulse` (CLI/crontab) | `lifecycle/cron.py` → `run_cron_prompt()` | `"cron"` |
+| `adjutant review` (CLI/crontab) | `lifecycle/cron.py` → `run_cron_prompt()` | `"cron"` |
+| Mariposa dashboard button | API spawns `adjutant pulse` → same as above | `"cron"` |
+| Telegram `/pulse` | `commands.py` → `cmd_pulse()` | `"telegram"` |
+| Telegram `/reflect` + `/confirm` | `commands.py` → `cmd_reflect_confirm()` | `"telegram"` |
+
+### Post-completion notification
+
+After a successful pulse or review (exit code 0), `run_cron_prompt()` reads `state/last_heartbeat.json` and sends a Telegram notification with a summary of what was found. This is budget-guarded and best-effort — failures are silently swallowed.
 
 ---
 
@@ -94,5 +143,5 @@ This pattern provides:
 | Module | What it does |
 |--------|-------------|
 | `control.py` | `pause`, `resume`, `kill`, `startup`. Clears `KILLED` lockfile on startup; creates/removes `PAUSED`. Emergency kill terminates all Adjutant processes by pattern and backs up then wipes crontab. |
-| `cron.py` | Runs the pulse and review prompts as cron-triggered subprocesses. |
+| `cron.py` | Runs pulse and review prompts as subprocesses. Writes active-operation marker before start, clears on finish. Sends Telegram notification on success. |
 | `update.py` | Compares `VERSION` against latest GitHub release, backs up, downloads, rsyncs new files into place. Personal files (`adjutant.yaml`, `.env`, `identity/`, `knowledge_bases/`) are never overwritten. |
