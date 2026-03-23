@@ -10,7 +10,6 @@ import pytest
 
 from adjutant.setup.steps.identity import (
     _estimate_tokens,
-    _extract_opencode_text,
     _heart_template,
     _write_templates,
     step_identity,
@@ -27,31 +26,6 @@ class TestEstimateTokens:
     def test_long_text(self) -> None:
         text = "a" * 400
         assert _estimate_tokens(text) == 100
-
-
-class TestExtractOpencodeText:
-    def test_extracts_text_parts(self) -> None:
-        lines = [
-            json.dumps({"part": {"text": "Hello "}}),
-            json.dumps({"part": {"text": "world"}}),
-        ]
-        result = _extract_opencode_text("\n".join(lines))
-        assert result == "Hello world"
-
-    def test_skips_non_text_parts(self) -> None:
-        lines = [
-            json.dumps({"part": {"type": "tool_call"}}),
-            json.dumps({"part": {"text": "Answer"}}),
-        ]
-        result = _extract_opencode_text("\n".join(lines))
-        assert result == "Answer"
-
-    def test_handles_invalid_json(self) -> None:
-        result = _extract_opencode_text("not json\n{bad}")
-        assert result == ""
-
-    def test_empty_input(self) -> None:
-        assert _extract_opencode_text("") == ""
 
 
 class TestHeartTemplate:

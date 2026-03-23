@@ -9,9 +9,8 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -24,9 +23,13 @@ from adjutant.lifecycle.cron import (
 )
 
 
-def _mock_run_ok() -> subprocess.CompletedProcess[bytes]:
-    """Return a CompletedProcess with returncode 0."""
-    return subprocess.CompletedProcess(args=[], returncode=0)
+def _mock_backend(returncode: int = 0) -> MagicMock:
+    """Return a mock backend with configurable returncode."""
+    backend = MagicMock()
+    backend.run_sync = MagicMock(return_value=returncode)
+    backend.find_binary = MagicMock(return_value="/usr/bin/opencode")
+    backend.name = "opencode"
+    return backend
 
 
 # ---------------------------------------------------------------------------
@@ -35,32 +38,29 @@ def _mock_run_ok() -> subprocess.CompletedProcess[bytes]:
 
 
 class TestRunCronPrompt:
-    def test_runs_opencode_with_prompt(self, tmp_path: Path) -> None:
-        """Should call subprocess.run with opencode and the prompt text."""
+    def test_runs_backend_with_prompt(self, tmp_path: Path) -> None:
+        """Should call backend.run_sync with the prompt text."""
         prompt = tmp_path / "pulse.md"
         prompt.write_text("Do the thing")
 
+        backend = _mock_backend()
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=_mock_run_ok()) as mock_run,
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit) as exc_info,
         ):
             run_cron_prompt(prompt, adj_dir=tmp_path)
 
         assert exc_info.value.code == 0
-        mock_run.assert_called_once_with(
-            ["/usr/bin/opencode", "run", "--dir", str(tmp_path), "Do the thing"],
-        )
+        backend.run_sync.assert_called_once_with("Do the thing", workdir=tmp_path)
 
     def test_propagates_nonzero_exit_code(self, tmp_path: Path) -> None:
-        """Should propagate opencode's non-zero exit code via sys.exit."""
+        """Should propagate backend's non-zero exit code via sys.exit."""
         prompt = tmp_path / "pulse.md"
         prompt.write_text("fail prompt")
 
-        fail_result = subprocess.CompletedProcess(args=[], returncode=42)
+        backend = _mock_backend(returncode=42)
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=fail_result),
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit) as exc_info,
         ):
             run_cron_prompt(prompt, adj_dir=tmp_path)
@@ -68,37 +68,41 @@ class TestRunCronPrompt:
         assert exc_info.value.code == 42
 
     def test_writes_and_clears_active_operation(self, tmp_path: Path) -> None:
-        """Should write state/active_operation.json before opencode and remove it after."""
+        """Should write state/active_operation.json before backend and remove it after."""
         prompt = tmp_path / "pulse.md"
         prompt.write_text("marker test")
         op_file = tmp_path / "state" / "active_operation.json"
 
         marker_existed_during_run = False
 
-        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        def fake_run_sync(*_args: object, **_kwargs: object) -> int:
             nonlocal marker_existed_during_run
             marker_existed_during_run = op_file.is_file()
-            return _mock_run_ok()
+            return 0
+
+        backend = _mock_backend()
+        backend.run_sync = MagicMock(side_effect=fake_run_sync)
 
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", side_effect=fake_run),
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit),
         ):
             run_cron_prompt(prompt, adj_dir=tmp_path, action="pulse", source="test")
 
-        assert marker_existed_during_run, "Marker should exist while opencode runs"
+        assert marker_existed_during_run, "Marker should exist while backend runs"
         assert not op_file.exists(), "Marker should be cleaned up after completion"
 
     def test_clears_marker_on_failure(self, tmp_path: Path) -> None:
-        """Should clear the marker even when subprocess.run raises."""
+        """Should clear the marker even when backend.run_sync raises."""
         prompt = tmp_path / "pulse.md"
         prompt.write_text("crash test")
         op_file = tmp_path / "state" / "active_operation.json"
 
+        backend = _mock_backend()
+        backend.run_sync = MagicMock(side_effect=OSError("boom"))
+
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", side_effect=OSError("boom")),
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(OSError, match="boom"),
         ):
             run_cron_prompt(prompt, adj_dir=tmp_path, action="pulse", source="test")
@@ -113,13 +117,15 @@ class TestRunCronPrompt:
 
         captured_data: dict[str, object] = {}
 
-        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        def fake_run_sync(*_args: object, **_kwargs: object) -> int:
             captured_data.update(json.loads(op_file.read_text()))
-            return _mock_run_ok()
+            return 0
+
+        backend = _mock_backend()
+        backend.run_sync = MagicMock(side_effect=fake_run_sync)
 
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", side_effect=fake_run),
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit),
         ):
             run_cron_prompt(
@@ -141,42 +147,37 @@ class TestRunCronPrompt:
             run_cron_prompt(missing, adj_dir=tmp_path)
         assert exc_info.value.code == 1
 
-    def test_raises_if_opencode_missing(self, tmp_path: Path) -> None:
-        """Should raise SystemExit(1) when opencode is not on PATH."""
-        from adjutant.core.opencode import OpenCodeNotFoundError
+    def test_raises_if_backend_binary_missing(self, tmp_path: Path) -> None:
+        """Should raise SystemExit(1) when backend binary is not on PATH."""
+        prompt = tmp_path / "pulse.md"
+        prompt.write_text("prompt text")
+
+        backend = _mock_backend()
+        backend.find_binary = MagicMock(return_value=None)
+
+        with (
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            run_cron_prompt(prompt, adj_dir=tmp_path)
+        assert exc_info.value.code == 1
+
+    def test_raises_if_backend_not_found(self, tmp_path: Path) -> None:
+        """Should raise SystemExit(1) when get_backend raises BackendNotFoundError."""
+        from adjutant.core.backend import BackendNotFoundError
 
         prompt = tmp_path / "pulse.md"
         prompt.write_text("prompt text")
 
         with (
             patch(
-                "adjutant.lifecycle.cron._core_find_opencode",
-                side_effect=OpenCodeNotFoundError("opencode not found on PATH"),
+                "adjutant.lifecycle.cron.get_backend",
+                side_effect=BackendNotFoundError("no backend"),
             ),
             pytest.raises(SystemExit) as exc_info,
         ):
             run_cron_prompt(prompt, adj_dir=tmp_path)
         assert exc_info.value.code == 1
-
-    def test_respects_opencode_bin_env(self, tmp_path: Path) -> None:
-        """OPENCODE_BIN env var should be honoured via the core resolver."""
-        prompt = tmp_path / "pulse.md"
-        prompt.write_text("env override test")
-
-        custom_bin = tmp_path / "custom" / "opencode"
-        custom_bin.parent.mkdir()
-        custom_bin.write_text("#!/bin/bash\nexit 0")
-        custom_bin.chmod(0o755)
-
-        with (
-            patch.dict(os.environ, {"OPENCODE_BIN": str(custom_bin)}),
-            patch("subprocess.run", return_value=_mock_run_ok()) as mock_run,
-            pytest.raises(SystemExit) as exc_info,
-        ):
-            run_cron_prompt(prompt, adj_dir=tmp_path)
-
-        assert exc_info.value.code == 0
-        assert mock_run.call_args[0][0][0] == str(custom_bin)
 
     def test_raises_if_adj_dir_not_set(self, tmp_path: Path) -> None:
         """Should raise SystemExit(1) when adj_dir is None and ADJ_DIR env not set."""
@@ -193,18 +194,16 @@ class TestRunCronPrompt:
         prompt = tmp_path / "pulse.md"
         prompt.write_text("env-sourced")
 
+        backend = _mock_backend()
         with (
             patch.dict(os.environ, {"ADJ_DIR": str(tmp_path)}),
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=_mock_run_ok()) as mock_run,
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit) as exc_info,
         ):
             run_cron_prompt(prompt, adj_dir=None)
 
         assert exc_info.value.code == 0
-        mock_run.assert_called_once_with(
-            ["/usr/bin/opencode", "run", "--dir", str(tmp_path), "env-sourced"],
-        )
+        backend.run_sync.assert_called_once_with("env-sourced", workdir=tmp_path)
 
 
 # ---------------------------------------------------------------------------
@@ -214,23 +213,21 @@ class TestRunCronPrompt:
 
 class TestPulseCron:
     def test_reads_pulse_md(self, tmp_path: Path) -> None:
-        """pulse_cron() should run opencode with prompts/pulse.md."""
+        """pulse_cron() should run backend with prompts/pulse.md."""
         prompts_dir = tmp_path / "prompts"
         prompts_dir.mkdir()
         (prompts_dir / "pulse.md").write_text("pulse text")
 
+        backend = _mock_backend()
         with (
             patch("adjutant.lifecycle.cron.init_adj_dir", return_value=tmp_path),
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=_mock_run_ok()) as mock_run,
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit) as exc_info,
         ):
             pulse_cron()
 
         assert exc_info.value.code == 0
-        mock_run.assert_called_once_with(
-            ["/usr/bin/opencode", "run", "--dir", str(tmp_path), "pulse text"],
-        )
+        backend.run_sync.assert_called_once_with("pulse text", workdir=tmp_path)
 
     def test_raises_if_pulse_md_missing(self, tmp_path: Path) -> None:
         """pulse_cron() should raise SystemExit(1) if prompts/pulse.md is absent."""
@@ -247,14 +244,14 @@ class TestPulseCron:
         prompts_dir.mkdir()
         (prompts_dir / "pulse.md").write_text("explicit")
 
+        backend = _mock_backend()
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=_mock_run_ok()) as mock_run,
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit),
         ):
             pulse_cron(adj_dir=tmp_path)
 
-        mock_run.assert_called_once()
+        backend.run_sync.assert_called_once()
 
     def test_passes_source_kwarg(self, tmp_path: Path) -> None:
         """pulse_cron(source=...) should pass source to the marker."""
@@ -265,15 +262,17 @@ class TestPulseCron:
 
         captured_source = None
 
-        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        def fake_run_sync(*_args: object, **_kwargs: object) -> int:
             nonlocal captured_source
             data = json.loads(op_file.read_text())
             captured_source = data["source"]
-            return _mock_run_ok()
+            return 0
+
+        backend = _mock_backend()
+        backend.run_sync = MagicMock(side_effect=fake_run_sync)
 
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", side_effect=fake_run),
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit),
         ):
             pulse_cron(adj_dir=tmp_path, source="mariposa")
@@ -302,23 +301,21 @@ class TestPulseCron:
 
 class TestReviewCron:
     def test_reads_review_md(self, tmp_path: Path) -> None:
-        """review_cron() should run opencode with prompts/review.md."""
+        """review_cron() should run backend with prompts/review.md."""
         prompts_dir = tmp_path / "prompts"
         prompts_dir.mkdir()
         (prompts_dir / "review.md").write_text("review text")
 
+        backend = _mock_backend()
         with (
             patch("adjutant.lifecycle.cron.init_adj_dir", return_value=tmp_path),
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=_mock_run_ok()) as mock_run,
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit) as exc_info,
         ):
             review_cron()
 
         assert exc_info.value.code == 0
-        mock_run.assert_called_once_with(
-            ["/usr/bin/opencode", "run", "--dir", str(tmp_path), "review text"],
-        )
+        backend.run_sync.assert_called_once_with("review text", workdir=tmp_path)
 
     def test_raises_if_review_md_missing(self, tmp_path: Path) -> None:
         with (
@@ -333,14 +330,14 @@ class TestReviewCron:
         prompts_dir.mkdir()
         (prompts_dir / "review.md").write_text("explicit review")
 
+        backend = _mock_backend()
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=_mock_run_ok()) as mock_run,
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit),
         ):
             review_cron(adj_dir=tmp_path)
 
-        mock_run.assert_called_once()
+        backend.run_sync.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -477,14 +474,13 @@ class TestNotifyCompletion:
             _notify_completion(tmp_path, "pulse", "cron")  # Should not raise
 
     def test_not_called_on_nonzero_exit(self, tmp_path: Path) -> None:
-        """run_cron_prompt should NOT notify when opencode fails."""
+        """run_cron_prompt should NOT notify when backend fails."""
         prompt = tmp_path / "pulse.md"
         prompt.write_text("fail test")
 
-        fail_result = subprocess.CompletedProcess(args=[], returncode=1)
+        backend = _mock_backend(returncode=1)
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=fail_result),
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             patch("adjutant.lifecycle.cron._notify_completion") as mock_notify,
             pytest.raises(SystemExit) as exc_info,
         ):
@@ -498,9 +494,9 @@ class TestNotifyCompletion:
         prompt = tmp_path / "pulse.md"
         prompt.write_text("success test")
 
+        backend = _mock_backend()
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=_mock_run_ok()),
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             patch("adjutant.lifecycle.cron._notify_completion") as mock_notify,
             pytest.raises(SystemExit) as exc_info,
         ):
@@ -514,9 +510,9 @@ class TestNotifyCompletion:
         prompt = tmp_path / "test.md"
         prompt.write_text("unknown")
 
+        backend = _mock_backend()
         with (
-            patch("adjutant.lifecycle.cron._find_opencode", return_value="/usr/bin/opencode"),
-            patch("subprocess.run", return_value=_mock_run_ok()),
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             patch("adjutant.lifecycle.cron._notify_completion") as mock_notify,
             pytest.raises(SystemExit),
         ):

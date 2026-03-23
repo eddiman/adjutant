@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from adjutant.core.backend import LLMResult
 from adjutant.capabilities.vision.vision import (
     _FALLBACK_MODEL,
     resolve_vision_model,
@@ -15,6 +16,16 @@ from adjutant.capabilities.vision.vision import (
     run_vision_multi,
     main,
 )
+
+
+def _llm_result(text="", error_type=None, timed_out=False):
+    return LLMResult(text=text, error_type=error_type, timed_out=timed_out)
+
+
+def _mock_backend(result=None):
+    backend = MagicMock()
+    backend.run = AsyncMock(return_value=result or _llm_result())
+    return backend
 
 
 # ---------------------------------------------------------------------------
@@ -84,20 +95,6 @@ class TestResolveVisionModel:
 # ---------------------------------------------------------------------------
 
 
-def _make_ndjson_result(text="", error_type=""):
-    m = MagicMock()
-    m.text = text
-    m.error_type = error_type
-    return m
-
-
-def _make_opencode_result(stdout="", timed_out=False):
-    m = MagicMock()
-    m.stdout = stdout
-    m.timed_out = timed_out
-    return m
-
-
 class TestRunVision:
     def test_raises_value_error_on_empty_path(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="No image path"):
@@ -110,115 +107,62 @@ class TestRunVision:
     def test_returns_text_on_success(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
+        backend = _mock_backend(_llm_result(text="A cat on a mat"))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result("ndjson output"),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_make_ndjson_result(text="A cat on a mat"),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value="anthropic/claude-haiku-4-5",
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value="anthropic/claude-haiku-4-5"),
         ):
             result = run_vision(str(img), "Describe this image.", tmp_path)
-
         assert result == "A cat on a mat"
 
     def test_returns_model_not_found_message(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
+        backend = _mock_backend(_llm_result(error_type="model_not_found"))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result(""),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_make_ndjson_result(error_type="model_not_found"),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value="bad-model",
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value="bad-model"),
         ):
             result = run_vision(str(img), "Describe", tmp_path)
-
         assert "vision" in result.lower() or "model" in result.lower()
 
     def test_returns_empty_string_when_no_reply(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
+        backend = _mock_backend(_llm_result(text="   "))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result(""),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_make_ndjson_result(text="   "),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value=_FALLBACK_MODEL,
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
         ):
             result = run_vision(str(img), "Describe", tmp_path)
-
         assert result == ""
 
     def test_returns_timeout_message_when_timed_out(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
+        backend = _mock_backend(_llm_result(timed_out=True))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result("", timed_out=True),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value=_FALLBACK_MODEL,
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
         ):
             result = run_vision(str(img), "Describe", tmp_path)
-
         assert "timed out" in result.lower()
 
     def test_uses_override_model(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
-        captured_args = {}
-
-        async def mock_opencode_run(args, timeout=None):
-            captured_args["args"] = args
-            return _make_opencode_result("")
-
+        backend = _mock_backend(_llm_result(text="ok"))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                side_effect=mock_opencode_run,
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_make_ndjson_result(text="ok"),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
         ):
             run_vision(str(img), "Describe", tmp_path, model="override-model")
-
-        assert "override-model" in captured_args["args"]
+        call_kwargs = backend.run.call_args[1]
+        assert call_kwargs["model"] == "override-model"
 
 
 # ---------------------------------------------------------------------------
@@ -244,24 +188,13 @@ class TestRunVisionMulti:
     def test_returns_text_on_success_single(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
+        backend = _mock_backend(_llm_result(text="A cat on a mat"))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result("ndjson output"),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_make_ndjson_result(text="A cat on a mat"),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value=_FALLBACK_MODEL,
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
         ):
             result = run_vision_multi([str(img)], "Describe.", tmp_path)
-
         assert result == "A cat on a mat"
 
     def test_returns_text_on_success_multi(self, tmp_path: Path) -> None:
@@ -269,122 +202,67 @@ class TestRunVisionMulti:
         img2 = tmp_path / "b.png"
         img1.write_bytes(b"fake png 1")
         img2.write_bytes(b"fake png 2")
-
+        backend = _mock_backend(_llm_result(text="Two images described."))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result("ndjson output"),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_make_ndjson_result(text="Two images described."),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value=_FALLBACK_MODEL,
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
         ):
             result = run_vision_multi([str(img1), str(img2)], "Describe both.", tmp_path)
-
         assert result == "Two images described."
 
-    def test_builds_multiple_f_flags(self, tmp_path: Path) -> None:
+    def test_passes_files_to_backend(self, tmp_path: Path) -> None:
         img1 = tmp_path / "a.png"
         img2 = tmp_path / "b.png"
         img3 = tmp_path / "c.png"
         img1.write_bytes(b"x")
         img2.write_bytes(b"x")
         img3.write_bytes(b"x")
-
-        captured: dict[str, list[str]] = {}
-
-        async def mock_opencode_run(args: list[str], timeout: float | None = None) -> object:
-            captured["args"] = args
-            return _make_opencode_result("")
-
+        backend = _mock_backend(_llm_result(text="ok"))
         with (
-            patch("adjutant.core.opencode.opencode_run", side_effect=mock_opencode_run),
-            patch("adjutant.lib.ndjson.parse_ndjson", return_value=_make_ndjson_result(text="ok")),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value=_FALLBACK_MODEL,
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
         ):
             run_vision_multi([str(img1), str(img2), str(img3)], "Describe.", tmp_path)
-
-        args = captured["args"]
-        # Each image should appear preceded by -f
-        f_indices = [i for i, a in enumerate(args) if a == "-f"]
-        assert len(f_indices) == 3
-        assert args[f_indices[0] + 1] == str(img1)
-        assert args[f_indices[1] + 1] == str(img2)
-        assert args[f_indices[2] + 1] == str(img3)
+        call_kwargs = backend.run.call_args[1]
+        files = call_kwargs["files"]
+        assert len(files) == 3
 
     def test_timeout_returns_message(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
+        backend = _mock_backend(_llm_result(timed_out=True))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result("", timed_out=True),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value=_FALLBACK_MODEL,
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
-
         assert "timed out" in result.lower()
 
     def test_model_not_found_returns_message(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
+        backend = _mock_backend(_llm_result(error_type="model_not_found"))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result(""),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_make_ndjson_result(error_type="model_not_found"),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value="bad-model",
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value="bad-model"),
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
-
         assert "model" in result.lower()
 
     def test_empty_reply_returns_empty_string(self, tmp_path: Path) -> None:
         img = tmp_path / "image.png"
         img.write_bytes(b"fake png")
-
+        backend = _mock_backend(_llm_result(text="   "))
         with (
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_make_opencode_result(""),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_make_ndjson_result(text="   "),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.capabilities.vision.vision.resolve_vision_model",
-                return_value=_FALLBACK_MODEL,
-            ),
+            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
-
         assert result == ""
 
 

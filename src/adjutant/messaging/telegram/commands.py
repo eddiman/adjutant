@@ -33,16 +33,15 @@ _PENDING_MODEL_TTL = 120  # seconds — auto-expire stale refinement prompts
 
 
 async def _fetch_available_models() -> list[str]:
-    """Return the list of available models from opencode, or [] on failure."""
+    """Return the list of available models from the backend, or [] on failure."""
     try:
-        proc = await asyncio.create_subprocess_exec(
-            "opencode",
-            "models",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10.0)
-        return [line for line in stdout.decode(errors="replace").splitlines() if line.strip()]
+        from adjutant.core.backend import get_backend
+
+        backend = get_backend()
+        if not backend.capabilities.model_listing:
+            return []
+        output = await backend.list_models()
+        return [line for line in output.splitlines() if line.strip()]
     except Exception:  # noqa: BLE001 — best-effort model listing
         return []
 
@@ -162,43 +161,40 @@ async def _run_opencode_prompt(
     adj_dir: Path,
     model: str,
 ) -> str:
-    """Run an opencode prompt file and return plain text (max 3800 chars).
+    """Run an LLM prompt file and return plain text (max 3800 chars).
 
-    Parses NDJSON output, truncates to 3800 chars, then calls opencode_reap.
+    Sends the prompt via the backend, reaps orphans if supported, truncates to 3800 chars.
     """
-    from adjutant.core.opencode import OpenCodeNotFoundError, opencode_reap, opencode_run
-    from adjutant.lib.ndjson import parse_ndjson
+    from adjutant.core.backend import BackendNotFoundError, get_backend
 
     if not prompt_path.is_file():
         return f"I can't find the prompt at {prompt_path}."
 
     prompt_text = prompt_path.read_text()
 
-    args = [
-        "run",
-        "--agent",
-        "adjutant",
-        "--dir",
-        str(adj_dir),
-        "--format",
-        "json",
-        "--model",
-        model,
-        prompt_text,
-    ]
-
     try:
-        result = await opencode_run(args, timeout=timeout)
-    except OpenCodeNotFoundError:
-        return "opencode is not available. Please check your installation."
+        backend = get_backend()
+        result = await backend.run(
+            prompt_text,
+            agent="adjutant",
+            workdir=adj_dir,
+            model=model,
+            timeout=timeout,
+        )
+    except BackendNotFoundError:
+        return "LLM backend is not available. Please check your installation."
     finally:
-        await opencode_reap(adj_dir)
+        try:
+            backend = get_backend()
+            if backend.capabilities.reaping:
+                await backend.reap(adj_dir)
+        except Exception:  # noqa: BLE001
+            pass
 
     if result.timed_out:
         return f"The operation timed out after {int(timeout)}s."
 
-    parsed = parse_ndjson(result.stdout)
-    reply = parsed.text.strip()
+    reply = result.text.strip()
 
     if not reply and result.returncode != 0:
         return (
@@ -341,7 +337,7 @@ async def cmd_pulse(
     chat_id: str,
 ) -> None:
     """Run a pulse check."""
-    import shutil
+    from adjutant.core.backend import get_backend
 
     _send(
         "On it — running a pulse check now. Give me a moment.",
@@ -351,8 +347,8 @@ async def cmd_pulse(
     )
     adj_log("telegram", "Pulse triggered via Telegram.")
 
-    # No opencode → read heartbeat JSON
-    if not shutil.which("opencode"):
+    # No backend binary → read heartbeat JSON
+    if not get_backend().find_binary():
         heartbeat_file = adj_dir / "state" / "last_heartbeat.json"
         if not heartbeat_file.is_file():
             _send(

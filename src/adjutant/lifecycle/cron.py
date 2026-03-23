@@ -16,28 +16,12 @@ with a summary of what was found (budget-guarded, best-effort).
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
+from adjutant.core.backend import BackendNotFoundError, get_backend
 from adjutant.core.lockfiles import clear_active_operation, set_active_operation
-from adjutant.core.opencode import OpenCodeNotFoundError
-from adjutant.core.opencode import _find_opencode as _core_find_opencode
 from adjutant.core.paths import AdjutantDirNotFoundError, get_adj_dir, init_adj_dir
-
-
-def _find_opencode() -> str:
-    """Return path to the opencode binary or raise SystemExit.
-
-    Delegates to :func:`adjutant.core.opencode._find_opencode` which
-    supports the ``OPENCODE_BIN`` env-var override — useful in cron or
-    other minimal-PATH environments.
-    """
-    try:
-        return _core_find_opencode()
-    except OpenCodeNotFoundError as exc:
-        sys.stderr.write(f"ERROR: {exc}\n")
-        raise SystemExit(1) from exc
 
 
 def _format_heartbeat(data: dict, action: str, source: str) -> str:  # noqa: C901
@@ -129,16 +113,23 @@ def run_cron_prompt(
         raise SystemExit(1)
 
     prompt_text = prompt_file.read_text()
-    opencode = _find_opencode()
+
+    try:
+        backend = get_backend()
+    except (BackendNotFoundError, ValueError) as exc:
+        sys.stderr.write(f"ERROR: {exc}\n")
+        raise SystemExit(1) from exc
+
+    if not backend.find_binary():
+        sys.stderr.write(f"ERROR: {backend.name} binary not found on PATH\n")
+        raise SystemExit(1)
 
     set_active_operation(action, source, adj_dir=adj_dir)
     try:
-        result = subprocess.run(
-            [opencode, "run", "--dir", str(adj_dir), prompt_text],
-        )
-        if result.returncode == 0 and action != "unknown":
+        returncode = backend.run_sync(prompt_text, workdir=adj_dir)
+        if returncode == 0 and action != "unknown":
             _notify_completion(adj_dir, action, source)
-        sys.exit(result.returncode)
+        sys.exit(returncode)
     except KeyboardInterrupt:
         sys.exit(130)
     finally:

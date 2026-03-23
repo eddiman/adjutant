@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -13,13 +12,13 @@ from adjutant.capabilities.kb.query import (
     KB_QUERY_TIMEOUT,
     KBQueryError,
     _read_kb_model_from_yaml,
-    _shell_quote,
     kb_query,
     kb_query_by_path,
     kb_write,
     kb_write_by_path,
     main,
 )
+from adjutant.core.backend import BackendNotFoundError, LLMResult
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +33,7 @@ def _make_adj_dir(tmp_path: Path) -> Path:
         "instance:\n  name: test\n"
         "llm:\n  models:\n    cheap: anthropic/claude-haiku-4-5\n"
         "    medium: anthropic/claude-sonnet-4-6\n"
-        "    expensive: anthropic/claude-opus-4-5\n"
+        "    expensive: anthropic/claude-opus-4-6\n"
     )
     (tmp_path / "state").mkdir(exist_ok=True)
     return tmp_path
@@ -48,19 +47,20 @@ def _make_kb(tmp_path: Path, name: str, model: str = "inherit") -> Path:
     return kb_path
 
 
-def _fake_opencode_result(text: str = "The answer.", returncode: int = 0, timed_out: bool = False):
-    """Return a fake OpenCodeResult-like object with correct NDJSON format.
-
-    parse_ndjson accumulates text from events with type="text" and part.text.
-    """
-    import json
-
-    ndjson = json.dumps({"type": "text", "part": {"text": text}}) + "\n"
-    return type(
-        "R",
-        (),
-        {"returncode": returncode, "stdout": ndjson, "stderr": "", "timed_out": timed_out},
-    )()
+def _mock_backend(text="The answer.", session_id=None, error_type=None, returncode=0, timed_out=False):
+    """Return a MagicMock backend whose ``run`` returns an ``LLMResult``."""
+    result = LLMResult(
+        text=text,
+        session_id=session_id,
+        error_type=error_type,
+        returncode=returncode,
+        timed_out=timed_out,
+    )
+    backend = MagicMock()
+    backend.run = AsyncMock(return_value=result)
+    backend.run_detached = MagicMock()
+    backend.find_binary = MagicMock(return_value="/usr/bin/opencode")
+    return backend
 
 
 # ---------------------------------------------------------------------------
@@ -119,11 +119,11 @@ class TestKbQueryByPath:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
 
-        fake_result = _fake_opencode_result("Portfolio value is $42k.")
+        backend = _mock_backend(text="Portfolio value is $42k.")
 
         with patch(
-            "adjutant.capabilities.kb.query.opencode_run",
-            new=AsyncMock(return_value=fake_result),
+            "adjutant.capabilities.kb.query.get_backend",
+            return_value=backend,
         ):
             import asyncio
 
@@ -135,14 +135,11 @@ class TestKbQueryByPath:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
 
-        # Empty stdout → parse_ndjson returns empty text
-        fake_result = type(
-            "R", (), {"returncode": 0, "stdout": "", "stderr": "", "timed_out": False}
-        )()
+        backend = _mock_backend(text="")
 
         with patch(
-            "adjutant.capabilities.kb.query.opencode_run",
-            new=AsyncMock(return_value=fake_result),
+            "adjutant.capabilities.kb.query.get_backend",
+            return_value=backend,
         ):
             import asyncio
 
@@ -153,15 +150,14 @@ class TestKbQueryByPath:
     def test_uses_custom_timeout(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
-        fake_result = _fake_opencode_result("ok")
+        backend = _mock_backend(text="ok")
 
-        mock_run = AsyncMock(return_value=fake_result)
-        with patch("adjutant.capabilities.kb.query.opencode_run", new=mock_run):
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
             import asyncio
 
             asyncio.run(kb_query_by_path(kb_path, "question?", adj_dir, timeout=30.0))
 
-        call_kwargs = mock_run.call_args[1]
+        call_kwargs = backend.run.call_args[1]
         assert call_kwargs["timeout"] == 30.0
 
 
@@ -193,11 +189,11 @@ class TestKbQuery:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "notes")
         self._make_registry(adj_dir, "notes", str(kb_path))
-        fake_result = _fake_opencode_result("Here are my notes.")
+        backend = _mock_backend(text="Here are my notes.")
 
         with patch(
-            "adjutant.capabilities.kb.query.opencode_run",
-            new=AsyncMock(return_value=fake_result),
+            "adjutant.capabilities.kb.query.get_backend",
+            return_value=backend,
         ):
             import asyncio
 
@@ -230,13 +226,13 @@ class TestMain:
         (kb_dir / "registry.yaml").write_text(
             f'knowledge_bases:\n  - name: "notes"\n    path: "{kb_path}"\n'
         )
-        fake_result = _fake_opencode_result("The answer.")
+        backend = _mock_backend(text="The answer.")
 
         with (
             patch.dict(os.environ, {"ADJ_DIR": str(adj_dir)}),
             patch(
-                "adjutant.capabilities.kb.query.opencode_run",
-                new=AsyncMock(return_value=fake_result),
+                "adjutant.capabilities.kb.query.get_backend",
+                return_value=backend,
             ),
         ):
             rc = main(["notes", "What is this?"])
@@ -246,13 +242,13 @@ class TestMain:
     def test_path_flag_queries_by_path(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "notes")
-        fake_result = _fake_opencode_result("Direct path answer.")
+        backend = _mock_backend(text="Direct path answer.")
 
         with (
             patch.dict(os.environ, {"ADJ_DIR": str(adj_dir)}),
             patch(
-                "adjutant.capabilities.kb.query.opencode_run",
-                new=AsyncMock(return_value=fake_result),
+                "adjutant.capabilities.kb.query.get_backend",
+                return_value=backend,
             ),
         ):
             rc = main(["--path", str(kb_path), "What?"])
@@ -264,27 +260,6 @@ class TestMain:
         with patch.dict(os.environ, {"ADJ_DIR": str(adj_dir)}):
             rc = main(["--path"])
         assert rc == 1
-
-
-# ---------------------------------------------------------------------------
-# _shell_quote
-# ---------------------------------------------------------------------------
-
-
-class TestShellQuote:
-    def test_quotes_simple_string(self) -> None:
-        assert _shell_quote("hello") == "hello"
-
-    def test_quotes_string_with_spaces(self) -> None:
-        assert _shell_quote("hello world") == "'hello world'"
-
-    def test_quotes_string_with_single_quotes(self) -> None:
-        result = _shell_quote("it's")
-        # shlex.quote handles single quotes by breaking and escaping
-        assert "it" in result and "s" in result
-
-    def test_quotes_empty_string(self) -> None:
-        assert _shell_quote("") == "''"
 
 
 # ---------------------------------------------------------------------------
@@ -307,70 +282,41 @@ class TestKbWriteByPath:
         with pytest.raises(KBQueryError, match="empty"):
             kb_write_by_path(kb_path, "   ", adj_dir)
 
-    def test_raises_when_opencode_not_found(self, tmp_path: Path) -> None:
+    def test_raises_when_backend_not_found(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
 
-        from adjutant.core.opencode import OpenCodeNotFoundError
-
-        with patch("adjutant.capabilities.kb.query.shutil.which", return_value=None):
-            with pytest.raises(OpenCodeNotFoundError):
+        with patch("adjutant.capabilities.kb.query.get_backend", side_effect=BackendNotFoundError("not found")):
+            with pytest.raises(BackendNotFoundError):
                 kb_write_by_path(kb_path, "update issue #1", adj_dir)
 
     def test_returns_confirmation_message(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
 
-        mock_popen = MagicMock()
-        with (
-            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
-            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
-        ):
+        backend = _mock_backend()
+
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
             msg = kb_write_by_path(kb_path, "Update issue #12: mark complete", adj_dir)
 
         assert "Write dispatched" in msg
         assert "mydb" in msg
         assert "Update issue #12" in msg
 
-    def test_spawns_detached_process(self, tmp_path: Path) -> None:
+    def test_calls_run_detached(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
 
-        mock_popen = MagicMock()
-        with (
-            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
-            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
-        ):
+        backend = _mock_backend()
+
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
             kb_write_by_path(kb_path, "Update issue #12", adj_dir)
 
-        # Verify start_new_session=True for process detachment
-        call_kwargs = mock_popen.call_args[1]
-        assert call_kwargs["start_new_session"] is True
-        assert call_kwargs["stdout"] == subprocess.DEVNULL
-        assert call_kwargs["stderr"] == subprocess.DEVNULL
-        assert call_kwargs["stdin"] == subprocess.DEVNULL
-
-    def test_shell_script_contains_opencode_and_logging(self, tmp_path: Path) -> None:
-        adj_dir = _make_adj_dir(tmp_path)
-        kb_path = _make_kb(tmp_path, "mydb")
-
-        mock_popen = MagicMock()
-        with (
-            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
-            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
-        ):
-            kb_write_by_path(kb_path, "Update issue #12", adj_dir)
-
-        # The shell script should contain the opencode binary, kb agent, and logging
-        shell_cmd = mock_popen.call_args[0][0]
-        assert shell_cmd[0] == "bash"
-        assert shell_cmd[1] == "-c"
-        shell_script = shell_cmd[2]
-        assert "/usr/bin/opencode" in shell_script
-        assert "--agent" in shell_script
-        assert "kb" in shell_script
-        assert "Write complete" in shell_script
-        assert "Write failed" in shell_script
+        # Verify run_detached was called
+        backend.run_detached.assert_called_once()
+        call_kwargs = backend.run_detached.call_args[1]
+        assert call_kwargs["agent"] == "kb"
+        assert call_kwargs["workdir"] == kb_path
 
     def test_truncates_long_instruction_in_preview(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
@@ -378,11 +324,9 @@ class TestKbWriteByPath:
 
         long_instruction = "x" * 200
 
-        mock_popen = MagicMock()
-        with (
-            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
-            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
-        ):
+        backend = _mock_backend()
+
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
             msg = kb_write_by_path(kb_path, long_instruction, adj_dir)
 
         assert msg.endswith("...")
@@ -417,11 +361,9 @@ class TestKbWrite:
         kb_path = _make_kb(tmp_path, "notes")
         self._make_registry(adj_dir, "notes", str(kb_path))
 
-        mock_popen = MagicMock()
-        with (
-            patch("adjutant.capabilities.kb.query.shutil.which", return_value="/usr/bin/opencode"),
-            patch("adjutant.capabilities.kb.query.subprocess.Popen", mock_popen),
-        ):
+        backend = _mock_backend()
+
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
             msg = kb_write("notes", "Add a new entry", adj_dir)
 
         assert "Write dispatched" in msg

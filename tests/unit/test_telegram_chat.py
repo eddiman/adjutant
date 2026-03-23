@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from adjutant.core.backend import BackendNotFoundError, LLMResult
 from adjutant.messaging.telegram.chat import (
     SESSION_TIMEOUT,
     get_model,
@@ -24,16 +25,17 @@ from adjutant.messaging.telegram.chat import (
 # ---------------------------------------------------------------------------
 
 
-def _oc_result(stdout="", returncode=0, timed_out=False):
-    from adjutant.core.opencode import OpenCodeResult
+def _llm_result(text="OK", session_id=None, error_type=None, returncode=0, timed_out=False):
+    return LLMResult(
+        text=text, session_id=session_id, error_type=error_type,
+        returncode=returncode, timed_out=timed_out,
+    )
 
-    return OpenCodeResult(stdout=stdout, stderr="", returncode=returncode, timed_out=timed_out)
 
-
-def _nd_result(text="", session_id=None, error_type=None):
-    from adjutant.lib.ndjson import NDJSONResult
-
-    return NDJSONResult(text=text, session_id=session_id, error_type=error_type)
+def _mock_backend(result=None):
+    backend = MagicMock()
+    backend.run = AsyncMock(return_value=result or _llm_result())
+    return backend
 
 
 # ---------------------------------------------------------------------------
@@ -140,23 +142,16 @@ class TestTouchSession:
 class TestRunChat:
     @pytest.mark.asyncio
     async def test_returns_reply_on_success(self, tmp_path: Path) -> None:
-        fake_result = _oc_result(stdout='{"type":"answer","text":"hello"}\n')
-        fake_parsed = _nd_result(text="hello", session_id="sid1")
-
-        with patch("adjutant.core.opencode.opencode_run", return_value=fake_result):
-            with patch("adjutant.lib.ndjson.parse_ndjson", return_value=fake_parsed):
-                reply = await run_chat("hi", tmp_path)
-
+        backend = _mock_backend(_llm_result(text="hello", session_id="sid1"))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
+            reply = await run_chat("hi", tmp_path)
         assert reply == "hello"
 
     @pytest.mark.asyncio
     async def test_saves_new_session(self, tmp_path: Path) -> None:
-        fake_result = _oc_result()
-        fake_parsed = _nd_result(text="reply", session_id="new_sid")
-
-        with patch("adjutant.core.opencode.opencode_run", return_value=fake_result):
-            with patch("adjutant.lib.ndjson.parse_ndjson", return_value=fake_parsed):
-                await run_chat("hello", tmp_path)
+        backend = _mock_backend(_llm_result(text="reply", session_id="new_sid"))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
+            await run_chat("hello", tmp_path)
 
         session_file = tmp_path / "state" / "telegram_session.json"
         assert session_file.is_file()
@@ -164,15 +159,11 @@ class TestRunChat:
         assert data["session_id"] == "new_sid"
 
     @pytest.mark.asyncio
-    async def test_returns_error_on_opencode_not_found(self, tmp_path: Path) -> None:
-        from adjutant.core.opencode import OpenCodeNotFoundError
-
-        with patch(
-            "adjutant.core.opencode.opencode_run",
-            side_effect=OpenCodeNotFoundError("not found"),
-        ):
+    async def test_returns_error_on_backend_not_found(self, tmp_path: Path) -> None:
+        backend = MagicMock()
+        backend.run = AsyncMock(side_effect=BackendNotFoundError("not found"))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
             reply = await run_chat("hi", tmp_path)
-
         assert "not available" in reply.lower()
 
     @pytest.mark.asyncio
@@ -181,8 +172,8 @@ class TestRunChat:
         state.mkdir()
         (state / "telegram_model.txt").write_text("anthropic/claude-haiku-4-5")
 
-        fake_result = _oc_result(returncode=-1, timed_out=True)
-        with patch("adjutant.core.opencode.opencode_run", return_value=fake_result):
+        backend = _mock_backend(_llm_result(returncode=-1, timed_out=True))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
             reply = await run_chat("hi", tmp_path)
 
         assert "timed out" in reply.lower() or "timeout" in reply.lower()
@@ -194,37 +185,28 @@ class TestRunChat:
         state.mkdir()
         (state / "telegram_model.txt").write_text("openai/gpt-4")
 
-        fake_result = _oc_result(returncode=-1, timed_out=True)
-        with patch("adjutant.core.opencode.opencode_run", return_value=fake_result):
+        backend = _mock_backend(_llm_result(returncode=-1, timed_out=True))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
             reply = await run_chat("hi", tmp_path)
 
         assert "timed out" in reply.lower() or "timeout" in reply.lower()
 
     @pytest.mark.asyncio
     async def test_returns_model_not_found_message(self, tmp_path: Path) -> None:
-        fake_result = _oc_result()
-        fake_parsed = _nd_result(error_type="model_not_found")
-
-        with patch("adjutant.core.opencode.opencode_run", return_value=fake_result):
-            with patch("adjutant.lib.ndjson.parse_ndjson", return_value=fake_parsed):
-                reply = await run_chat("hi", tmp_path)
-
+        backend = _mock_backend(_llm_result(error_type="model_not_found"))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
+            reply = await run_chat("hi", tmp_path)
         assert "no longer available" in reply.lower() or "model" in reply.lower()
 
     @pytest.mark.asyncio
     async def test_returns_fallback_on_empty_reply(self, tmp_path: Path) -> None:
-        fake_result = _oc_result()
-        fake_parsed = _nd_result(text="")
-
-        with patch("adjutant.core.opencode.opencode_run", return_value=fake_result):
-            with patch("adjutant.lib.ndjson.parse_ndjson", return_value=fake_parsed):
-                reply = await run_chat("hi", tmp_path)
-
+        backend = _mock_backend(_llm_result(text=""))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
+            reply = await run_chat("hi", tmp_path)
         assert "didn't get a response" in reply.lower() or "went wrong" in reply.lower()
 
     @pytest.mark.asyncio
     async def test_uses_existing_session_when_fresh(self, tmp_path: Path) -> None:
-        # Write a fresh session
         state = tmp_path / "state"
         state.mkdir()
         session_data = {
@@ -233,18 +215,10 @@ class TestRunChat:
         }
         (state / "telegram_session.json").write_text(json.dumps(session_data))
 
-        fake_result = _oc_result()
-        fake_parsed = _nd_result(text="reply", session_id="existing_sid")
+        backend = _mock_backend(_llm_result(text="reply", session_id="existing_sid"))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
+            await run_chat("hello", tmp_path)
 
-        captured_args = []
-
-        async def mock_run(args, timeout):
-            captured_args.extend(args)
-            return fake_result
-
-        with patch("adjutant.core.opencode.opencode_run", side_effect=mock_run):
-            with patch("adjutant.lib.ndjson.parse_ndjson", return_value=fake_parsed):
-                await run_chat("hello", tmp_path)
-
-        assert "--session" in captured_args
-        assert "existing_sid" in captured_args
+        # Verify session_id was passed to backend.run
+        call_kwargs = backend.run.call_args[1]
+        assert call_kwargs["session_id"] == "existing_sid"

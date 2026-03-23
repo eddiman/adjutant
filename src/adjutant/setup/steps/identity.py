@@ -137,41 +137,21 @@ def _show_estimate(input_tokens: int, output_tokens: int) -> None:
 
 
 # ---------------------------------------------------------------------------
-# LLM call (opencode)
+# LLM call (backend)
 # ---------------------------------------------------------------------------
 
 
-def _extract_opencode_text(ndjson: str) -> str:
-    """Extract assembled text from opencode NDJSON output."""
-    assembled: list[str] = []
-    for line in ndjson.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-            text = (obj.get("part") or {}).get("text") or ""
-            if text:
-                assembled.append(text)
-        except (json.JSONDecodeError, AttributeError):
-            pass
-    return "".join(assembled)
-
-
 def _run_opencode(prompt: str, adj_dir: Path) -> str | None:
-    """Call opencode with the given prompt. Returns extracted text or None on failure."""
+    """Call the LLM backend with the given prompt. Returns text or None on failure."""
     try:
-        from adjutant.core.opencode import opencode_run
+        from adjutant.core.backend import get_backend
 
-        result = asyncio.run(
-            opencode_run(
-                ["--model", "anthropic/claude-haiku-4-5", "--format", "json", prompt],
-            )
-        )
+        backend = get_backend()
+        result = asyncio.run(backend.run(prompt, model="haiku"))
         if result.returncode != 0 or result.timed_out:
             return None
-        text = _extract_opencode_text(result.stdout)
-        return text if text.strip() else None
+        text = result.text
+        return text if text and text.strip() else None
     except Exception:  # noqa: BLE001 — fallback to template on LLM error
         return None
 
@@ -427,9 +407,11 @@ def step_identity(adj_dir: Path, *, dry_run: bool = False) -> bool:
             wiz_ok("Backed up existing files")
         print("", file=sys.stderr)
 
-    # Check if opencode is available
-    if shutil.which("opencode") is None:
-        wiz_warn("opencode not found — cannot generate identity with LLM")
+    # Check if LLM backend is available
+    from adjutant.core.backend import get_backend
+
+    if not get_backend().find_binary():
+        wiz_warn("LLM backend not found — cannot generate identity with LLM")
         _write_templates(adj_dir, dry_run=dry_run)
         return True
 

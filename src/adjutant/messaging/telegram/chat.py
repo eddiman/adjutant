@@ -1,4 +1,4 @@
-"""Natural conversation via opencode — session management and chat routing.
+"""Natural conversation via LLM backend — session management and chat routing.
 
 Replaces: scripts/messaging/telegram/chat.sh
 
@@ -167,7 +167,7 @@ def touch_session(adj_dir: Path) -> None:
 
 
 async def run_chat(message: str, adj_dir: Path) -> str:
-    """Send a message to opencode and return the plain-text reply.
+    """Send a message to the LLM backend and return the plain-text reply.
 
     Manages session continuity automatically. Uses the model from
     state/telegram_model.txt (or the haiku fallback).
@@ -179,36 +179,27 @@ async def run_chat(message: str, adj_dir: Path) -> str:
     Returns:
         The reply text, or an appropriate error string.
     """
-    from adjutant.core.opencode import OpenCodeNotFoundError, opencode_run
-    from adjutant.lib.ndjson import parse_ndjson
+    from adjutant.core.backend import BackendNotFoundError, get_backend
 
     model = get_model(adj_dir)
     existing_session = get_session_id(adj_dir, model=model)
-
-    args = [
-        "run",
-        "--agent",
-        "adjutant",
-        "--dir",
-        str(adj_dir),
-        "--format",
-        "json",
-        "--model",
-        model,
-    ]
-    if existing_session:
-        args += ["--session", existing_session]
-    args.append(message)
 
     _, chat_timeout = _get_config_timeouts(adj_dir)
     adj_log("telegram", f"Chat: model={model} session={'yes' if existing_session else 'new'}")
 
     try:
-        result = await opencode_run(args, timeout=chat_timeout)
-    except OpenCodeNotFoundError:
-        return "opencode is not available. Please check your installation."
+        backend = get_backend()
+        result = await backend.run(
+            message,
+            agent="adjutant",
+            workdir=adj_dir,
+            model=model,
+            session_id=existing_session,
+            timeout=chat_timeout,
+        )
+    except BackendNotFoundError:
+        return "LLM backend is not available. Please check your installation."
 
-    # Handle timeout (asyncio.TimeoutError → timed_out=True, returncode=-1)
     if result.timed_out:
         adj_log("telegram", "Chat timed out after 240s")
         if model.startswith("anthropic/"):
@@ -219,16 +210,13 @@ async def run_chat(message: str, adj_dir: Path) -> str:
             )
         return "Request timed out after 240s — the AI server may be slow. Try again in a moment."
 
-    parsed = parse_ndjson(result.stdout)
-
-    # Check for model-not-found error
-    if parsed.error_type == "model_not_found":
+    if result.error_type == "model_not_found":
         return f"The model `{model}` is no longer available. Use /model to switch to a valid one."
 
-    reply = parsed.text
+    reply = result.text
 
     # Persist / touch session
-    new_sid = parsed.session_id
+    new_sid = result.session_id
     if new_sid:
         if not existing_session:
             save_session(new_sid, adj_dir, model=model)

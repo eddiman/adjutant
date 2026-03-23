@@ -95,12 +95,14 @@ def check_prerequisites() -> None:
         else:
             warn("  Install with: sudo apt-get install jq")
 
-    # opencode
-    if shutil.which("opencode"):
-        ok("opencode found")
+    # LLM backend
+    from adjutant.core.backend import get_backend
+
+    backend = get_backend()
+    if backend.find_binary():
+        ok(f"{backend.name} found")
     else:
-        warn("opencode not found — required for LLM calls")
-        warn("  Install from: https://opencode.ai")
+        warn(f"{backend.name} not found — required for LLM calls")
         failed = True
 
     if failed:

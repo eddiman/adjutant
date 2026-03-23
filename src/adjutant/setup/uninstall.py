@@ -90,17 +90,19 @@ def _kill_pid_file(pid_file: Path) -> None:
 
 
 def stop_processes(adj_dir: Path) -> None:
-    """Stop opencode, telegram listener, and scheduled jobs."""
+    """Stop backend services, telegram listener, and scheduled jobs."""
     print("\033[1mStopping processes...\033[0m", file=sys.stderr)
     print("", file=sys.stderr)
 
-    # OpenCode web server
-    print("  Stopping OpenCode...", file=sys.stderr)
+    # Backend services (opencode web or claude remote-control)
+    print("  Stopping backend services...", file=sys.stderr)
     _pkill("opencode web")
-    pid_file = adj_dir / "state" / "opencode_web.pid"
-    if pid_file.is_file():
-        pid_file.unlink(missing_ok=True)
-    wiz_ok("OpenCode stopped")
+    _pkill("claude.*remote-control")
+    for pid_name in ("opencode_web.pid", "claude_remote.pid"):
+        pid_file = adj_dir / "state" / pid_name
+        if pid_file.is_file():
+            pid_file.unlink(missing_ok=True)
+    wiz_ok("Backend services stopped")
 
     # Telegram listener — 3-tier
     print("  Stopping Telegram listener...", file=sys.stderr)

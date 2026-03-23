@@ -273,7 +273,7 @@ def _check_required_dirs(
 
 
 def _check_dependencies(issues_found: int) -> int:
-    deps = ["bash", "curl", "jq", "python3", "opencode"]
+    deps = ["bash", "curl", "jq", "python3"]
     wiz_ok("Dependencies:")
     all_ok = True
     for cmd in deps:
@@ -282,6 +282,15 @@ def _check_dependencies(issues_found: int) -> int:
         else:
             print(f"    {cmd:<12} {RED}MISSING{RESET}", file=sys.stderr)
             all_ok = False
+    # LLM backend binary
+    from adjutant.core.backend import get_backend
+
+    backend = get_backend()
+    if backend.find_binary():
+        print(f"    {backend.name:<12} OK", file=sys.stderr)
+    else:
+        print(f"    {backend.name:<12} {RED}MISSING{RESET}", file=sys.stderr)
+        all_ok = False
     if not all_ok:
         issues_found += 1
     return issues_found

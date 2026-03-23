@@ -94,9 +94,8 @@ def run_vision_multi(
         ValueError: If image_paths is empty.
         FileNotFoundError: If any path in image_paths does not exist.
     """
+    from adjutant.core.backend import BackendNotFoundError, get_backend
     from adjutant.core.logging import adj_log
-    from adjutant.core.opencode import opencode_run
-    from adjutant.lib.ndjson import parse_ndjson
 
     if not image_paths:
         raise ValueError("No image paths provided.")
@@ -116,38 +115,27 @@ def run_vision_multi(
             f"Vision analysis: {len(image_paths)} images using {resolved_model}",
         )
 
-    # Build args with one -f flag per image
-    file_args: list[str] = []
-    for image_path in image_paths:
-        file_args += ["-f", image_path]
+    backend = get_backend()
+    files = [Path(p) for p in image_paths]
+    result = asyncio.run(
+        backend.run(prompt, model=resolved_model, files=files, timeout=_VISION_TIMEOUT)
+    )
 
-    args = [
-        "run",
-        "--model",
-        resolved_model,
-        "--format",
-        "json",
-        *file_args,
-        "--",
-        prompt,
-    ]
-
-    result = asyncio.run(opencode_run(args, timeout=_VISION_TIMEOUT))
+    if result.error_type == "vision_unsupported":
+        return result.text
 
     if result.timed_out:
         label = image_paths[0] if len(image_paths) == 1 else f"{len(image_paths)} images"
         adj_log("vision", f"Vision analysis timed out after {_VISION_TIMEOUT}s for {label}")
         return f"Vision analysis timed out after {_VISION_TIMEOUT}s. Try again in a moment."
 
-    parsed = parse_ndjson(result.stdout)
-
-    if parsed.error_type == "model_not_found":
+    if result.error_type == "model_not_found":
         return (
             "The selected model doesn't support vision. "
             "Try switching to claude-haiku-4-5 with /model anthropic/claude-haiku-4-5."
         )
 
-    reply = parsed.text.strip()
+    reply = result.text.strip()
 
     if reply:
         label = image_paths[0] if len(image_paths) == 1 else f"{len(image_paths)} images"

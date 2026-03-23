@@ -358,7 +358,7 @@ def kb_query_cmd(
     from pathlib import Path as _Path
 
     from adjutant.capabilities.kb.query import KBQueryError, kb_query, kb_query_by_path
-    from adjutant.core.opencode import OpenCodeNotFoundError
+    from adjutant.core.backend import BackendNotFoundError
 
     try:
         if kb_path:
@@ -373,7 +373,7 @@ def kb_query_cmd(
             answer = asyncio.run(kb_query(kb_name, query_text, adj_dir))
 
         click.echo(answer, nl=False)
-    except (KBQueryError, OpenCodeNotFoundError) as exc:
+    except (KBQueryError, BackendNotFoundError) as exc:
         click.echo(f"ERROR: {exc}", err=True)
         raise SystemExit(1) from exc
 
@@ -406,7 +406,7 @@ def kb_write_cmd(
     from pathlib import Path as _Path
 
     from adjutant.capabilities.kb.query import KBQueryError, kb_write, kb_write_by_path
-    from adjutant.core.opencode import OpenCodeNotFoundError
+    from adjutant.core.backend import BackendNotFoundError
 
     try:
         if kb_path:
@@ -421,7 +421,7 @@ def kb_write_cmd(
             msg = kb_write(kb_name, instruction, adj_dir)
 
         click.echo(msg)
-    except (KBQueryError, OpenCodeNotFoundError) as exc:
+    except (KBQueryError, BackendNotFoundError) as exc:
         click.echo(f"ERROR: {exc}", err=True)
         raise SystemExit(1) from exc
 

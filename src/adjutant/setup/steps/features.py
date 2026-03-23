@@ -186,7 +186,10 @@ def step_features(adj_dir: Path, *, dry_run: bool = False) -> bool:
     print("", file=sys.stderr)
 
     # ── News briefing ────────────────────────────────────────────────────────
-    news_hint = "" if shutil.which("opencode") else " (requires opencode)"
+    from adjutant.core.backend import get_backend
+
+    backend = get_backend()
+    news_hint = "" if backend.find_binary() else f" (requires {backend.name})"
     if wiz_confirm(f"Enable news briefing?{news_hint} (fetches AI news daily)", "N"):
         WIZARD_FEATURES_NEWS = True
         wiz_ok("News briefing enabled")

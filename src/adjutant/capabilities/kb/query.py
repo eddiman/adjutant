@@ -1,12 +1,12 @@
-"""Query and write to a knowledge base sub-agent via opencode.
+"""Query and write to a knowledge base sub-agent via LLM backend.
 
 Replaces: scripts/capabilities/kb/query.sh
 
-Spawns ``opencode run --agent kb --dir <kb-path> --format json --model <model>``
-with an 80-second timeout, parses NDJSON output, and returns the plain-text answer.
+Sends queries to the KB sub-agent via the configured LLM backend with an
+80-second timeout and returns the plain-text answer.
 
-For writes, spawns the sub-agent as a detached background process and returns
-immediately with a confirmation message (fire-and-forget).
+For writes, dispatches the sub-agent as a detached background process and
+returns immediately with a confirmation message (fire-and-forget).
 
 Usage:
     result = await kb_query("my-kb", "What is the current portfolio value?", adj_dir)
@@ -18,14 +18,11 @@ Usage:
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
 from pathlib import Path
 
+from adjutant.core.backend import BackendNotFoundError, get_backend
 from adjutant.core.logging import adj_log
 from adjutant.core.model import resolve_kb_model
-from adjutant.core.opencode import OpenCodeNotFoundError, opencode_run
-from adjutant.lib.ndjson import parse_ndjson
 
 # Keep under the 120 s bash-tool ceiling.
 # health check (~5-20 s) + query timeout must not exceed ~110 s total.
@@ -79,7 +76,7 @@ async def kb_query_by_path(
 
     Raises:
         KBQueryError: If the KB directory is missing or query is empty.
-        OpenCodeNotFoundError: If opencode is not on PATH.
+        BackendNotFoundError: If the backend binary is not on PATH.
     """
     if not kb_path.is_dir():
         raise KBQueryError(f"KB directory does not exist: {kb_path}")
@@ -91,20 +88,10 @@ async def kb_query_by_path(
     kb_name = kb_path.name
     adj_log("kb", f"Query start: kb='{kb_name}' model='{model}' timeout={timeout}s")
 
-    args = [
-        "run",
-        "--agent",
-        "kb",
-        "--dir",
-        str(kb_path),
-        "--format",
-        "json",
-        "--model",
-        model,
-        query,
-    ]
-
-    result = await opencode_run(args, timeout=timeout)
+    backend = get_backend()
+    result = await backend.run(
+        query, agent="kb", workdir=kb_path, model=model, timeout=timeout,
+    )
 
     if result.returncode != 0 or result.timed_out:
         adj_log(
@@ -113,8 +100,7 @@ async def kb_query_by_path(
             f"(kb='{kb_name}', timed_out={result.timed_out})",
         )
 
-    parsed = parse_ndjson(result.stdout)
-    reply = parsed.text
+    reply = result.text
 
     if not reply:
         adj_log(
@@ -192,73 +178,28 @@ def kb_write_by_path(
 
     Raises:
         KBQueryError: If the KB directory is missing or instruction is empty.
-        OpenCodeNotFoundError: If opencode is not on PATH.
+        BackendNotFoundError: If the backend binary is not on PATH.
     """
     if not kb_path.is_dir():
         raise KBQueryError(f"KB directory does not exist: {kb_path}")
     if not instruction.strip():
         raise KBQueryError("Write instruction is empty.")
 
-    opencode_bin = shutil.which("opencode")
-    if opencode_bin is None:
-        raise OpenCodeNotFoundError("opencode not found on PATH")
-
     model = _resolve_model(kb_path, adj_dir)
     kb_name = kb_path.name
 
     adj_log("kb", f"Write dispatched: kb='{kb_name}' model='{model}'")
 
-    # Build the wrapper script that runs opencode and logs the result.
-    # This runs as a fully detached process that survives parent exit.
     log_path = adj_dir / "state" / "adjutant.log"
-    args = [
-        opencode_bin,
-        "run",
-        "--agent",
-        "kb",
-        "--dir",
-        str(kb_path),
-        "--format",
-        "json",
-        "--model",
-        model,
-        instruction,
-    ]
-
-    # Spawn detached subprocess.  stdout/stderr are piped to /dev/null
-    # from the parent's perspective — the wrapper script handles logging.
-    # We use a small shell wrapper so we can log completion to adjutant.log.
-    shell_script = (
-        f"{' '.join(_shell_quote(a) for a in args)} > /dev/null 2>&1; "
-        f"RC=$?; "
-        f'TS=$(date "+%H:%M %d.%m.%Y"); '
-        f'if [ "$RC" -eq 0 ]; then '
-        f"  echo \"[$TS] [kb] Write complete: kb='{kb_name}'\" >> {_shell_quote(str(log_path))}; "
-        f"else "
-        f"  echo \"[$TS] [kb] Write failed: kb='{kb_name}' rc=$RC\""
-        f" >> {_shell_quote(str(log_path))}; "
-        f"fi"
-    )
-
-    subprocess.Popen(
-        ["bash", "-c", shell_script],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,  # detach from parent process group
+    backend = get_backend()
+    backend.run_detached(
+        instruction, agent="kb", workdir=kb_path, model=model, log_path=log_path,
     )
 
     preview = instruction[:120]
     if len(instruction) > 120:
         preview += "..."
     return f"Write dispatched to '{kb_name}': {preview}"
-
-
-def _shell_quote(s: str) -> str:
-    """Quote a string for safe shell embedding."""
-    import shlex
-
-    return shlex.quote(s)
 
 
 def kb_write(
@@ -333,6 +274,6 @@ def main(argv: list[str] | None = None) -> int:
         answer = asyncio.run(_run())
         print(answer, end="")
         return 0
-    except (KBQueryError, OpenCodeNotFoundError) as exc:
+    except (KBQueryError, BackendNotFoundError) as exc:
         _sys.stderr.write(f"ERROR: {exc}\n")
         return 1

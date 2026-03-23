@@ -175,16 +175,18 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                 adj_log("telegram", "KILLED lockfile detected. Stopping listener.")
                 break
 
-            # Periodic opencode reaper
+            # Periodic orphan reaper (backend-conditional)
             reap_counter += 1
             if reap_counter >= _REAP_INTERVAL:
                 reap_counter = 0
                 try:
-                    from adjutant.core.opencode import opencode_reap
+                    from adjutant.core.backend import get_backend
 
-                    await opencode_reap()
+                    backend = get_backend()
+                    if backend.capabilities.reaping:
+                        await backend.reap(adj_dir)
                 except Exception as exc:
-                    adj_log("telegram", f"opencode_reap error: {exc}")
+                    adj_log("telegram", f"reap error: {exc}")
 
             # Periodic opencode web server watchdog (~5 min)
             watchdog_counter += 1

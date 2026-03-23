@@ -99,7 +99,7 @@ def step_prerequisites() -> bool:
     wiz_step(1, 7, "Prerequisites Check")
     print("", file=sys.stderr)
 
-    required_deps = ["bash", "curl", "jq", "python3", "opencode"]
+    required_deps = ["bash", "curl", "jq", "python3"]
     result = PrerequisiteResult()
     all_required_ok = True
 
@@ -112,6 +112,19 @@ def step_prerequisites() -> bool:
             wiz_fail(f"{cmd} not found")
             result.deps_missing.append(cmd)
             all_required_ok = False
+
+    # LLM backend binary
+    from adjutant.core.backend import get_backend
+
+    backend = get_backend()
+    backend_bin = backend.find_binary()
+    if backend_bin:
+        wiz_ok(f"{backend.name} ({backend_bin})")
+        result.deps_ok.append(backend.name)
+    else:
+        wiz_fail(f"{backend.name} not found")
+        result.deps_missing.append(backend.name)
+        all_required_ok = False
 
     # Optional dependencies
     print("", file=sys.stderr)
