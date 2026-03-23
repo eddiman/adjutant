@@ -34,7 +34,14 @@ _ALIASES: dict[str, str] = {
     "anthropic/claude-opus-4-6": "opus",
 }
 
-# Reverse: Claude CLI name → full OpenCode model ID (for translate_model_id)
+# Cross-backend translation: OpenCode full ID → Claude CLI short name
+_FROM_OPENCODE: dict[str, str] = {
+    "anthropic/claude-haiku-4-5": "haiku",
+    "anthropic/claude-sonnet-4-6": "sonnet",
+    "anthropic/claude-opus-4-6": "opus",
+}
+
+# Cross-backend translation: Claude CLI short name → OpenCode full ID
 _TO_OPENCODE: dict[str, str] = {
     "haiku": "anthropic/claude-haiku-4-5",
     "sonnet": "anthropic/claude-sonnet-4-6",
@@ -329,4 +336,5 @@ class ClaudeCLIBackend:
         return _ALIASES.get(alias, alias)
 
     def translate_model_id(self, model_id: str) -> str:
-        return _TO_OPENCODE.get(model_id, model_id)
+        """Convert a model ID from another backend's format to this backend's."""
+        return _FROM_OPENCODE.get(model_id, model_id)

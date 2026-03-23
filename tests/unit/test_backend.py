@@ -113,8 +113,11 @@ class TestOpenCodeAliases:
         assert backend.resolve_alias("some/custom-model") == "some/custom-model"
 
     def test_translate_model_id(self):
+        """translate_model_id converts FROM other backend's format TO this backend's."""
         backend = get_backend("opencode")
-        assert backend.translate_model_id("anthropic/claude-sonnet-4-6") == "sonnet"
+        # Claude CLI "sonnet" → OpenCode full ID
+        assert backend.translate_model_id("sonnet") == "anthropic/claude-sonnet-4-6"
+        assert backend.translate_model_id("haiku") == "anthropic/claude-haiku-4-5"
         assert backend.translate_model_id("unknown-model") == "unknown-model"
 
 
@@ -134,6 +137,9 @@ class TestClaudeCLIAliases:
         assert backend.resolve_alias("custom-model") == "custom-model"
 
     def test_translate_model_id(self):
+        """translate_model_id converts FROM other backend's format TO this backend's."""
         backend = get_backend("claude-cli")
-        assert backend.translate_model_id("sonnet") == "anthropic/claude-sonnet-4-6"
+        # OpenCode full ID → Claude CLI short name
+        assert backend.translate_model_id("anthropic/claude-sonnet-4-6") == "sonnet"
+        assert backend.translate_model_id("anthropic/claude-opus-4-6") == "opus"
         assert backend.translate_model_id("unknown") == "unknown"

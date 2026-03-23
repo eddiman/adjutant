@@ -204,4 +204,5 @@ class OpenCodeBackend:
         return _ALIASES.get(alias, alias)
 
     def translate_model_id(self, model_id: str) -> str:
-        return _REVERSE_ALIASES.get(model_id, model_id)
+        """Convert a model ID from another backend's format to this backend's."""
+        return _ALIASES.get(model_id, model_id)
