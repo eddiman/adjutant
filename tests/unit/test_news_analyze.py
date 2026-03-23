@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from adjutant.core.backend import LLMResult
 from adjutant.news.analyze import analyze_news, main
 
 
@@ -55,30 +56,14 @@ def _make_raw_items(n: int = 3) -> list[dict]:
     ]
 
 
-def _make_analyzed_json(n: int = 2) -> str:
-    items = [
-        {
-            "rank": i + 1,
-            "title": f"Top item {i}",
-            "url": f"https://top.com/{i}",
-            "summary": "Interesting",
-        }
-        for i in range(n)
-    ]
-    return json.dumps(items)
+def _llm_result(text: str = "OK", error_type: str | None = None) -> LLMResult:
+    return LLMResult(text=text, error_type=error_type)
 
 
-def _mock_opencode_result(text: str) -> MagicMock:
-    m = MagicMock()
-    m.stdout = text
-    return m
-
-
-def _mock_ndjson_result(text: str = "", error_type: str = "") -> MagicMock:
-    m = MagicMock()
-    m.text = text
-    m.error_type = error_type
-    return m
+def _mock_backend(text: str = "OK") -> MagicMock:
+    backend = MagicMock()
+    backend.run = AsyncMock(return_value=_llm_result(text=text))
+    return backend
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +96,6 @@ class TestAnalyzeNews:
         raw_items = _make_raw_items(2)
         _write_raw(tmp_path, raw_items)
 
-        # Mark all URLs as already seen
         dedup = {
             "urls": [
                 {"url": item["url"], "first_seen": "2026-01-01T00:00:00+00:00"}
@@ -138,18 +122,12 @@ class TestAnalyzeNews:
         _write_raw(tmp_path, _make_raw_items(5))
 
         llm_json = '[{"rank":1,"title":"Best","url":"https://best.com","summary":"Great"}]'
+        backend = _mock_backend(text=llm_json)
 
         with (
             patch("adjutant.core.lockfiles.check_killed", return_value=True),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_mock_opencode_result(f"```json\n{llm_json}\n```"),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_mock_ndjson_result(text=llm_json),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
         ):
             result = analyze_news(tmp_path)
 
@@ -166,17 +144,12 @@ class TestAnalyzeNews:
         _write_config(tmp_path)
         _write_raw(tmp_path, _make_raw_items(3))
 
+        backend = _mock_backend(text="no json array here")
+
         with (
             patch("adjutant.core.lockfiles.check_killed", return_value=True),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_mock_opencode_result("no json here"),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_mock_ndjson_result(text="no json array here"),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
         ):
             result = analyze_news(tmp_path)
 
@@ -193,18 +166,12 @@ class TestAnalyzeNews:
         _write_raw(tmp_path, _make_raw_items(3))
 
         llm_json = '[{"rank":1,"title":"Fallback","url":"https://f.com","summary":"ok"}]'
+        backend = _mock_backend(text=llm_json)
 
         with (
             patch("adjutant.core.lockfiles.check_killed", return_value=True),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_mock_opencode_result(llm_json),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_mock_ndjson_result(text=llm_json),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
         ):
             result = analyze_news(tmp_path)
 
@@ -215,18 +182,12 @@ class TestAnalyzeNews:
         _write_raw(tmp_path, _make_raw_items(1))
 
         llm_json = '[{"rank":1,"title":"T","url":"https://t.com","summary":"s"}]'
+        backend = _mock_backend(text=llm_json)
 
         with (
             patch("adjutant.core.lockfiles.check_killed", return_value=True),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                return_value=_mock_opencode_result(llm_json),
-            ),
-            patch(
-                "adjutant.lib.ndjson.parse_ndjson",
-                return_value=_mock_ndjson_result(text=llm_json),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
         ):
             analyze_news(tmp_path)
 
@@ -237,18 +198,18 @@ class TestAnalyzeNews:
         _write_config(tmp_path)
         _write_raw(tmp_path, _make_raw_items(2))
 
+        backend = MagicMock()
+        backend.run = AsyncMock(side_effect=RuntimeError("backend crashed"))
+
         with (
             patch("adjutant.core.lockfiles.check_killed", return_value=True),
             patch("adjutant.core.logging.adj_log"),
-            patch(
-                "adjutant.core.opencode.opencode_run",
-                side_effect=RuntimeError("opencode crashed"),
-            ),
+            patch("adjutant.core.backend.get_backend", return_value=backend),
         ):
             result = analyze_news(tmp_path)
 
         assert result.startswith("ERROR")
-        assert "opencode crashed" in result
+        assert "backend crashed" in result
 
 
 # ---------------------------------------------------------------------------

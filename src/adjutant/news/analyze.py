@@ -36,10 +36,9 @@ def analyze_news(adj_dir: Path | None = None) -> str:
     if adj_dir is None:
         adj_dir = Path(os.environ.get("ADJ_DIR", ""))
 
+    from adjutant.core.backend import BackendNotFoundError, get_backend
     from adjutant.core.lockfiles import check_killed
     from adjutant.core.logging import adj_log
-    from adjutant.core.opencode import opencode_run
-    from adjutant.lib.ndjson import parse_ndjson
 
     if not check_killed(adj_dir):
         return "ERROR:adjutant is stopped (killed flag set)"
@@ -137,14 +136,13 @@ def analyze_news(adj_dir: Path | None = None) -> str:
     adj_log("news-analyze", f"Calling {model}...")
 
     try:
-        result = asyncio.run(opencode_run(["run", prompt, "--model", model, "--format", "json"]))
-    except Exception as exc:
+        backend = get_backend()
+        llm_result = asyncio.run(backend.run(prompt, model=model))
+    except (BackendNotFoundError, Exception) as exc:
         return f"ERROR:LLM call failed: {exc}"
 
-    ndjson_result = parse_ndjson(result.stdout or "")
-
     # Extract JSON array from the response text
-    raw_text = ndjson_result.text or ""
+    raw_text = llm_result.text or ""
     match = re.search(r"\[.*\]", raw_text, re.DOTALL)
     if not match:
         return f"ERROR:LLM did not return valid JSON array. Response: {raw_text[:200]}"
