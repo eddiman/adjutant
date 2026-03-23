@@ -131,26 +131,29 @@ def file_size(filepath: Path) -> tuple[int, bool]:
         return 0, False
 
 
+# Directories that must be on PATH for tools like opencode, brew, etc.
+# Shared by ensure_path() (runtime) and schedule/install._snapshot_path() (cron).
+ESSENTIAL_PATH_DIRS: tuple[str, ...] = (
+    "/opt/homebrew/bin",
+    "/opt/homebrew/sbin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/sbin",
+    "/sbin",
+)
+
+
 def ensure_path() -> None:
     """Ensure common tool directories are on PATH.
 
     Idempotently prepends /opt/homebrew/bin, /usr/local/bin, etc.
     Matches bash ``ensure_path()`` in platform.sh.
     """
-    dirs = [
-        "/opt/homebrew/bin",
-        "/opt/homebrew/sbin",
-        "/usr/local/bin",
-        "/usr/bin",
-        "/bin",
-        "/usr/sbin",
-        "/sbin",
-    ]
-
     current_path = os.environ.get("PATH", "")
     path_entries = current_path.split(os.pathsep)
 
-    for d in reversed(dirs):
+    for d in reversed(ESSENTIAL_PATH_DIRS):
         if os.path.isdir(d) and d not in path_entries:
             path_entries.insert(0, d)
 

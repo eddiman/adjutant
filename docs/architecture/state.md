@@ -125,6 +125,21 @@ After a successful pulse or review (exit code 0), `run_cron_prompt()` reads `sta
 - **OPERATIONAL → KILLED**: `adjutant kill` or `/kill`. Terminates all processes, creates `KILLED` file, disables cron.
 - **KILLED → OPERATIONAL**: `adjutant startup`. Detects and clears `KILLED` lockfile, restores crontab, then starts the listener fresh. Note: `adjutant start` will refuse if a `KILLED` lockfile is present.
 
+### External State Observation (Mariposa)
+
+The Mariposa dashboard derives a fourth display state, **STOPPED**, for its UI:
+
+| Condition | Displayed State |
+|-----------|----------------|
+| `KILLED` file present | KILLED |
+| `PAUSED` file present | PAUSED |
+| No marker files + listener PID alive | OPERATIONAL |
+| No marker files + listener PID dead | STOPPED |
+
+STOPPED is not a lockfile state — it's an observation that the process exited without leaving a `KILLED` or `PAUSED` marker. This happens when the listener is stopped manually or crashes.
+
+Process detection checks `state/listener.lock/pid` first (authoritative), then `state/telegram.pid` (launcher-written), and verifies the PID is alive via `kill(pid, 0)`.
+
 ---
 
 ## Directory-Based Mutex

@@ -41,16 +41,14 @@ def _snapshot_path() -> str:
     Instead of dumping the full shell PATH (which can exceed cron's line-
     length limits), we include only essential directories: system paths,
     Homebrew, and ~/.local/bin.
+
+    Uses :data:`adjutant.core.platform.ESSENTIAL_PATH_DIRS` — the same
+    directory list that :func:`adjutant.core.platform.ensure_path` uses
+    at runtime.
     """
-    essential = [
-        "/opt/homebrew/bin",
-        "/opt/homebrew/sbin",
-        "/usr/local/bin",
-        "/usr/bin",
-        "/bin",
-        "/usr/sbin",
-        "/sbin",
-    ]
+    from adjutant.core.platform import ESSENTIAL_PATH_DIRS
+
+    essential = list(ESSENTIAL_PATH_DIRS)
     # Add ~/.local/bin if it exists (user-installed tools)
     local_bin = Path.home() / ".local" / "bin"
     if local_bin.is_dir():

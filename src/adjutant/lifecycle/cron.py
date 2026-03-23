@@ -16,22 +16,28 @@ with a summary of what was found (budget-guarded, best-effort).
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from adjutant.core.lockfiles import clear_active_operation, set_active_operation
+from adjutant.core.opencode import OpenCodeNotFoundError
+from adjutant.core.opencode import _find_opencode as _core_find_opencode
 from adjutant.core.paths import AdjutantDirNotFoundError, get_adj_dir, init_adj_dir
 
 
 def _find_opencode() -> str:
-    """Return path to the opencode binary or raise SystemExit."""
-    path = shutil.which("opencode")
-    if path is None:
-        sys.stderr.write("ERROR: opencode not found on PATH\n")
-        raise SystemExit(1)
-    return path
+    """Return path to the opencode binary or raise SystemExit.
+
+    Delegates to :func:`adjutant.core.opencode._find_opencode` which
+    supports the ``OPENCODE_BIN`` env-var override — useful in cron or
+    other minimal-PATH environments.
+    """
+    try:
+        return _core_find_opencode()
+    except OpenCodeNotFoundError as exc:
+        sys.stderr.write(f"ERROR: {exc}\n")
+        raise SystemExit(1) from exc
 
 
 def _format_heartbeat(data: dict, action: str, source: str) -> str:  # noqa: C901

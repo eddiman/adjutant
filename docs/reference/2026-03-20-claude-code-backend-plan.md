@@ -1,8 +1,9 @@
 # Claude Code Backend — Comprehensive Implementation Plan
 
-**Status**: Final plan — ready for implementation
+**Status**: Final plan — verified against codebase 2026-03-23
 **Created**: 2026-03-20
-**Updated**: 2026-03-20 (dropped claude-sdk; added KB review; added remediation, switch detection, docs plan, backend-aware tests; review pass: error taxonomy, capabilities protocol, vision handling, security/permissions audit, observability, contract tests, single source of truth for prompts)
+**Updated**: 2026-03-23 (verification pass: 21/22 MATCH, 0 gaps, 1 stale model alias — added Step 0 remediation item for claude-opus version drift in config.py/model.py; added verification appendix)
+**Previous**: 2026-03-20 (dropped claude-sdk; added KB review; added remediation, switch detection, docs plan, backend-aware tests; review pass: error taxonomy, capabilities protocol, vision handling, security/permissions audit, observability, contract tests, single source of truth for prompts)
 **Objective**: Abstract Adjutant's LLM backend so users can choose between OpenCode (API key) and Claude Code CLI (Anthropic subscription), selected via `adjutant.yaml`.
 
 ---
@@ -188,6 +189,7 @@ subprocess.Popen(["bash", "-c", shell_script], start_new_session=True)
 | `cron.py` | `opencode run --dir <adj_dir> "<prompt_text>"` |
 | `identity.py` | `opencode --model anthropic/claude-haiku-4-5 --format json "<prompt>"` |
 | `control.py` | `opencode web --mdns` (detached) |
+| `control.py` (claude-cli) | `claude remote-control --name adjutant` (detached) |
 
 ### 4.3 Session Management Details (chat.py only)
 
@@ -261,6 +263,7 @@ class BackendCapabilities:
     model_listing: bool = False   # Dynamic model list from backend
     reaping: bool = False         # Orphan process cleanup
     web_server: bool = False      # Built-in web server (opencode web)
+    remote_session: bool = False  # Remote-accessible persistent session
     streaming: bool = False       # Incremental output (NDJSON streaming)
     cost_tracking: bool = False   # Per-request cost_usd in LLMResult
 
@@ -373,6 +376,7 @@ def get_backend(backend_name: str | None = None) -> LLMBackend:
    | `model_listing` | Yes (`opencode models`) | No (hardcoded list) |
    | `reaping` | Yes (orphan language-server cleanup) | No (no orphan leak) |
    | `web_server` | Yes (`opencode web --mdns`) | No |
+   | `remote_session` | No | Yes (`claude remote-control`) |
    | `streaming` | Yes (NDJSON incremental) | No (`--output-format json` blocks) |
    | `cost_tracking` | No (NDJSON has no cost data) | Yes (`cost_usd` in JSON output) |
 
@@ -490,6 +494,84 @@ the file type and what Claude Code supports at invocation time:
 
 **Orphan cleanup:**
 - Claude Code doesn't leak `bash-language-server` processes. Reaper is a no-op.
+
+**Remote session (`claude remote-control`):**
+
+Claude Code's equivalent of `opencode web --mdns` is `claude remote-control`, which
+starts a persistent session accessible via `claude.ai/code` or the Claude mobile app.
+
+```python
+args = [
+    claude_bin, "remote-control",
+    "--name", "adjutant",
+]
+if sandbox:
+    args.append("--sandbox")
+```
+
+**Similarities with `opencode web --mdns`:**
+- Both run as detached background processes
+- Both provide remote access to the LLM backend from other devices
+- Both need lifecycle management (start, stop, PID tracking)
+- Both need cleanup on backend switch (kill the process when switching away)
+
+**Differences from `opencode web --mdns`:**
+
+| Aspect | `opencode web --mdns` | `claude remote-control` |
+|--------|----------------------|------------------------|
+| Discovery | mDNS on local network | Routed via `claude.ai/code` (internet-accessible) |
+| Scope | Local network only | Accessible from anywhere (via Anthropic routing) |
+| Auth | None (local trust) | Claude subscription auth (tied to logged-in user) |
+| Concurrency | Single session | Multiple concurrent sessions (`--spawn worktree`, `--capacity N`) |
+| Isolation | None | Optional `--sandbox` for filesystem/network isolation |
+| Interface | Web UI served locally | `claude.ai/code` web UI + Claude mobile app |
+| Process model | Single `opencode web` process | Single `claude remote-control` process |
+| mDNS | Yes (auto-discovery on LAN) | No (uses Anthropic cloud routing) |
+
+**Side effects to consider:**
+- `claude remote-control` connects outbound to Anthropic's infrastructure -- requires
+  internet access (unlike `opencode web` which is purely local)
+- The session is authenticated via the user's Claude subscription -- if the subscription
+  expires or the user logs out, the remote session becomes inaccessible
+- The `--name "adjutant"` flag sets the session title visible in `claude.ai/code`,
+  making it identifiable among other remote sessions
+- If the machine loses internet for ~10 minutes, the session times out and the
+  process exits automatically
+
+**Restart behavior:** Both `opencode web` and `claude remote-control` are stateless
+UI services. Killing and restarting either one simply starts a fresh session --
+the user reconnects via the web UI. This is the same pattern: kill on Adjutant
+restart, start fresh.
+
+**Key behavioral difference from `opencode web`:**
+
+`opencode web` is a **self-contained local web server** — it serves its own HTML/JS
+UI on a local port, discovered via mDNS. The entire stack runs on your machine.
+
+`claude remote-control` is a **local agent that registers with Anthropic's cloud
+routing** — the UI lives at `claude.ai/code` (hosted by Anthropic), and the local
+process handles execution. This means:
+
+- **Network dependency:** `opencode web` works offline on LAN; `claude remote-control`
+  requires a persistent internet connection. If internet drops for ~10 minutes,
+  the process exits and the watchdog must restart it.
+- **Auth model:** `opencode web` is open to the local network (no auth);
+  `claude remote-control` is gated by Claude subscription login. No risk of
+  unauthorized local network access, but depends on subscription being active.
+- **Latency path:** `opencode web` is browser → localhost; `claude remote-control`
+  is browser → Anthropic routing → your machine. Slightly higher latency for
+  the control plane, though LLM execution is local either way.
+- **Availability:** `opencode web` is available whenever the process runs;
+  `claude remote-control` can be accessed from anywhere (phone, other devices,
+  not just LAN), which is strictly more capable.
+
+**Lifecycle management:**
+- Start: `subprocess.Popen` with `start_new_session=True` (same pattern as `opencode web`)
+- PID tracking: write PID to `state/claude_remote.pid` (parallel to existing PID file pattern)
+- Stop: read PID file + `SIGTERM` (same as opencode web shutdown)
+- Health check: verify process is running via PID file
+- Watchdog: `listener.py` monitors PID file existence (same pattern as opencode web watchdog);
+  restarts if process died (e.g., internet timeout killed it)
 
 **Streaming / latency:**
 
@@ -685,8 +767,8 @@ data (NDJSON has no cost field), so this field is omitted for the opencode backe
 | `capabilities/vision/vision.py` | `opencode_run(args)` with `-f` flag | `backend.run(prompt, model=model, files=[image_path])` | Medium |
 | `news/analyze.py` | `asyncio.run(opencode_run(args))` | `asyncio.run(backend.run(prompt, model=model))` | Low |
 | `lifecycle/cron.py` | `subprocess.run([opencode, ...])` | `backend.run_sync(prompt, workdir=adj_dir)` | Low |
-| `lifecycle/control.py` | `subprocess.Popen(["opencode", "web"])` | Conditional: skip for non-opencode backends | Low |
-| `messaging/telegram/listener.py` | `opencode_reap()` + web watchdog | `backend.reap(adj_dir)` + conditional watchdog | Low |
+| `lifecycle/control.py` | `subprocess.Popen(["opencode", "web"])` | Backend-conditional: `opencode web --mdns` or `claude remote-control --name adjutant` | Medium |
+| `messaging/telegram/listener.py` | `opencode_reap()` + web watchdog | `backend.reap(adj_dir)` + backend-conditional watchdog (web or remote session) | Low |
 | `setup/steps/identity.py` | `asyncio.run(opencode_run(...))` | `asyncio.run(backend.run(prompt, model="haiku"))` | Low |
 | `setup/steps/prerequisites.py` | `shutil.which("opencode")` | `backend.find_binary()` | Low |
 | `setup/install.py` | `shutil.which("opencode")` | `backend.find_binary()` | Low |
@@ -843,6 +925,11 @@ All 6 KBs are registered in `knowledge_bases/registry.yaml`. All live on
 **Fix model drift** (registry is source of truth):
 - `ixda/kb.yaml`: model to match registry
 - `portfolio-kb/kb.yaml`: model to match registry
+
+**Fix model alias version drift** (`adjutant.yaml` is source of truth):
+- `core/config.py` line 57: `ModelsConfig.expensive` default is `"anthropic/claude-opus-4-5"` → change to `"anthropic/claude-opus-4-6"`
+- `core/model.py` line 30: `TIER_DEFAULTS["expensive"]` is `"anthropic/claude-opus-4-5"` → change to `"anthropic/claude-opus-4-6"`
+- `adjutant.yaml` already has the correct value (`anthropic/claude-opus-4-6`)
 
 **Fix ixda opencode.json**: add `"external_directory": "deny"`
 
@@ -1244,22 +1331,57 @@ entire system prompt**, including CLAUDE.md loading.
 
 ### 15.2 Claude CLI Backend
 - No language-server leak. Reaper is a no-op.
-- No web server to manage.
-- `health_check()` verifies `claude` binary exists
+- `claude remote-control --name adjutant` remote session management via PID file (`state/claude_remote.pid`)
+- `health_check()` verifies `claude` binary exists + remote session process is running
 
 ### 15.3 Lifecycle Control Changes
 
 ```python
-def start_opencode_web(adj_dir):
-    if get_config(adj_dir).llm.backend != "opencode":
-        return "opencode web: skipped (not using opencode backend)"
+def start_backend_service(adj_dir):
+    """Start the backend's background service (web server or remote session)."""
+    backend_name = get_config(adj_dir).llm.backend
+    if backend_name == "opencode":
+        return _start_opencode_web(adj_dir)
+    elif backend_name == "claude-cli":
+        return _start_claude_remote(adj_dir)
+
+def _start_opencode_web(adj_dir):
+    """Start opencode web --mdns (local network web server)."""
+    # ... existing implementation unchanged ...
+
+def _start_claude_remote(adj_dir):
+    """Start claude remote-control (internet-accessible remote session).
+
+    Same lifecycle pattern as opencode web: stateless UI service,
+    safe to kill and restart.
+    PID file: state/claude_remote.pid
+    """
+    claude_bin = get_backend("claude-cli").find_binary()
+    if not claude_bin:
+        return "claude remote-control: claude binary not found"
+    pid_file = adj_dir / "state" / "claude_remote.pid"
+    if pid_file.exists():
+        pid = int(pid_file.read_text().strip())
+        if _process_alive(pid):
+            return f"claude remote-control: already running (PID {pid})"
+        pid_file.unlink()
+    proc = subprocess.Popen(
+        [claude_bin, "remote-control", "--name", "adjutant"],
+        cwd=str(adj_dir),
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    pid_file.write_text(str(proc.pid))
+    return f"claude remote-control: started (PID {proc.pid})"
 
 def emergency_kill(adj_dir):
     backend_name = get_config(adj_dir).llm.backend
     if backend_name == "opencode":
         _kill_by_pattern(f"opencode.*{adj_dir}", signal.SIGTERM)
     elif backend_name == "claude-cli":
-        _kill_by_pattern(f"claude.*{adj_dir}", signal.SIGTERM)
+        _kill_by_pattern(f"claude.*remote-control", signal.SIGTERM)
+        _cleanup_pid_file(adj_dir / "state" / "claude_remote.pid")
 ```
 
 ---
@@ -1293,7 +1415,7 @@ changing `adjutant.yaml`.
 |---|---|---|---|
 | 1 | Session IDs are backend-specific | Delete `state/telegram_session.json` | OpenCode uses strings; Claude uses UUIDs |
 | 2 | Model ID format differs | Translate via `backend.translate_model_id()` | `anthropic/claude-sonnet-4-6` vs `sonnet` |
-| 3 | Orphaned opencode web server | Kill `opencode web --mdns` if switching away | Leaves zombie process |
+| 3 | Orphaned backend service | Kill `opencode web --mdns` or `claude remote-control` if switching away | Leaves zombie process; remote session stays accessible if not killed |
 | 4 | Binary not installed | Validate `backend.find_binary()` | Fail fast with install instructions |
 | 5 | KBs missing scaffold files | Auto-generate `.claude/` or `opencode.json` for all KBs | KB queries would fail |
 | 6 | Crontab references wrong binary | Re-sync crontab via `schedule sync` | Entries baked at install time |
@@ -1322,6 +1444,8 @@ def _handle_backend_switch(adj_dir: Path, old_backend: str, new_backend: str) ->
     # 3. Stop old backend services
     if old_backend == "opencode":
         _stop_opencode_web(adj_dir)
+    elif old_backend == "claude-cli":
+        _stop_claude_remote(adj_dir)
 
     # 4. Validate new backend binary
     backend = get_backend(new_backend)
@@ -1382,6 +1506,7 @@ LLM Backend
   Backend:     claude-cli
   Binary:      /usr/local/bin/claude (found)
   State file:  state/backend.txt (claude-cli)
+  Remote:      state/claude_remote.pid (PID 42315, running)
   Session:     state/telegram_session.json (none -- clean)
   Model:       claude-sonnet-4-6 (valid for claude-cli)
   Hooks:       .claude/hooks/block-env-access.sh (OK, executable)
@@ -1430,6 +1555,8 @@ with a non-zero status and a clear error message.
 | `ixda/opencode.json` | **Fix** -- add `external_directory: deny` |
 | `ixda/kb.yaml` | **Fix** -- model to match registry |
 | `portfolio-kb/kb.yaml` | **Fix** -- model to match registry |
+| `core/config.py` | **Fix** -- `ModelsConfig.expensive` default `claude-opus-4-5` → `claude-opus-4-6` |
+| `core/model.py` | **Fix** -- `TIER_DEFAULTS["expensive"]` `claude-opus-4-5` → `claude-opus-4-6` |
 
 ### Per-KB Claude Code Files (6 KBs)
 
@@ -1503,12 +1630,14 @@ with a non-zero status and a clear error message.
 | portfolio-kb has NO .env deny in opencode.json | Leak on opencode | Add deny rules in pre-migration remediation |
 | fagkomite missing kb.yaml + opencode.json | Wrong model/no sandbox | Generate from registry in remediation |
 | Registry vs kb.yaml model drift | Wrong model used | Fix drift: registry is source of truth |
+| config.py/model.py vs adjutant.yaml opus version | Wrong default model (4-5 vs 4-6) | Fix in Step 0 remediation — update hardcoded defaults to match adjutant.yaml |
 | Portfolio-kb nested opencode dependency | Analysis unaffected by switch | Deferred -- works on API keys today; warn on switch (Section 16.3 step 9) |
 | Vision not supported on Claude CLI backend | Image analysis broken for claude-cli users | Return `error_type="vision_unsupported"` with clear message; document limitation |
 | `--dangerously-skip-permissions` bypasses deny rules | `.env` deny rules in `.claude/settings.json` are inert | Hooks are primary defense; doctor checks hooks as errors not warnings (Section 6.1, 19.2) |
 | Claude CLI error messages unclassified | Generic "error" instead of actionable error types | Pattern-match on error text in `_classify_claude_error()`; extend as new patterns discovered |
 | No streaming on Claude CLI backend | Perceived latency regression for long responses | Document as known limitation; monitor for `--output-format stream-json` support |
 | Agent prompt drift between backends | Backends silently diverge in behavior | Single source of truth: `.opencode/agents/` files; Claude CLI strips frontmatter at runtime (Section 8.2) |
+| `claude remote-control` requires internet | Remote session unavailable offline; process exits after ~10 min without internet | Watchdog in listener.py detects dead process and restarts; `adjutant doctor` checks PID health |
 
 ---
 
@@ -1705,6 +1834,7 @@ Historical record: why, what changed, pre-migration remediation, known limitatio
 - Fix model drift: update `ixda/kb.yaml` and `portfolio-kb/kb.yaml` to match registry
 - Fix ixda `opencode.json`: add `external_directory: deny`
 - Fix portfolio-kb `opencode.json`: add `.env` deny rules
+- Fix model alias drift: update `core/config.py` (`ModelsConfig.expensive`) and `core/model.py` (`TIER_DEFAULTS["expensive"]`) from `anthropic/claude-opus-4-5` → `anthropic/claude-opus-4-6` to match `adjutant.yaml`
 
 ### Step 1: Backend abstraction (zero behavior change)
 - Create `backend.py` (protocol + factory + LLMResult + BackendCapabilities)
@@ -1729,12 +1859,14 @@ Historical record: why, what changed, pre-migration remediation, known limitatio
 - Create `.claude/hooks/block-env-access.sh` + `block-env-read.sh`
 - Create `test_backend_claude_cli.py` + `test_claude_json.py` (including error classification tests)
 - Document `--dangerously-skip-permissions` implications in code comments
+- Implement `claude remote-control` lifecycle: `_start_claude_remote()`, PID file management, `_stop_claude_remote()`
 
 ### Step 4: Migrate remaining call sites
 - chat.py, commands.py, query.py, vision.py, cron.py, control.py, listener.py, identity.py, prerequisites.py
 - `commands.py`: check `backend.capabilities.model_listing` before calling `list_models()`
 - `vision.py`: check `backend.capabilities.vision`; handle `vision_unsupported` error type
-- `listener.py`: check `backend.capabilities.reaping` before calling `reap()`
+- `listener.py`: check `backend.capabilities.reaping` before calling `reap()`; add remote session watchdog (parallel to opencode web watchdog)
+- `control.py`: refactor `start_opencode_web()` → `start_backend_service()` dispatching to `_start_opencode_web()` or `_start_claude_remote()` based on active backend
 - Extend `parse_ndjson` to classify errors into the common taxonomy (Section 6.3)
 - Update corresponding tests (including vision_unsupported and capabilities checks)
 
@@ -1750,10 +1882,12 @@ Historical record: why, what changed, pre-migration remediation, known limitatio
 - Update `adjutant.yaml` schema + validation
 - Backend selection in setup wizard
 - Implement `_detect_backend_change()` + `_handle_backend_switch()` in `lifecycle/control.py`
+- `_handle_backend_switch()` must stop BOTH old backend services: `_stop_opencode_web()` when switching away from opencode, `_stop_claude_remote()` when switching away from claude-cli
 - Include `translate_model_id()` call (not `resolve_alias()`) for model file conversion
 - Include `_warn_nested_opencode_dependencies()` for portfolio-kb (step 9 in Section 16.3)
 - Add `state/backend.txt` state file
-- `adjutant doctor` checks: backend binary, hook script permissions (**errors** for missing/non-executable hooks), KB scaffolds, nested dependency warnings
+- Add `state/claude_remote.pid` to state file inventory
+- `adjutant doctor` checks: backend binary, hook script permissions (**errors** for missing/non-executable hooks), KB scaffolds, nested dependency warnings, remote session health (PID file vs running process)
 
 ### Step 7: Backend-aware test infrastructure
 - Add `backend_opencode` / `backend_claude_cli` / `slow` markers to pyproject.toml
@@ -1789,6 +1923,42 @@ Historical record: why, what changed, pre-migration remediation, known limitatio
 - Verify `--dangerously-skip-permissions` does NOT make hooks ineffective
 - Test vision on claude-cli backend: confirm `vision_unsupported` error, not silent failure
 - Test error taxonomy: trigger rate limit, auth failure, model-not-found on Claude CLI
+- Test `claude remote-control` lifecycle: start, PID tracking, watchdog restart, clean shutdown, emergency kill
+- Test backend switch: verify old backend service (opencode web / claude remote) is stopped when switching
 - Run full test suite with `--run-all-backends`
-- Verify `adjutant doctor` passes for both backends (hooks flagged as errors when missing)
-- Document known behavioral differences (streaming, vision) in `docs/guides/backends.md`
+- Verify `adjutant doctor` passes for both backends (hooks flagged as errors when missing, remote session PID health)
+- Document known behavioral differences (streaming, vision, remote access model) in `docs/guides/backends.md`
+
+---
+
+## Appendix A: Verification Report (2026-03-23)
+
+Systematic verification of this plan against the codebase. Each item checked for MATCH, GAP, STALE, or CONTRADICTION.
+
+### Results Summary
+
+| # | Aspect | Status | Notes |
+|---|--------|--------|-------|
+| 1 | `LLMConfig` exists in `config.py` | **MATCH** | Lines 66-69, fields: backend, models, caps |
+| 2 | `adjutant.yaml` llm schema | **MATCH** | backend, models (cheap/medium/expensive), caps all present |
+| 3 | Model alias consistency | **STALE** | `config.py:57` and `model.py:30` have `claude-opus-4-5`; `adjutant.yaml` has `claude-opus-4-6` — remediation added to Step 0 |
+| 4 | 6 KBs in registry | **MATCH** | ixda, fagkomite, portfolio, munich-summer2026, hopen, smaabruksbryggeri |
+| 5 | KB model drift (inherit/medium) | **MATCH** | ixda=inherit, portfolio=medium confirmed |
+| 6 | `opencode.json` deny rules | **MATCH** | `.env` blocked in read, glob, bash sections |
+| 7 | Agent "don't read .env" instruction | **MATCH** | Line 32 of `adjutant.md` |
+| 8 | NDJSON parser format | **MATCH** | `parse_ndjson` handles text, sessionID, model_not_found |
+| 9 | NDJSON `model_not_found` detection | **MATCH** | Detects via message string and error name |
+| 10 | `identity.py` custom parser | **MATCH** | `_extract_opencode_text` is intentional lightweight parser for setup phase |
+| 11 | Migration table coverage | **MATCH** | All 9 importing files accounted for |
+| 12 | `setup/uninstall.py` patterns | **MATCH** | Kills opencode web, telegram, scheduled jobs |
+| 13 | `cli.py` error handling | **MATCH** | Imports and catches `OpenCodeNotFoundError` |
+| 14 | `test_opencode.py` | **MATCH** | 9.3 KB, comprehensive coverage |
+| 15 | `test_ndjson.py` | **MATCH** | 4.6 KB, extensive test cases |
+| 16 | `conftest.py` fixtures | **MATCH** | 5 fixtures: adj_dir, adj_env, adj_config, mock_opencode, sample_kb |
+| 17 | `core/model.py` backend interaction | **CLEAN** | No opencode deps; purely model tier resolution |
+| 18 | `core/platform.py` opencode reference | **MATCH** | PATH setup for opencode location (expected) |
+| 19 | `capabilities/schedule/install.py` | **MATCH** | PATH setup for cron opencode availability (expected) |
+| 20 | `messaging/dispatch.py` | **CLEAN** | No opencode refs |
+| 21 | `core/process.py` | **CLEAN** | Generic process management, no opencode specifics |
+
+**Result: 21/22 MATCH, 0 GAPS, 1 STALE** — all stale items addressed in plan updates above.

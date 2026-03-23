@@ -11,6 +11,7 @@ import pytest
 
 from adjutant.core.platform import (
     ADJUTANT_OS,
+    ESSENTIAL_PATH_DIRS,
     date_subtract,
     date_subtract_epoch,
     detect_os,
@@ -114,6 +115,28 @@ class TestFileSize:
         size, success = file_size(tmp_path / "nonexistent.txt")
         assert success is False
         assert size == 0
+
+
+class TestEssentialPathDirs:
+    """Test the shared ESSENTIAL_PATH_DIRS constant."""
+
+    def test_is_tuple(self):
+        assert isinstance(ESSENTIAL_PATH_DIRS, tuple)
+
+    def test_contains_homebrew(self):
+        assert "/opt/homebrew/bin" in ESSENTIAL_PATH_DIRS
+
+    def test_contains_system_dirs(self):
+        assert "/usr/bin" in ESSENTIAL_PATH_DIRS
+        assert "/bin" in ESSENTIAL_PATH_DIRS
+
+    def test_used_by_snapshot_path(self):
+        """_snapshot_path() in schedule/install must use the shared constant."""
+        from adjutant.capabilities.schedule.install import _snapshot_path
+
+        result = _snapshot_path()
+        for d in ESSENTIAL_PATH_DIRS:
+            assert d in result
 
 
 class TestEnsurePath:

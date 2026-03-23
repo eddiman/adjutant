@@ -143,12 +143,40 @@ class TestRunCronPrompt:
 
     def test_raises_if_opencode_missing(self, tmp_path: Path) -> None:
         """Should raise SystemExit(1) when opencode is not on PATH."""
+        from adjutant.core.opencode import OpenCodeNotFoundError
+
         prompt = tmp_path / "pulse.md"
         prompt.write_text("prompt text")
 
-        with patch("shutil.which", return_value=None), pytest.raises(SystemExit) as exc_info:
+        with (
+            patch(
+                "adjutant.lifecycle.cron._core_find_opencode",
+                side_effect=OpenCodeNotFoundError("opencode not found on PATH"),
+            ),
+            pytest.raises(SystemExit) as exc_info,
+        ):
             run_cron_prompt(prompt, adj_dir=tmp_path)
         assert exc_info.value.code == 1
+
+    def test_respects_opencode_bin_env(self, tmp_path: Path) -> None:
+        """OPENCODE_BIN env var should be honoured via the core resolver."""
+        prompt = tmp_path / "pulse.md"
+        prompt.write_text("env override test")
+
+        custom_bin = tmp_path / "custom" / "opencode"
+        custom_bin.parent.mkdir()
+        custom_bin.write_text("#!/bin/bash\nexit 0")
+        custom_bin.chmod(0o755)
+
+        with (
+            patch.dict(os.environ, {"OPENCODE_BIN": str(custom_bin)}),
+            patch("subprocess.run", return_value=_mock_run_ok()) as mock_run,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            run_cron_prompt(prompt, adj_dir=tmp_path)
+
+        assert exc_info.value.code == 0
+        assert mock_run.call_args[0][0][0] == str(custom_bin)
 
     def test_raises_if_adj_dir_not_set(self, tmp_path: Path) -> None:
         """Should raise SystemExit(1) when adj_dir is None and ADJ_DIR env not set."""
