@@ -435,6 +435,90 @@ If Claude Code adds a non-interactive mode that respects deny rules (e.g.,
 `--non-interactive` without bypassing permissions), migrate to that flag
 immediately and restore the three-layer defense.
 
+### 6.1.1 Configurable Permission Mode
+
+The `--dangerously-skip-permissions` flag is not the only option. Claude Code
+supports several permission-related flags that offer finer-grained control:
+
+| Flag | Behavior |
+|------|----------|
+| `--dangerously-skip-permissions` | Bypass all permission checks (current default) |
+| `--allowedTools "Read,Glob,Grep,Bash(*)"` | Whitelist specific tools — others are blocked |
+| `--disallowedTools "Bash(rm *)"` | Blacklist specific tools — removed from model context |
+| `--permission-mode bypassPermissions` | Equivalent to `--dangerously-skip-permissions` |
+| `--permission-mode acceptEdits` | Auto-accept edit/write, prompt for bash |
+
+**Configuration:** `adjutant.yaml` gains a `permission_mode` field under `llm`:
+
+```yaml
+llm:
+  backend: "claude-cli"
+  permission_mode: "skip"   # "skip" | "allowlist" | default omitted = "skip"
+```
+
+| Mode | Flag Used | Security | Use Case |
+|------|-----------|----------|----------|
+| `"skip"` (default) | `--dangerously-skip-permissions` | Hooks are primary defense | Non-interactive subprocess (current behavior) |
+| `"allowlist"` | `--allowedTools "Read,Glob,Grep,Edit,Write,Bash(*)"` | Deny rules + hooks both active | Users who want Layer 1 protection |
+
+**`"allowlist"` mode details:** When active, the backend constructs `--allowedTools`
+from a configurable list. This preserves `.claude/settings.json` deny rules (Layer 1)
+because `--dangerously-skip-permissions` is NOT passed. The model can use whitelisted
+tools without prompting, but deny rules still block disallowed patterns.
+
+Default allowlist (matches the OpenCode-equivalent sandbox):
+```
+Read, Glob, Grep, Edit, Write, Bash(*)
+```
+
+**Implementation in `ClaudeCLIBackend`:**
+
+```python
+def _build_permission_args(self) -> list[str]:
+    """Build permission-related CLI args from config."""
+    config = load_typed_config()
+    mode = config.llm.permission_mode
+
+    if mode == "allowlist":
+        tools = config.llm.allowed_tools or "Read,Glob,Grep,Edit,Write,Bash(*)"
+        return ["--allowedTools", tools]
+
+    # Default: skip permissions (non-interactive mode)
+    return ["--dangerously-skip-permissions"]
+```
+
+**Setup wizard integration:** The backend setup step (Section 11.3) should ask:
+
+```
+Permission mode for Claude CLI:
+
+  1. Skip all permissions (default)
+     -> Fastest, hooks are your security boundary
+     -> Required if you're running headless/cron
+
+  2. Use allowlist
+     -> Deny rules in .claude/settings.json stay active
+     -> Slightly safer, but some operations may be blocked
+
+Choose [1/2]:
+```
+
+**Config model addition:**
+
+```python
+class LLMConfig(BaseModel):
+    backend: str = "opencode"
+    permission_mode: str = "skip"
+    allowed_tools: str | None = None  # Only used when permission_mode="allowlist"
+```
+
+**`adjutant doctor` check:** When `permission_mode="skip"`, hooks are flagged as
+**errors** if missing. When `permission_mode="allowlist"`, hooks are flagged as
+**warnings** (Layer 1 provides backup protection).
+
+**Note:** The `permission_mode` setting is ignored when `backend="opencode"` —
+OpenCode has its own permission model via `opencode.json`.
+
 **Workspace scoping:** Uses `cwd=workdir` parameter on subprocess instead of `--dir`.
 
 **Session management:**
@@ -1018,6 +1102,8 @@ This matches the dual-backend pattern already proven by hopen.
 ```yaml
 llm:
   backend: "claude-cli"           # "opencode" | "claude-cli"
+  permission_mode: "skip"         # "skip" | "allowlist" (claude-cli only)
+  allowed_tools: null             # Custom allowlist (only when permission_mode="allowlist")
   models:
     cheap: "haiku"
     medium: "sonnet"
@@ -1049,6 +1135,20 @@ Which LLM backend would you like to use?
 
   2. Claude Code CLI
      -> Uses `claude` CLI, works with Claude subscription
+```
+
+If Claude CLI is selected, a follow-up prompt:
+```
+Permission mode for Claude CLI:
+
+  1. Skip all permissions (default, recommended)
+     -> Non-interactive mode, hooks guard .env access
+
+  2. Use allowlist
+     -> .claude/settings.json deny rules stay active
+     -> Slightly safer, some edge cases may block
+
+Choose [1/2]:
 ```
 
 ### 11.4 Config Validation
@@ -1622,7 +1722,7 @@ with a non-zero status and a clear error message.
 | Session ID format incompatibility | Resume fails | Session storage detects format; generate UUIDs for Claude |
 | Claude subscription rate limits hit during heavy use | Throttled | Exponential backoff; surface errors clearly |
 | Vision file attachment via piped stdin unreliable | Image analysis broken | Test piping; fall back to temp file in workdir |
-| `--dangerously-skip-permissions` disabled by org policy | Runs fail | Detect permission prompts; fall back to `.claude/settings.json` allow rules |
+| `--dangerously-skip-permissions` disabled by org policy | Runs fail | Use `permission_mode: "allowlist"` with `--allowedTools` flag instead |
 | KB writes via `run_detached()` lose output | No confirmation | Log to adjutant.log; monitor for completion |
 | Existing tests break during migration | CI failure | Migrate incrementally; keep OpenCode tests passing |
 | `.env` bypass via creative Bash | Credential leak | Three-layer defense + bypass vector testing |

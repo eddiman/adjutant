@@ -133,13 +133,17 @@ class OpenCodeBackend:
             args += ["--model", self.resolve_alias(model)]
         args.append(prompt)
 
-        stdout_dest = open(log_path, "a") if log_path else subprocess.DEVNULL  # noqa: SIM115
-        subprocess.Popen(
-            args,
-            stdout=stdout_dest,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        log_fh = open(log_path, "a") if log_path else None  # noqa: SIM115
+        try:
+            subprocess.Popen(
+                args,
+                stdout=log_fh or subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+        finally:
+            if log_fh is not None:
+                log_fh.close()
 
     def run_sync(
         self,
