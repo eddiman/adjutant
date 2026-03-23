@@ -305,6 +305,67 @@ def _write_kb_opencode_json(kb_path: Path, access: str) -> None:
     (kb_path / "opencode.json").write_text(json.dumps(config, indent=2) + "\n")
 
 
+def _write_kb_claude_scaffold(kb_path: Path, access: str, adj_dir: Path) -> None:
+    """Generate .claude/settings.json + hooks for a KB.
+
+    Uses templates from templates/kb/claude/ if available, otherwise
+    generates settings programmatically. Both backends get scaffolded
+    so the KB works regardless of which backend is active.
+    """
+    import shutil as _shutil
+
+    claude_dir = kb_path / ".claude"
+    claude_dir.mkdir(parents=True, exist_ok=True)
+    hooks_dir = claude_dir / "hooks"
+    hooks_dir.mkdir(exist_ok=True)
+
+    templates = _templates_path(adj_dir)
+
+    # Settings from template
+    if access == "read-write":
+        tmpl = templates / "claude" / "settings-rw.json"
+    else:
+        tmpl = templates / "claude" / "settings.json"
+
+    if tmpl.is_file():
+        _shutil.copy2(tmpl, claude_dir / "settings.json")
+    else:
+        # Fallback: generate minimal settings
+        deny_base = [
+            "Read(.env)", "Read(**/.env)", "Read(**/.env.*)",
+            "Read(**/*secret*)", "Read(**/*credential*)",
+        ]
+        if access != "read-write":
+            allow = ["Read", "Glob", "Grep"]
+            deny_base = ["Bash(*)", "Edit(*)", "Write(*)"] + deny_base
+        else:
+            allow = ["Read", "Edit", "Write", "Glob", "Grep"]
+            deny_base = ["Bash(*)"] + deny_base
+
+        settings = {"permissions": {"allow": allow, "deny": deny_base}}
+        (claude_dir / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
+
+    # Hook script from template
+    hook_tmpl = templates / "claude" / "hooks" / "block-env-read.sh"
+    hook_dest = hooks_dir / "block-env-read.sh"
+    if hook_tmpl.is_file():
+        _shutil.copy2(hook_tmpl, hook_dest)
+        hook_dest.chmod(0o755)
+    else:
+        # Fallback: minimal hook
+        hook_dest.write_text(
+            "#!/usr/bin/env bash\n"
+            "# block-env-read.sh — deny .env reads\n"
+            "INPUT=$(cat)\n"
+            'FP=$(echo "$INPUT" | grep -oP \'"file_path"\\s*:\\s*"([^"]*)"\\\'  | head -1 '
+            "| sed 's/.*\"file_path\"\\s*:\\s*\"//;s/\"$//' || true)\n"
+            '[ -z "$FP" ] && exit 0\n'
+            'echo "$FP" | grep -qiE \'(^|/)\\.env($|/)\' && exit 2\n'
+            "exit 0\n"
+        )
+        hook_dest.chmod(0o755)
+
+
 def kb_scaffold(
     adj_dir: Path,
     name: str,
@@ -399,6 +460,9 @@ def kb_scaffold(
             "## Key references\n\n"
             "- (add links to key files as the KB grows)\n"
         )
+
+    # Claude Code scaffold — .claude/settings.json + hooks
+    _write_kb_claude_scaffold(kb_path, access, adj_dir)
 
     # .gitkeep placeholders
     for gitkeep_dir in ["knowledge", "history", "state", "docs/reference", "templates"]:
