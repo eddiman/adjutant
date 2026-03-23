@@ -27,7 +27,7 @@ DEFAULT_MODEL = "anthropic/claude-haiku-4-5"
 TIER_DEFAULTS: dict[str, str] = {
     "cheap": "anthropic/claude-haiku-4-5",
     "medium": "anthropic/claude-sonnet-4-6",
-    "expensive": "anthropic/claude-opus-4-5",
+    "expensive": "anthropic/claude-opus-4-6",
 }
 
 

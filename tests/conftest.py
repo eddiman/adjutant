@@ -53,7 +53,7 @@ def adj_config(adj_dir: Path) -> dict:
             "models": {
                 "cheap": "anthropic/claude-haiku-4-5",
                 "medium": "anthropic/claude-sonnet-4-6",
-                "expensive": "anthropic/claude-opus-4-5",
+                "expensive": "anthropic/claude-opus-4-6",
             }
         },
         "features": {

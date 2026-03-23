@@ -63,4 +63,6 @@ markers = [
     "integration: Integration tests (mocked external calls)",
     "slow: Slow tests (skip with -m 'not slow')",
     "bash: Tests that invoke bash scripts",
+    "backend_opencode: Tests specific to the OpenCode backend",
+    "backend_claude_cli: Tests specific to the Claude CLI backend",
 ]

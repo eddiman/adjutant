@@ -143,7 +143,7 @@ class TestAdjutantConfig:
         config = AdjutantConfig()
         assert config.get_model("cheap") == "anthropic/claude-haiku-4-5"
         assert config.get_model("medium") == "anthropic/claude-sonnet-4-6"
-        assert config.get_model("expensive") == "anthropic/claude-opus-4-5"
+        assert config.get_model("expensive") == "anthropic/claude-opus-4-6"
 
     def test_get_model_unknown_tier_falls_back_to_cheap(self) -> None:
         config = AdjutantConfig()

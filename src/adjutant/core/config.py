@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 # ---------------------------------------------------------------------------
 # Typed config models
@@ -54,7 +54,7 @@ class MessagingConfig(BaseModel):
 class ModelsConfig(BaseModel):
     cheap: str = "anthropic/claude-haiku-4-5"
     medium: str = "anthropic/claude-sonnet-4-6"
-    expensive: str = "anthropic/claude-opus-4-5"
+    expensive: str = "anthropic/claude-opus-4-6"
 
 
 class CapsConfig(BaseModel):
@@ -67,6 +67,14 @@ class LLMConfig(BaseModel):
     backend: str = "opencode"
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     caps: CapsConfig = Field(default_factory=CapsConfig)
+
+    @field_validator("backend")
+    @classmethod
+    def validate_backend(cls, v: str) -> str:
+        valid = {"opencode", "claude-cli"}
+        if v not in valid:
+            raise ValueError(f"llm.backend must be one of {valid}, got {v!r}")
+        return v
 
 
 class FeatureConfig(BaseModel):
