@@ -170,23 +170,26 @@ def restart(adj_dir: Path | None = None) -> str:
     else:
         lines.append("Telegram listener not running")
 
-    # Stop OpenCode web server
-    web_pid_file = d / "state" / "opencode_web.pid"
-    web_pid = _read_pid(web_pid_file)
-    if web_pid and _pid_alive(web_pid):
-        with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.kill(web_pid, signal.SIGTERM)
-        web_pid_file.unlink(missing_ok=True)
-        lines.append("OpenCode web server stopped")
-    else:
-        # Look for orphan
-        orphan = _pgrep_first("opencode web")
-        if orphan:
-            _kill_by_pattern("opencode web", signal.SIGTERM)
-            time.sleep(1)
-            lines.append("OpenCode web server stopped")
+    # Stop backend services (both — handles mid-switch state)
+    for svc_name, pattern, pid_name in [
+        ("OpenCode web server", "opencode web", "opencode_web.pid"),
+        ("Claude remote-control", "claude.*remote-control", "claude_remote.pid"),
+    ]:
+        pid_file = d / "state" / pid_name
+        pid = _read_pid(pid_file)
+        if pid and _pid_alive(pid):
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, signal.SIGTERM)
+            pid_file.unlink(missing_ok=True)
+            lines.append(f"{svc_name} stopped")
         else:
-            lines.append("OpenCode web server not running")
+            orphan = _pgrep_first(pattern)
+            if orphan:
+                _kill_by_pattern(pattern, signal.SIGTERM)
+                time.sleep(1)
+                lines.append(f"{svc_name} stopped")
+            else:
+                lines.append(f"{svc_name} not running")
 
     lines += ["", "Waiting for clean shutdown..."]
     time.sleep(2)
@@ -416,6 +419,123 @@ def _sync_schedule_crontab(adj_dir: Path) -> str:
         return "Crontab synced"
 
 
+def _detect_backend_change(adj_dir: Path) -> str | None:
+    """Compare config backend against state/backend.txt.
+
+    Returns the previous backend name if a switch is detected, else None.
+    Writes current backend to state file.
+    """
+    try:
+        from adjutant.core.config import load_typed_config
+
+        config = load_typed_config(adj_dir / "adjutant.yaml")
+        current = config.llm.backend
+    except Exception:  # noqa: BLE001
+        current = "opencode"
+
+    state_file = adj_dir / "state" / "backend.txt"
+    if state_file.exists():
+        previous = state_file.read_text().strip()
+        if previous != current:
+            return previous
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(current)
+    return None
+
+
+def _handle_backend_switch(adj_dir: Path, old_backend: str, new_backend: str) -> list[str]:
+    """Perform side effects when the backend changes. Returns status lines."""
+    lines: list[str] = []
+
+    # 1. Clear active session (format incompatible between backends)
+    session_file = adj_dir / "state" / "telegram_session.json"
+    if session_file.exists():
+        session_file.unlink()
+        lines.append("Cleared stale session (format incompatible)")
+
+    # 2. Translate model ID
+    model_file = adj_dir / "state" / "telegram_model.txt"
+    if model_file.exists():
+        from adjutant.core.backend import get_backend
+
+        current_model = model_file.read_text().strip()
+        backend = get_backend(new_backend)
+        new_model = backend.translate_model_id(current_model)
+        if new_model != current_model:
+            model_file.write_text(new_model)
+            lines.append(f"Translated model: {current_model} → {new_model}")
+
+    # 3. Stop old backend services
+    if old_backend == "opencode":
+        _kill_by_pattern("opencode web", signal.SIGTERM)
+        (adj_dir / "state" / "opencode_web.pid").unlink(missing_ok=True)
+        lines.append("Stopped opencode web server")
+    elif old_backend == "claude-cli":
+        _kill_by_pattern("claude.*remote-control", signal.SIGTERM)
+        (adj_dir / "state" / "claude_remote.pid").unlink(missing_ok=True)
+        lines.append("Stopped claude remote-control")
+
+    # 4. Record new backend
+    (adj_dir / "state" / "backend.txt").write_text(new_backend)
+
+    # 5. Log
+    _adj_log("backend", f"Switched from {old_backend} to {new_backend}")
+    lines.append(f"Backend switched: {old_backend} → {new_backend}")
+
+    return lines
+
+
+def start_backend_service(adj_dir: Path) -> str:
+    """Start the appropriate backend service (opencode web or claude remote-control)."""
+    try:
+        from adjutant.core.config import load_typed_config
+
+        config = load_typed_config(adj_dir / "adjutant.yaml")
+        backend_name = config.llm.backend
+    except Exception:  # noqa: BLE001
+        backend_name = "opencode"
+
+    if backend_name == "claude-cli":
+        return _start_claude_remote(adj_dir)
+    return start_opencode_web(adj_dir)
+
+
+def _start_claude_remote(adj_dir: Path) -> str:
+    """Start claude remote-control (internet-accessible remote session)."""
+    from adjutant.core.backend import get_backend
+
+    backend = get_backend("claude-cli")
+    claude_bin = backend.find_binary()
+    if not claude_bin:
+        return "claude remote-control: claude binary not found"
+
+    pid_file = adj_dir / "state" / "claude_remote.pid"
+    if pid_file.exists():
+        pid = _read_pid(pid_file)
+        if pid and _pid_alive(pid):
+            return f"claude remote-control: already running (PID {pid})"
+        pid_file.unlink(missing_ok=True)
+
+    log_file = adj_dir / "state" / "claude_remote.log"
+    log_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(log_file, "a") as lf:
+            proc = subprocess.Popen(
+                [claude_bin, "remote-control", "--name", "adjutant"],
+                cwd=str(adj_dir),
+                stdout=lf,
+                stderr=lf,
+                start_new_session=True,
+            )
+        pid_file.write_text(str(proc.pid))
+        time.sleep(2)
+        if _pid_alive(proc.pid):
+            return f"claude remote-control: started (PID {proc.pid})"
+        return f"claude remote-control: failed to start (check {log_file})"
+    except OSError as e:
+        return f"claude remote-control error: {e}"
+
+
 def startup(
     adj_dir: Path | None = None,
     interactive: bool = True,
@@ -485,14 +605,27 @@ def startup(
         _adj_log("startup", "System recovered from emergency kill switch")
         _log_journal(d, "System recovered from emergency kill switch")
 
+    # Backend switch detection
+    old_backend = _detect_backend_change(d)
+    if old_backend:
+        lines += ["", "Backend change detected!", ""]
+        try:
+            from adjutant.core.config import load_typed_config
+
+            new_backend = load_typed_config(d / "adjutant.yaml").llm.backend
+        except Exception:  # noqa: BLE001
+            new_backend = "opencode"
+        switch_lines = _handle_backend_switch(d, old_backend, new_backend)
+        lines.extend(f"  {l}" for l in switch_lines)
+
     # Start services
     lines += ["", "Starting services...", ""]
 
     # Telegram listener
     lines.append(_start_telegram_service(d))
 
-    # OpenCode web server
-    lines.append(start_opencode_web(d))
+    # Backend service (opencode web or claude remote-control)
+    lines.append(start_backend_service(d))
 
     # Post-startup PID sync
     sync_pid = _pgrep_first("messaging/telegram/listener")

@@ -65,6 +65,8 @@ class CapsConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     backend: str = "opencode"
+    permission_mode: str = "skip"
+    allowed_tools: str | None = None
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     caps: CapsConfig = Field(default_factory=CapsConfig)
 
@@ -74,6 +76,14 @@ class LLMConfig(BaseModel):
         valid = {"opencode", "claude-cli"}
         if v not in valid:
             raise ValueError(f"llm.backend must be one of {valid}, got {v!r}")
+        return v
+
+    @field_validator("permission_mode")
+    @classmethod
+    def validate_permission_mode(cls, v: str) -> str:
+        valid = {"skip", "allowlist"}
+        if v not in valid:
+            raise ValueError(f"llm.permission_mode must be one of {valid}, got {v!r}")
         return v
 
 

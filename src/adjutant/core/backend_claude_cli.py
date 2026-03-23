@@ -43,6 +43,27 @@ _TO_OPENCODE: dict[str, str] = {
 
 _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp"})
 
+_DEFAULT_ALLOWED_TOOLS = "Read,Glob,Grep,Edit,Write,Bash(*)"
+
+
+def _get_permission_args() -> list[str]:
+    """Build permission-related CLI args from config.
+
+    Returns either --dangerously-skip-permissions (default "skip" mode)
+    or --allowedTools with a whitelist ("allowlist" mode).
+    """
+    try:
+        from adjutant.core.config import load_typed_config
+
+        config = load_typed_config()
+        mode = config.llm.permission_mode
+        if mode == "allowlist":
+            tools = config.llm.allowed_tools or _DEFAULT_ALLOWED_TOOLS
+            return ["--allowedTools", tools]
+    except Exception:  # noqa: BLE001
+        pass
+    return ["--dangerously-skip-permissions"]
+
 
 def _find_claude() -> str:
     """Find the claude binary via CLAUDE_CODE_BIN env var or PATH."""
@@ -140,7 +161,7 @@ class ClaudeCLIBackend:
                 tmp_prompt_file.close()
                 args += ["--system-prompt-file", tmp_prompt_file.name]
 
-        args.append("--dangerously-skip-permissions")
+        args.extend(_get_permission_args())
 
         if session_id:
             args += ["--resume", session_id]
@@ -231,7 +252,7 @@ class ClaudeCLIBackend:
                 prompt_file.write_text(body)
                 args += ["--system-prompt-file", str(prompt_file)]
 
-        args.append("--dangerously-skip-permissions")
+        args.extend(_get_permission_args())
         args.append(prompt)
 
         log_fh = open(log_path, "a") if log_path else None  # noqa: SIM115
@@ -256,7 +277,7 @@ class ClaudeCLIBackend:
     ) -> int:
         claude_bin = _find_claude()
         args = [claude_bin, "-p", "--output-format", "json"]
-        args.append("--dangerously-skip-permissions")
+        args.extend(_get_permission_args())
         args.append(prompt)
 
         start = time.monotonic()

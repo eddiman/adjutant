@@ -1,7 +1,7 @@
 """Tests for src/adjutant/messaging/telegram/listener.py
 
 Focus on unit-testable helpers: _load_offset, _save_offset, _poll_once,
-_watchdog_check_web.
+_watchdog_check_backend_service.
 The main() polling loop is integration-level and not covered here.
 """
 
@@ -17,7 +17,7 @@ from adjutant.messaging.telegram.listener import (
     _load_offset,
     _poll_once,
     _save_offset,
-    _watchdog_check_web,
+    _watchdog_check_backend_service,
 )
 
 
@@ -156,16 +156,16 @@ class TestPollOnce:
 
 
 # ---------------------------------------------------------------------------
-# _watchdog_check_web
+# _watchdog_check_backend_service
 # ---------------------------------------------------------------------------
 
 
-class TestWatchdogCheckWeb:
-    """Test the opencode web server watchdog."""
+class TestWatchdogCheckBackendService:
+    """Test the backend service watchdog."""
 
     @pytest.mark.asyncio
     async def test_restarts_when_pid_file_missing(self, tmp_path: Path) -> None:
-        """No PID file → watchdog starts the web server."""
+        """No PID file → watchdog starts the backend service."""
         adj = tmp_path / ".adjutant"
         adj.mkdir()
         (adj / "state").mkdir()
@@ -174,13 +174,13 @@ class TestWatchdogCheckWeb:
 
         def fake_start(d):
             started.append(d)
-            return "OpenCode web server started (PID 12345)"
+            return "Backend service started (PID 12345)"
 
         with patch(
-            "adjutant.lifecycle.control.start_opencode_web",
+            "adjutant.lifecycle.control.start_backend_service",
             side_effect=fake_start,
         ):
-            await _watchdog_check_web(adj)
+            await _watchdog_check_backend_service(adj)
 
         assert len(started) == 1
         assert started[0] == adj
@@ -204,11 +204,11 @@ class TestWatchdogCheckWeb:
         with (
             patch("adjutant.core.process.read_pid_file", return_value=None),
             patch(
-                "adjutant.lifecycle.control.start_opencode_web",
+                "adjutant.lifecycle.control.start_backend_service",
                 side_effect=fake_start,
             ),
         ):
-            await _watchdog_check_web(adj)
+            await _watchdog_check_backend_service(adj)
 
         assert len(started) == 1
         # Stale PID file should be removed
@@ -233,11 +233,11 @@ class TestWatchdogCheckWeb:
         with (
             patch("adjutant.core.process.read_pid_file", return_value=os.getpid()),
             patch(
-                "adjutant.lifecycle.control.start_opencode_web",
+                "adjutant.lifecycle.control.start_backend_service",
                 side_effect=fake_start,
             ),
         ):
-            await _watchdog_check_web(adj)
+            await _watchdog_check_backend_service(adj)
 
         assert len(started) == 0  # No restart attempted
 
@@ -249,9 +249,9 @@ class TestWatchdogCheckWeb:
         (adj / "state").mkdir()
 
         with patch(
-            "adjutant.lifecycle.control.start_opencode_web",
+            "adjutant.lifecycle.control.start_backend_service",
             side_effect=OSError("disk full"),
         ):
             # The watchdog itself raises — caller (listener loop) catches it
             with pytest.raises(OSError, match="disk full"):
-                await _watchdog_check_web(adj)
+                await _watchdog_check_backend_service(adj)

@@ -89,39 +89,47 @@ async def _poll_once(
         return None
 
 
-async def _watchdog_check_web(adj_dir: Path) -> None:
-    """Check if the opencode web server is alive; restart if dead.
+async def _watchdog_check_backend_service(adj_dir: Path) -> None:
+    """Check if the backend service is alive; restart if dead.
 
-    Uses the PID file as the liveness signal.  If the file exists but the
-    process is gone, the stale file is removed and the server is restarted.
-    If no PID file exists at all (server was never started or file was
-    cleaned up), a start is also attempted.
+    Dispatches to the correct backend service (opencode web or claude
+    remote-control) based on the active backend configuration.
     """
     from adjutant.core.process import read_pid_file
-    from adjutant.lifecycle.control import start_opencode_web
+    from adjutant.lifecycle.control import start_backend_service
 
-    web_pid_file = adj_dir / "state" / "opencode_web.pid"
+    # Determine which PID file to check
+    try:
+        from adjutant.core.config import load_typed_config
 
-    if not web_pid_file.exists():
-        # No PID file — server was never started or file was cleaned up
-        adj_log("telegram", "Watchdog: no opencode web PID file — starting server")
-        result = await asyncio.to_thread(start_opencode_web, adj_dir)
+        backend_name = load_typed_config(adj_dir / "adjutant.yaml").llm.backend
+    except Exception:  # noqa: BLE001
+        backend_name = "opencode"
+
+    if backend_name == "claude-cli":
+        pid_file = adj_dir / "state" / "claude_remote.pid"
+        svc_name = "claude remote-control"
+    else:
+        pid_file = adj_dir / "state" / "opencode_web.pid"
+        svc_name = "opencode web"
+
+    if not pid_file.exists():
+        adj_log("telegram", f"Watchdog: no {svc_name} PID file — starting service")
+        result = await asyncio.to_thread(start_backend_service, adj_dir)
         adj_log("telegram", f"Watchdog: {result}")
         return
 
-    # PID file exists — check if the process is alive
-    live_pid = read_pid_file(web_pid_file)
+    live_pid = read_pid_file(pid_file)
     if live_pid is not None:
-        return  # Process is alive, nothing to do
+        return  # Process is alive
 
-    # Stale PID file — process is dead
     try:
-        stale_pid_str = web_pid_file.read_text().strip()
+        stale_pid_str = pid_file.read_text().strip()
     except OSError:
         stale_pid_str = "?"
-    adj_log("telegram", f"Watchdog: opencode web (PID {stale_pid_str}) is dead — restarting")
-    web_pid_file.unlink(missing_ok=True)
-    result = await asyncio.to_thread(start_opencode_web, adj_dir)
+    adj_log("telegram", f"Watchdog: {svc_name} (PID {stale_pid_str}) is dead — restarting")
+    pid_file.unlink(missing_ok=True)
+    result = await asyncio.to_thread(start_backend_service, adj_dir)
     adj_log("telegram", f"Watchdog: {result}")
 
 
@@ -188,12 +196,12 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                 except Exception as exc:
                     adj_log("telegram", f"reap error: {exc}")
 
-            # Periodic opencode web server watchdog (~5 min)
+            # Periodic backend service watchdog (~5 min)
             watchdog_counter += 1
             if watchdog_counter >= _WEB_WATCHDOG_INTERVAL:
                 watchdog_counter = 0
                 try:
-                    await _watchdog_check_web(adj_dir)
+                    await _watchdog_check_backend_service(adj_dir)
                 except Exception as exc:
                     adj_log("telegram", f"Watchdog error: {exc}")
 
