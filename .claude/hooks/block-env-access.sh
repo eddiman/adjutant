@@ -12,7 +12,7 @@ set -euo pipefail
 # The tool input is passed via stdin as JSON.
 # Extract the command field.
 INPUT=$(cat)
-COMMAND=$(echo "$INPUT" | grep -oP '"command"\s*:\s*"([^"]*)"' | head -1 | sed 's/.*"command"\s*:\s*"//;s/"$//' || true)
+COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null || true)
 
 if [ -z "$COMMAND" ]; then
     exit 0  # No command found — allow
