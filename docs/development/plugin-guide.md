@@ -2,7 +2,7 @@
 
 A capability is a self-contained Python module that gives Adjutant a new skill — taking screenshots, querying an API, reading files, sending notifications to third-party services, etc.
 
-The agent can invoke capabilities via OpenCode tool calls. Capabilities can also be wired to slash commands in `commands.py`.
+The agent can invoke capabilities via LLM backend tool calls (OpenCode or Claude CLI). Capabilities can also be wired to slash commands in `commands.py`.
 
 ---
 
@@ -170,7 +170,7 @@ When a feature is disabled in config, `dispatch.py` will reject the command with
 
 ## Wiring the Agent
 
-The agent (OpenCode) can call any capability via the bash tool or Python tool. Document the capability in `.opencode/agents/adjutant.md` so the agent knows it exists:
+The agent (via whichever LLM backend is active) can call any capability via the bash tool or Python tool. Document the capability in `.opencode/agents/adjutant.md` so the agent knows it exists:
 
 ```markdown
 ## Available Tools
@@ -265,6 +265,8 @@ See [docs/guides/schedules.md](../guides/schedules.md) for the full guide.
 5. Document in `.opencode/agents/adjutant.md` so the agent knows it exists
 6. Add unit test at `tests/unit/test_<name>.py`
 7. Add to `docs/guides/commands.md`
+8. Use `backend.run()` for any LLM calls — never import backend implementations directly
+9. If your capability depends on a backend-specific feature (e.g. vision), check `backend.capabilities.*` before calling
 
 Full guide: this file.
 

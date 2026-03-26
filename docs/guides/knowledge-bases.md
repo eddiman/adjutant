@@ -8,7 +8,7 @@ How to create, structure, register, and query knowledge bases in Adjutant.
 
 When you ask Adjutant something domain-specific, it:
 1. Reads `knowledge_bases/registry.yaml` to find a matching KB
-2. Spawns `opencode run --agent kb --dir <kb-path>`
+2. Spawns the LLM backend with agent="kb" and workdir=kb-path (OpenCode: `opencode run --agent kb --dir <kb-path>`, Claude CLI: `claude -p --system-prompt-file <kb-agent>.md`)
 3. The sub-agent uses **glob** and **grep** to find relevant files, then **reads** them
 4. Returns a synthesized answer
 
@@ -171,7 +171,7 @@ Set in `kb.yaml`:
 - `read-only` — Adjutant can query but not write. Use for reference KBs.
 - `read-write` — Adjutant can update files and run scripts. Use for operational KBs where you want it to record decisions, update `current.md`, or run data-fetch scripts during `/reflect`.
 
-Default to `read-write` for active project KBs. The sub-agent won't write unless explicitly told to. Read-write KBs have `edit` and `write` tools permitted in their `opencode.json` workspace config, while `read-only` KBs have those tools denied — restricting the sub-agent to read operations only.
+Default to `read-write` for active project KBs. The sub-agent won't write unless explicitly told to. Read-write KBs have `edit` and `write` tools permitted in their workspace config (`opencode.json` for OpenCode, `.claude/settings.json` for Claude CLI), while `read-only` KBs have those tools denied — restricting the sub-agent to read operations only. Both backend configs are generated from the same templates during scaffold creation.
 
 ---
 
@@ -307,6 +307,27 @@ knowledge/
 ```
 
 Add subdirectories and `history/` as volume grows.
+
+---
+
+## Backend compatibility
+
+KBs work with both LLM backends (OpenCode and Claude CLI). Each backend uses its own workspace configuration:
+
+| Backend | Config file | Permissions | Hooks |
+|---------|-------------|-------------|-------|
+| OpenCode | `opencode.json` | Deny rules for `.env`, external directories | N/A |
+| Claude CLI | `.claude/settings.json` | Deny rules + tool allowlists | `.claude/hooks/block-env-read.sh` |
+
+Both configs are generated automatically from shared templates during scaffold creation (`adjutant kb create`). When switching backends via `adjutant.yaml`, `_handle_backend_switch()` auto-generates any missing scaffold files for all registered KBs.
+
+**Key differences:**
+
+- **Read-only KBs**: OpenCode denies bash/edit/write in `opencode.json`. Claude CLI denies the same tools in `.claude/settings.json`.
+- **Read-write KBs**: OpenCode allows bash/edit/write but denies external directories. Claude CLI allows the same tools with hook-based `.env` protection.
+- **Vision**: Only supported on the OpenCode backend. Image file attachments return `vision_unsupported` on Claude CLI.
+
+**Nested dependencies**: Some KBs (e.g. portfolio-kb) have internal pipelines that call `opencode run` directly. Switching the main backend to Claude CLI does not affect these nested calls — they still require a working `opencode` binary and API key. Adjutant warns about this during a backend switch.
 
 ---
 

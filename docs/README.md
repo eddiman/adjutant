@@ -1,6 +1,6 @@
 # Adjutant Documentation
 
-Adjutant is a persistent autonomous agent framework that runs on your local machine. It listens for messages from a messaging backend, routes them through a backend-agnostic dispatcher, and responds via OpenCode-powered AI or built-in commands.
+Adjutant is a persistent autonomous agent framework that runs on your local machine. It listens for messages from a messaging backend, routes them through a backend-agnostic dispatcher, and responds via LLM-powered AI (OpenCode or Claude Code CLI) or built-in commands.
 
 ---
 
@@ -17,6 +17,7 @@ For people using Adjutant.
 | [Schedules](guides/schedules.md) | Cron-based scheduled jobs, KB operations, registry management |
 | [Autonomy](guides/autonomy.md) | Autonomous pulse/review cycles, notification budget, dry-run mode |
 | [Lifecycle](guides/lifecycle.md) | Start, stop, pause, kill, recover, and update |
+| [Backends](guides/backends.md) | Choosing, configuring, and switching LLM backends (OpenCode / Claude CLI) |
 
 ---
 
@@ -28,7 +29,8 @@ For people who want to understand how Adjutant works internally.
 |----------|---------------|
 | [Overview](architecture/overview.md) | High-level diagram and layer summary |
 | [Messaging](architecture/messaging.md) | Adaptor contract, dispatcher, Telegram adaptor internals |
-| [Identity & Agent](architecture/identity.md) | Three-layer identity model and OpenCode integration |
+| [Identity & Agent](architecture/identity.md) | Three-layer identity model and LLM backend integration |
+| [Backends](architecture/backends.md) | Backend protocol, factory, capability system, error taxonomy |
 | [State & Lifecycle](architecture/state.md) | Lockfiles, state files, lifecycle state machine, rate limiting |
 | [Autonomy](architecture/autonomy.md) | Autonomous cycle architecture, pulse/review/escalation design |
 | [Design Decisions](architecture/design-decisions.md) | Why things are the way they are |
@@ -45,6 +47,7 @@ For people extending or contributing to Adjutant.
 | [Plugin Guide](development/plugin-guide.md) | How to add a new capability script |
 | [Setup Wizard Internals](development/setup-wizard.md) | `adjutant setup` implementation: steps, dry-run, prompt helpers |
 | [Testing](development/testing.md) | Running the test suite, tier overview, isolation model |
+| [Backend Guide](development/backend-guide.md) | Working with the backend abstraction, adding call sites, testing |
 
 ---
 
@@ -58,3 +61,4 @@ Background context and historical records.
 | [Testing Appendix](reference/testing-appendix.md) | Historical bats test listings (pre-Python rewrite; superseded by pytest) |
 | [Deployment Readiness Assessment](reference/deployment-readiness.md) | Pre-release checklist and findings (2026-03-01) |
 | [Framework Plan](reference/framework-plan.md) | Original 6-phase development plan |
+| [Backend Migration Log](reference/backend-migration-log.md) | Claude Code CLI backend implementation record |

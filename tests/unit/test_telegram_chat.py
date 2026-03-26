@@ -27,8 +27,11 @@ from adjutant.messaging.telegram.chat import (
 
 def _llm_result(text="OK", session_id=None, error_type=None, returncode=0, timed_out=False):
     return LLMResult(
-        text=text, session_id=session_id, error_type=error_type,
-        returncode=returncode, timed_out=timed_out,
+        text=text,
+        session_id=session_id,
+        error_type=error_type,
+        returncode=returncode,
+        timed_out=timed_out,
     )
 
 
@@ -47,8 +50,8 @@ class TestGetModel:
     def test_reads_model_from_file(self, tmp_path: Path) -> None:
         state = tmp_path / "state"
         state.mkdir()
-        (state / "telegram_model.txt").write_text("anthropic/claude-opus-4-5\n")
-        assert get_model(tmp_path) == "anthropic/claude-opus-4-5"
+        (state / "telegram_model.txt").write_text("anthropic/claude-opus-4-6\n")
+        assert get_model(tmp_path) == "anthropic/claude-opus-4-6"
 
     def test_falls_back_to_default_when_missing(self, tmp_path: Path) -> None:
         assert get_model(tmp_path) == "anthropic/claude-haiku-4-5"

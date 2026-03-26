@@ -54,7 +54,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | Command | What it does |
 |---------|-------------|
 | `/model` | Shows the currently active model |
-| `/model <name>` | Switches to a different model for the current session. Example: `/model anthropic/claude-opus-4-5`. The model reverts to default on session expiry. |
+| `/model <name>` | Switches to a different model for the current session. Example: `/model anthropic/claude-opus-4-6`. The model reverts to default on session expiry. |
 
 ### Help
 

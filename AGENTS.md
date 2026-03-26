@@ -31,8 +31,8 @@ adjutant/
 ├── src/adjutant/
 │   ├── cli.py                      # Click CLI
 │   ├── __main__.py
-│   ├── core/                       # config, env, lockfiles, logging, model, opencode, paths, platform, process
-│   ├── lib/                        # http, ndjson
+│   ├── core/                       # backend, backend_opencode, backend_claude_cli, config, env, lockfiles, logging, model, opencode, paths, platform, process
+│   ├── lib/                        # http, ndjson, claude_json
 │   ├── lifecycle/                  # control, cron, update
 │   ├── observability/              # status, usage_estimate, journal_rotate
 │   ├── capabilities/
@@ -92,7 +92,40 @@ Gitignored: `identity/`, `state/`, `journal/`, `insights/`, `photos/`, `screensh
 6. Add `tests/unit/test_<name>.py`
 7. Add to `docs/guides/commands.md`
 
+8. Use `backend.run()` for LLM calls — never import backend implementations directly
+
 Full guide: `docs/development/plugin-guide.md`
+
+---
+
+## LLM Backend
+
+Adjutant supports two LLM backends: **OpenCode** (`opencode`) and **Claude Code CLI** (`claude-cli`). The active backend is set in `adjutant.yaml` under `llm.backend`.
+
+**All LLM calls go through the backend abstraction.** Import `get_backend` from `core/backend.py`:
+
+```python
+from adjutant.core.backend import get_backend
+
+backend = get_backend()
+result = await backend.run(prompt, agent="adjutant", model=model)
+```
+
+Never import `backend_opencode` or `backend_claude_cli` directly. Never call `opencode_run()` from call sites.
+
+**Check capabilities before optional features:**
+
+```python
+if backend.capabilities.vision:
+    result = await backend.run(prompt, files=[image_path])
+
+if backend.capabilities.model_listing:
+    models = await backend.list_models()
+```
+
+**Error handling:** Check `result.error_type` against the shared taxonomy (`model_not_found`, `auth_failure`, `rate_limited`, `context_overflow`, `permission_denied`, `vision_unsupported`, `timeout`, `parse_error`, `error`).
+
+Full guide: `docs/development/backend-guide.md`
 
 ---
 
@@ -186,6 +219,10 @@ All tests must pass before release. No CI. Full guide: `docs/development/testing
 
 ## Gotchas
 
+- **Backend abstraction**: Never call `opencode_run()` from call sites — always use `get_backend().run()`. The old function still exists in `core/opencode.py` but is only used internally by `backend_opencode.py`.
+- **Claude CLI `--dangerously-skip-permissions`**: Required for non-interactive subprocess mode. Bypasses `.claude/settings.json` deny rules — hooks in `.claude/hooks/` are the primary defense.
+- **Backend capabilities**: Always check `backend.capabilities.*` before calling optional methods like `list_models()`, `reap()`, or passing `files=` for vision. Not all backends support all features.
+- **Model ID formats differ**: OpenCode uses `anthropic/claude-sonnet-4-6`, Claude CLI uses `sonnet`. The backend's `resolve_alias()` handles this transparently, but raw model IDs in state files may need translation during backend switches.
 - `kb_list()` returns `KBEntry` objects, not dicts — use `.name`, `.description`, `.access`
 - `kb_info()` / `kb_remove()` raise `ValueError`, not `KBNotFoundError`
 - `kb_quick_create()` takes `kb_path` as `str`, not `Path`

@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import psutil
 import pytest
 
+pytestmark = pytest.mark.backend_opencode
+
 from adjutant.core.opencode import (
     OpenCodeNotFoundError,
     OpenCodeResult,
@@ -178,7 +180,8 @@ class TestOpenCodeHealthCheck:
     async def test_fails_with_no_pid_file(self, adj_dir: Path):
         """No web server PID file → health check fails."""
         with patch("adjutant.lifecycle.control.start_opencode_web", return_value="started"):
-            result = await opencode_health_check(adj_dir)
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await opencode_health_check(adj_dir)
         assert result is False
 
     @pytest.mark.asyncio
@@ -186,7 +189,8 @@ class TestOpenCodeHealthCheck:
         """When HTTP ping and API probe both pass, returns True."""
         # No PID file → health check should return False
         with patch("adjutant.lifecycle.control.start_opencode_web", return_value="started"):
-            result = await opencode_health_check(adj_dir)
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await opencode_health_check(adj_dir)
         assert result is False
 
     @pytest.mark.asyncio
@@ -202,7 +206,8 @@ class TestOpenCodeHealthCheck:
             "adjutant.lifecycle.control.start_opencode_web",
             side_effect=fake_start,
         ):
-            result = await opencode_health_check(adj_dir)
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await opencode_health_check(adj_dir)
 
         # The restart was attempted (no PID file → _http_ping returns False → restart)
         assert len(started) == 1
@@ -230,17 +235,18 @@ class TestOpenCodeHealthCheck:
             "adjutant.lifecycle.control.start_opencode_web",
             return_value="started",
         ):
-            with patch("httpx.AsyncClient") as mock_client_cls:
-                mock_client = AsyncMock()
-                mock_client.get = patched_get
-                mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-                mock_client.__aexit__ = AsyncMock(return_value=False)
-                mock_client_cls.return_value = mock_client
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                with patch("httpx.AsyncClient") as mock_client_cls:
+                    mock_client = AsyncMock()
+                    mock_client.get = patched_get
+                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                    mock_client.__aexit__ = AsyncMock(return_value=False)
+                    mock_client_cls.return_value = mock_client
 
-                # Write PID file so ping can proceed on retry
-                (adj_dir / "state" / "opencode_web.pid").write_text("12345")
-                with patch("adjutant.core.opencode.read_pid_file", return_value=12345):
-                    result = await opencode_health_check(adj_dir)
+                    # Write PID file so ping can proceed on retry
+                    (adj_dir / "state" / "opencode_web.pid").write_text("12345")
+                    with patch("adjutant.core.opencode.read_pid_file", return_value=12345):
+                        result = await opencode_health_check(adj_dir)
 
         assert result is True
 
@@ -251,6 +257,7 @@ class TestOpenCodeHealthCheck:
             "adjutant.lifecycle.control.start_opencode_web",
             side_effect=OSError("disk full"),
         ):
-            result = await opencode_health_check(adj_dir)
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await opencode_health_check(adj_dir)
         # Should not raise — error is caught
         assert result is False

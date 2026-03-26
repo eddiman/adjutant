@@ -231,7 +231,7 @@ llm:
   models:
     cheap: "anthropic/claude-haiku-4-5"
     medium: "anthropic/claude-sonnet-4-6"
-    expensive: "anthropic/claude-opus-4-5"
+    expensive: "anthropic/claude-opus-4-6"
   caps:
     session_tokens: 44000
     session_window_hours: 5

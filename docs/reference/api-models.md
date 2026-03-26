@@ -74,7 +74,7 @@ Via OpenCode 1.2.24:
 |------|-------|----------|----------|-----------|-----------|
 | `cheap` | Kimi K2.5 | `opencode/kimi-k2.5` | $0.60 | $3.00 | 40% cheaper than Haiku; strong reasoning; highest-volume tier = biggest savings |
 | `medium` | Gemini 3 Pro | `opencode/gemini-3-pro` | $2.00 | $12.00 | 33% cheaper input than Sonnet; competitive analysis quality |
-| `expensive` | Claude Opus 4.5 | `anthropic/claude-opus-4-5` | $5.00 | $25.00 | Low volume; reliability anchor for /confirm |
+| `expensive` | Claude Opus 4.6 | `anthropic/claude-opus-4-6` | $5.00 | $25.00 | Low volume; reliability anchor for /confirm |
 
 ### Other model assignments
 

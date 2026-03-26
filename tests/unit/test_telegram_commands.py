@@ -205,19 +205,19 @@ class TestCmdModel:
         # Mock opencode models to include the target model
         fake_proc = AsyncMock()
         fake_proc.communicate = AsyncMock(
-            return_value=(b"anthropic/claude-opus-4-5\nanthropicmodel2\n", b"")
+            return_value=(b"anthropic/claude-opus-4-6\nanthropicmodel2\n", b"")
         )
         fake_proc.returncode = 0
 
         with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
             with patch("asyncio.create_subprocess_exec", return_value=fake_proc):
                 await cmd_model(
-                    "anthropic/claude-opus-4-5", 1, tmp_path, bot_token=BOT, chat_id=CHAT
+                    "anthropic/claude-opus-4-6", 1, tmp_path, bot_token=BOT, chat_id=CHAT
                 )
 
         model_file = state / "telegram_model.txt"
         assert model_file.is_file()
-        assert model_file.read_text().strip() == "anthropic/claude-opus-4-5"
+        assert model_file.read_text().strip() == "anthropic/claude-opus-4-6"
         assert any("switched" in m.lower() or "claude-opus" in m for m in sent)
 
     @pytest.mark.asyncio
@@ -254,9 +254,7 @@ class TestCmdScreenshot:
 
         with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
             with patch("adjutant.messaging.telegram.send.msg_react", mock_react):
-                with patch(
-                    "adjutant.messaging.telegram.send.msg_typing_start", mock_typing_start
-                ):
+                with patch("adjutant.messaging.telegram.send.msg_typing_start", mock_typing_start):
                     with patch(
                         "adjutant.messaging.telegram.send.msg_typing_stop", mock_typing_stop
                     ):

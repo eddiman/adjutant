@@ -32,7 +32,7 @@ llm:
     # Multi-provider suite — see docs/reference/api-models.md for pricing & rationale
     cheap: "opencode/kimi-k2.5"              # retrieval, formatting, notifications, triage ($0.60/$3.00 per 1M)
     medium: "opencode/gemini-3-pro"          # reasoning, analysis, signal generation ($2.00/$12.00 per 1M)
-    expensive: "anthropic/claude-opus-4-5"   # /reflect + /confirm only ($5.00/$25.00 per 1M)
+    expensive: "anthropic/claude-opus-4-6"   # /reflect + /confirm only ($5.00/$25.00 per 1M)
   caps:
     session_tokens: 44000              # per-session token budget
     session_window_hours: 5            # rolling window for session tracking

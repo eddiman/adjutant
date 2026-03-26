@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 from adjutant.lib.ndjson import NDJSONResult, check_model_not_found, parse_ndjson
+
+pytestmark = pytest.mark.backend_opencode
 
 
 class TestParseNdjson:

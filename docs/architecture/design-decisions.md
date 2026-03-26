@@ -90,17 +90,31 @@ This dual-path design means KBs with a Python CLI (like `portfolio-kb`) need zer
 
 ---
 
-## Timeout on all opencode_run calls
+## Dual LLM backend support
 
-`opencode` can hang indefinitely if the underlying process is in a degraded state. Without a timeout, a single hung call silently kills a briefing or leaves a chat session showing "typing..." forever -- with no log evidence.
+Adjutant supports two LLM backends: OpenCode (API key) and Claude Code CLI (subscription). The reasons:
 
-The fix: `core/opencode.py` wraps subprocess calls with a configurable timeout. Callers set it explicitly based on expected response time. Exit code 124 (standard `timeout` exit code) is checked and logged with a clear message.
+- **Access coverage** — Anthropic Pro/Team/Enterprise subscribers are blocked from API key access via OpenCode. Claude Code CLI is the only path for these users.
+- **Cost model flexibility** — API key billing is pay-per-token. Subscription billing is flat-rate with usage limits. Different users prefer different models.
+- **Feature parity is not a goal** — each backend has different capabilities (OpenCode has vision/streaming, Claude CLI has cost tracking). The backend protocol declares capabilities explicitly and call sites check before using optional features.
+
+**Rejected alternative:** Claude SDK (`anthropic` Python package). This would bypass the CLI entirely but would mean maintaining prompt routing, tool definitions, and streaming logic inside Adjutant rather than delegating to a purpose-built CLI. The maintenance cost is not justified for a single-user tool.
+
+**Implementation:** A `typing.Protocol` (`LLMBackend`) with a factory function (`get_backend()`). Backends are stateless — instantiated per call, with session state on the filesystem. Both backends read agent prompts from the same `.opencode/agents/` directory.
+
+---
+
+## Timeout on all LLM backend calls
+
+LLM backends can hang indefinitely if the underlying process is in a degraded state. Without a timeout, a single hung call silently kills a briefing or leaves a chat session showing "typing..." forever -- with no log evidence.
+
+The fix: both backends accept a `timeout` parameter. `run()` uses `asyncio.wait_for()` with the specified deadline. `run_sync()` uses `subprocess.run(timeout=...)`. Timed-out results get `error_type="timeout"` in the returned `LLMResult`.
 
 ---
 
 ## KB sub-agents are sandboxed
 
-Every KB has an `opencode.json` that sets `external_directory: deny`. This means a KB sub-agent cannot read or write files outside its own workspace. A compromised or misbehaving KB cannot:
+Every KB has workspace-level sandboxing (`opencode.json` for OpenCode, `.claude/settings.json` for Claude CLI) that denies external directory access. This means a KB sub-agent cannot read or write files outside its own workspace. A compromised or misbehaving KB cannot:
 
 - Read your identity files or other KBs
 - Write to `state/` or `journal/`

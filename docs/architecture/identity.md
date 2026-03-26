@@ -24,24 +24,29 @@ Loading context has a cost — both in tokens and latency. Splitting identity in
 
 ## Agent Definition — `.opencode/agents/adjutant.md`
 
-The agent definition loaded by `opencode run --agent adjutant`. This file lives at `.opencode/agents/adjutant.md`. It specifies:
-- Which identity files to load
-- System prompt instructions for the AI
-- Behavioural constraints
+The agent definition file lives at `.opencode/agents/adjutant.md`. Both backends read from this same location:
+- **OpenCode:** loaded via `opencode run --agent adjutant`
+- **Claude CLI:** YAML frontmatter is stripped, markdown body passed via `--system-prompt-file`
 
-This file is tracked in the repo (it contains no personal data). The identity files it references are gitignored and personal.
+This file specifies which identity files to load, system prompt instructions, and behavioural constraints. It is tracked in the repo (it contains no personal data). The identity files it references are gitignored and personal.
 
 ---
 
-## OpenCode Integration
+## LLM Backend Integration
 
-Natural language processing and long-running agent tasks use OpenCode. All AI calls go through `opencode_run()` (defined in `core/opencode.py`) rather than calling `opencode` directly.
+Natural language processing and long-running agent tasks use the LLM backend. All AI calls go through `get_backend().run()` (defined in `core/backend.py`) rather than calling `opencode` or `claude` directly.
+
+Two backends are supported:
+- **OpenCode** (`opencode`): Uses the OpenCode CLI with an Anthropic API key. Supports vision, streaming, model listing, and process reaping.
+- **Claude Code CLI** (`claude-cli`): Uses the Claude Code CLI with a Claude subscription. Supports cost tracking and remote sessions.
+
+The backend is configured in `adjutant.yaml` under `llm.backend`. See [Backend Architecture](backends.md) for the full protocol and capability system.
 
 ### Why wrap `opencode`?
 
 Every `opencode run` invocation spawns a `bash-language-server` child process (~400MB RSS). When `opencode` exits, this child survives as an orphan (reparented to PID 1). Without intervention, these accumulate over time.
 
-`core/opencode.py` provides process management to prevent this — it takes a snapshot of `bash-language-server` PIDs before calling `opencode run`, then kills any new ones that appeared after it exits.
+`core/opencode.py` provides process management to prevent this — it takes a snapshot of `bash-language-server` PIDs before calling `opencode run`, then kills any new ones that appeared after it exits. This is handled internally by `backend_opencode.py`; call sites never interact with `opencode.py` directly.
 
 ---
 
@@ -61,11 +66,11 @@ The active model for Telegram chat is stored in `state/telegram_model.txt` and c
 
 ## Security Model
 
-Adjutant is sandboxed to its install directory (`$ADJ_DIR`). External directory access is denied at the OpenCode permission level — configured in `opencode.json`, not in the agent prompt. This prevents:
+Adjutant is sandboxed to its install directory (`$ADJ_DIR`). External directory access is denied at the workspace permission level — configured in `opencode.json` (OpenCode) or `.claude/settings.json` + hooks (Claude CLI), not in the agent prompt. This prevents:
 - Accidental writes to user projects outside the adjutant directory
 - Prompt injection risk from external files being read directly by the agent
 
-All external knowledge enters through KB sub-agents, which are sandboxed to their own directories and run as separate `opencode run --agent kb` invocations.
+All external knowledge enters through KB sub-agents, which are sandboxed to their own directories and run as separate backend invocations scoped to the KB's workspace.
 
 ---
 

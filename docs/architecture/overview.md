@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Adjutant is a persistent autonomous agent framework that runs on your local machine. It listens for messages from a messaging backend, routes them through a backend-agnostic dispatcher, and responds via OpenCode-powered AI or built-in commands.
+Adjutant is a persistent autonomous agent framework that runs on your local machine. It listens for messages from a messaging backend, routes them through a backend-agnostic dispatcher, and responds via LLM-powered AI (OpenCode or Claude Code CLI) or built-in commands.
 
 ---
 
@@ -22,8 +22,8 @@ Adjutant is a persistent autonomous agent framework that runs on your local mach
 │         └──► natural language ──► chat.py            │
 │                                       │              │
 │                                       ▼              │
-│                               opencode_run            │
-│                               (OpenCode agent)       │
+│                               backend.run()           │
+│                          (OpenCode or Claude CLI)     │
 │         │                                            │
 │         ▼                                            │
 │   Adaptor send functions ──► Messaging Backend       │
@@ -39,12 +39,13 @@ Everything runs on your machine. There is no server, no cloud component, and no 
 | Layer | Location | Responsibility |
 |-------|----------|---------------|
 | CLI | `src/adjutant/cli.py` | Click-based CLI — all `adjutant` subcommands |
-| Common utilities | `src/adjutant/core/` | Shared library: paths, env, lockfiles, logging, model, platform |
+| Common utilities | `src/adjutant/core/` | Shared library: backend abstraction, paths, env, lockfiles, logging, model, platform |
 | Messaging | `src/adjutant/messaging/` | Adaptor contract, dispatcher, backend implementations |
 | Lifecycle | `src/adjutant/lifecycle/` | Start, stop, pause, kill, restart, update |
 | Capabilities | `src/adjutant/capabilities/` | Screenshot, vision, knowledge base, schedule, search |
 | Identity | `identity/` | Three-layer agent persona loaded at chat time |
-| OpenCode | `.opencode/` | Agent definition, workspace config, permissions |
+| LLM Backend | `core/backend*.py` | Backend abstraction: OpenCode or Claude CLI |
+| Agent config | `.opencode/`, `.claude/` | Agent definitions, workspace config, permissions, hooks |
 
 ---
 
@@ -81,7 +82,10 @@ Shared library imported by every other module.
 | `env.py` | Extracts credential values from `.env` using line-by-line parsing — never `exec`s the file. Provides `get_credential(key)`, `has_credential(key)`. |
 | `lockfiles.py` | Manages the `KILLED` and `PAUSED` state files. Provides check functions and state mutators. |
 | `logging.py` | Appends structured log lines to `state/adjutant.log`. Provides `adj_log(component, message)`. |
-| `opencode.py` | Wraps `opencode` CLI invocation with timeout support, NDJSON output parsing, and an `OpenCodeResult` return type. |
+| `backend.py` | LLM backend protocol, `LLMResult`, `BackendCapabilities`, `get_backend()` factory. |
+| `backend_opencode.py` | OpenCode CLI backend implementation. |
+| `backend_claude_cli.py` | Claude Code CLI backend implementation. |
+| `opencode.py` | Low-level OpenCode CLI process management (used by `backend_opencode.py`). |
 | `model.py` | Resolves model tier names (`cheap`/`medium`/`expensive`) to actual model slugs from `adjutant.yaml`. |
 | `config.py` | Loads and validates `adjutant.yaml`. |
 | `platform.py` | OS and architecture detection. |
@@ -98,7 +102,7 @@ Each capability is an isolated subdirectory. Capability functions accept argumen
 | `kb/` | `kb/query.py`, `kb/run.py`, `kb/manage.py` | KB query, KB-local operations, KB CRUD |
 | `schedule/` | `schedule/install.py`, `schedule/manage.py` | Scheduled job management |
 | `screenshot/` | `screenshot/screenshot.py` | Playwright screenshot + vision caption + Telegram send |
-| `vision/` | `vision/vision.py` | LLM image analysis via OpenCode |
+| `vision/` | `vision/vision.py` | LLM image analysis (OpenCode backend only) |
 | `search/` | `search/search.py` | Brave Search API integration |
 | `memory/` | `memory/memory.py`, `memory/classify.py` | Persistent long-term memory with auto-classification |
 
@@ -107,7 +111,8 @@ Each capability is an isolated subdirectory. Capability functions accept argumen
 ## Further Reading
 
 - [Messaging](messaging.md) — adaptor contract, dispatcher, Telegram internals
-- [Identity & Agent](identity.md) — three-layer identity model, OpenCode integration
+- [Identity & Agent](identity.md) — three-layer identity model, LLM backend integration
+- [Backends](backends.md) — backend protocol, factory, capability system, error taxonomy
 - [State & Lifecycle](state.md) — lockfiles, state files, lifecycle state machine
 - [Autonomy](autonomy.md) — pulse/review cycle, notification budget, action ledger
 - [Design Decisions](design-decisions.md) — why things are the way they are

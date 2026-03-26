@@ -1,0 +1,202 @@
+# LLM Backends
+
+Adjutant supports two LLM backends. You choose one in `adjutant.yaml` and all AI interactions route through it.
+
+| Backend | Binary | Auth | Billing |
+|---------|--------|------|---------|
+| **OpenCode** (`opencode`) | `opencode` CLI | Anthropic API key | Pay-per-token |
+| **Claude Code CLI** (`claude-cli`) | `claude` CLI | Claude subscription (Pro/Team/Enterprise) | Included in subscription |
+
+---
+
+## Choosing a backend
+
+Set `llm.backend` in `adjutant.yaml`:
+
+```yaml
+llm:
+  backend: "opencode"      # or "claude-cli"
+```
+
+Or use the setup wizard, which will ask during initial configuration:
+
+```bash
+adjutant setup
+```
+
+### When to use OpenCode
+
+- You have an Anthropic API key
+- You need vision/image analysis (Claude CLI does not support native image input)
+- You want dynamic model listing (`/models` command)
+- You want streaming output
+
+### When to use Claude Code CLI
+
+- You have a Claude Pro, Team, or Enterprise subscription
+- You are rate-limited or blocked from the Anthropic API (e.g. Pro/Team accounts)
+- You want per-request cost tracking (Claude CLI reports `cost_usd` in JSON output)
+
+---
+
+## Switching backends
+
+1. Edit `adjutant.yaml`:
+   ```yaml
+   llm:
+     backend: "claude-cli"   # was "opencode"
+   ```
+2. Restart Adjutant: `adjutant restart`
+
+On restart, Adjutant detects the backend change and automatically:
+- Stops the old backend's service (OpenCode web server or Claude remote session)
+- Translates the active model ID to the new backend's format
+- Clears the Telegram session (new backend, new conversation)
+- Records the switch in `state/backend.txt`
+
+No data is lost. You can switch back at any time.
+
+---
+
+## Capability differences
+
+| Capability | OpenCode | Claude CLI |
+|-----------|----------|------------|
+| Vision (image analysis) | Yes | No |
+| Dynamic model listing | Yes | No (static list) |
+| Process reaping | Yes | No (not needed) |
+| Web server (remote access) | Yes (`opencode web`) | Yes (`claude remote-control`) |
+| Streaming output | Yes | No |
+| Cost tracking per request | No | Yes |
+| Session resume | Yes (`--session`) | Yes (`--resume`) |
+
+If you use a feature that the current backend doesn't support, Adjutant tells you clearly rather than failing silently. For example, sending an image with Claude CLI returns:
+
+> Vision (image analysis) is not supported on the Claude CLI backend. Switch to the opencode backend for image analysis.
+
+---
+
+## Claude CLI setup
+
+### 1. Install the Claude Code CLI
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### 2. Authenticate
+
+```bash
+claude login
+```
+
+### 3. Configure Adjutant
+
+```yaml
+# adjutant.yaml
+llm:
+  backend: "claude-cli"
+```
+
+### 4. Verify
+
+```bash
+adjutant doctor
+```
+
+The doctor command checks that the `claude` binary is on PATH, hooks are executable, and the backend is healthy.
+
+---
+
+## Permission modes (Claude CLI only)
+
+Claude Code requires explicit permission handling for non-interactive (subprocess) use. Adjutant supports two modes:
+
+### `skip` mode (default)
+
+```yaml
+llm:
+  backend: "claude-cli"
+  permission_mode: "skip"
+```
+
+Uses `--dangerously-skip-permissions`. This bypasses Claude Code's deny rules in `.claude/settings.json`, but **hooks still fire**. The hooks in `.claude/hooks/` are the primary technical defense for `.env` protection.
+
+### `allowlist` mode
+
+```yaml
+llm:
+  backend: "claude-cli"
+  permission_mode: "allowlist"
+  allowed_tools: "Read,Glob,Grep,Edit,Write,Bash(*)"
+```
+
+Uses `--allowedTools` with an explicit whitelist. More restrictive but requires listing every tool the agent needs.
+
+---
+
+## Security: `.env` protection
+
+Both backends protect `.env` files through layered defenses:
+
+| Layer | OpenCode | Claude CLI |
+|-------|----------|------------|
+| **Workspace permissions** | `opencode.json` deny rules | `.claude/settings.json` (bypassed by `--dangerously-skip-permissions`) |
+| **Hooks** | N/A | `.claude/hooks/block-env-access.sh` + `block-env-read.sh` (always active) |
+| **Agent instructions** | "Never read .env" in agent prompt | Same |
+
+On Claude CLI, the hooks are the primary defense. They fire even when `--dangerously-skip-permissions` is active, blocking:
+- `cat .env`, `head .env`, `tail .env`, and similar read commands
+- `source .env` and `. .env`
+- `printenv`, `env`, `export -p`
+- `grep`, `awk`, `sed` on `.env` files
+- Read tool calls targeting `.env` paths
+
+---
+
+## Known behavioral differences
+
+- **Response style**: Claude CLI responses may feel different from OpenCode responses because OpenCode uses streaming (model sees partial output) while Claude CLI uses single-shot mode.
+- **Vision**: Only available on OpenCode. Claude CLI returns `vision_unsupported` error.
+- **Model names**: OpenCode uses full IDs (`anthropic/claude-sonnet-4-6`), Claude CLI uses short names (`sonnet`). Adjutant translates automatically.
+- **Cost tracking**: Only Claude CLI reports `cost_usd`. OpenCode responses have no cost field.
+- **Process cleanup**: OpenCode spawns `bash-language-server` child processes that need reaping. Claude CLI does not have this issue.
+
+---
+
+## Troubleshooting
+
+### `claude not found on PATH`
+
+Install Claude Code CLI: `npm install -g @anthropic-ai/claude-code`
+
+Or set the `CLAUDE_CODE_BIN` environment variable to the full path:
+
+```bash
+export CLAUDE_CODE_BIN=/usr/local/bin/claude
+```
+
+### `Not authenticated` / `login required`
+
+Run `claude login` and follow the prompts.
+
+### Hooks not working
+
+Check that hook scripts are executable:
+
+```bash
+chmod +x .claude/hooks/block-env-access.sh
+chmod +x .claude/hooks/block-env-read.sh
+```
+
+`adjutant doctor` flags non-executable hooks as errors.
+
+### Backend switch didn't take effect
+
+Restart Adjutant after changing `llm.backend`:
+
+```bash
+adjutant restart
+```
+
+Check `state/backend.txt` to confirm the active backend.

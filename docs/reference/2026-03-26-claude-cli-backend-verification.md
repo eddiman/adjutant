@@ -1,15 +1,15 @@
 # Claude CLI Backend — Deployment Readiness Verification
 
 **Date**: 2026-03-26
-**Status**: Conditionally Ready
+**Status**: Ready (all gaps resolved 2026-03-26)
 **Scope**: Verify implementation of `docs/reference/2026-03-20-claude-code-backend-plan.md` against the codebase
 **Method**: Systematic phase-by-phase comparison of plan against code, followed by full test suite run
 
 ---
 
-## Verdict: Conditionally Ready
+## Verdict: Ready
 
-The claude-cli backend implementation is substantially complete and well-executed. All core architecture, call site migrations, security layers, config/setup, and documentation are in place. The test suite passes cleanly (1360 passed, 47 skipped). There are **5 gaps** that should be addressed before considering this fully deployment-ready.
+The claude-cli backend implementation is complete. All core architecture, call site migrations, security layers, config/setup, and documentation are in place. The initial verification found 5 gaps — all have been resolved. The test suite passes cleanly (1365 passed, 73 skipped, 0 failures).
 
 ---
 
@@ -90,7 +90,7 @@ KB files are on an external volume (`/Volumes/Mandalor/`) which is not accessibl
 | `templates/kb/claude/settings-rw.json` (read-write) | EXISTS, correct permissions |
 | `templates/kb/claude/hooks/block-env-read.sh` | EXISTS, executable |
 
-### Phase 7: Config, Setup & Model Resolution — MATCH with 1 GAP
+### Phase 7: Config, Setup & Model Resolution — MATCH
 
 | Item | Status | Evidence |
 |------|--------|----------|
@@ -101,7 +101,7 @@ KB files are on an external volume (`/Volumes/Mandalor/`) which is not accessibl
 | Setup wizard backend step | **MATCH** | `setup/steps/backend.py` exists with backend + permission mode selection |
 | `_detect_backend_change()` | **MATCH** | `control.py:422-443` |
 | `_handle_backend_switch()` (5 of 9 side effects in handler; rest delegated to startup) | **MATCH** | `control.py:446-485` |
-| `_warn_nested_opencode_dependencies()` | **GAP** | Function does not exist anywhere in the codebase |
+| `_warn_nested_opencode_dependencies()` | **MATCH** | Implemented in `control.py:493-521` |
 
 ### Phase 8: Security Layer — MATCH
 
@@ -112,7 +112,7 @@ KB files are on an external volume (`/Volumes/Mandalor/`) which is not accessibl
 | `.claude/hooks/block-env-read.sh` | **MATCH** — blocks Read tool on .env and credential files |
 | Hook scripts executable (755) | **MATCH** |
 
-### Phase 8: Test Infrastructure — MATCH with 2 GAPS
+### Phase 8: Test Infrastructure — MATCH
 
 | Item | Status |
 |------|--------|
@@ -123,10 +123,10 @@ KB files are on an external volume (`/Volumes/Mandalor/`) which is not accessibl
 | `test_backend_switch.py` (neutral) | **MATCH** |
 | `test_claude_json.py` (backend_claude_cli) | **MATCH** |
 | `test_security_hooks.py` (backend_claude_cli) | **MATCH** |
-| `test_backend_claude_cli.py` | **GAP** — file does not exist |
-| `test_opencode.py` / `test_ndjson.py` backend_opencode marker | **GAP** — marker not applied |
+| `test_backend_claude_cli.py` (backend_claude_cli) | **MATCH** — 16 tests covering binary resolution, prompts, permissions, vision, run, detached, sync, reap, health, models |
+| `test_opencode.py` / `test_ndjson.py` backend_opencode marker | **MATCH** — `pytestmark` applied |
 
-### Phase 8: Documentation — MATCH with 1 PARTIAL
+### Phase 8: Documentation — MATCH
 
 | Document | Status |
 |----------|--------|
@@ -137,7 +137,7 @@ KB files are on an external volume (`/Volumes/Mandalor/`) which is not accessibl
 | `docs/reference/backend-migration-log.md` (new) | **EXISTS** — 52 lines |
 | `AGENTS.md` (updated) | **MATCH** — dual-backend, get_backend(), capability checks, gotchas |
 | `docs/guides/configuration.md` (updated) | **MATCH** — llm.backend, permission_mode, workspace permissions |
-| `docs/guides/knowledge-bases.md` (updated) | **PARTIAL** — mentions both backends inline, no dedicated section |
+| `docs/guides/knowledge-bases.md` (updated) | **MATCH** — dedicated "Backend Compatibility" section added |
 | `docs/architecture/overview.md` (updated) | **MATCH** — "LLM Backend" in layer table |
 | `docs/architecture/identity.md` (updated) | **MATCH** — "LLM Backend Integration" section |
 | `docs/architecture/design-decisions.md` (updated) | **MATCH** — dual-backend ADR |
@@ -147,30 +147,29 @@ KB files are on an external volume (`/Volumes/Mandalor/`) which is not accessibl
 ### Test Suite — PASS
 
 ```
-1360 passed, 47 skipped, 1 warning in 8.99s
+1365 passed, 73 skipped, 1 warning in 8.13s
 ```
 
 ---
 
-## Gaps Found
+## Gaps Found (Original)
 
-| # | Severity | Gap | Location | Plan Reference |
-|---|----------|-----|----------|----------------|
-| **G1** | P1 | `_warn_nested_opencode_dependencies()` not implemented | `lifecycle/control.py` | Section 16.3, step 9 |
-| **G2** | P1 | `test_backend_claude_cli.py` not created | `tests/unit/` | Section 12.4 |
-| **G3** | P1 | `test_opencode.py` and `test_ndjson.py` missing `backend_opencode` marker | `tests/unit/` | Section 12.4 |
-| **G4** | P1 | Stale `claude-opus-4-5` in `setup/wizard.py:234` | `src/adjutant/setup/wizard.py` | Step 0 remediation |
-| **G5** | P2 | `docs/guides/knowledge-bases.md` missing dedicated "Backend Compatibility" section | `docs/guides/` | Section 20.2 |
+| # | Severity | Gap | Location | Plan Reference | Resolution |
+|---|----------|-----|----------|----------------|------------|
+| **G1** | P1 | `_warn_nested_opencode_dependencies()` not implemented | `lifecycle/control.py` | Section 16.3, step 9 | **FIXED** — implemented + tests added |
+| **G2** | P1 | `test_backend_claude_cli.py` not created | `tests/unit/` | Section 12.4 | **FIXED** — created with 16 tests |
+| **G3** | P1 | `test_opencode.py` and `test_ndjson.py` missing `backend_opencode` marker | `tests/unit/` | Section 12.4 | **FIXED** — `pytestmark` added |
+| **G4** | P1 | Stale `claude-opus-4-5` in `setup/wizard.py:234` | `src/adjutant/setup/wizard.py` | Step 0 remediation | **FIXED** — updated to `claude-opus-4-6` |
+| **G5** | P2 | `docs/guides/knowledge-bases.md` missing dedicated "Backend Compatibility" section | `docs/guides/` | Section 20.2 | **FIXED** — section added |
 
-### G4 Extended: Stale `claude-opus-4-5` also present in
+### G4 Extended: Stale `claude-opus-4-5` — all instances fixed
 
-- `adjutant.yaml.example:35`
-- `docs/guides/commands.md:57`
-- `docs/reference/api-models.md:77`
-- `tests/unit/test_telegram_chat.py:50-51`
-- `tests/unit/test_telegram_commands.py:208,215,220`
-
-The critical instance is `setup/wizard.py` since it generates `adjutant.yaml` for new installations. The others may be intentional (test fixtures, historical docs) but should be audited.
+- `setup/wizard.py:234` — **FIXED**
+- `adjutant.yaml.example:35` — **FIXED**
+- `docs/guides/commands.md:57` — **FIXED**
+- `docs/reference/api-models.md:77` — **FIXED**
+- `tests/unit/test_telegram_chat.py:50-51` — **FIXED**
+- `tests/unit/test_telegram_commands.py:208,215,220` — **FIXED**
 
 ---
 
@@ -188,14 +187,13 @@ The critical instance is `setup/wizard.py` since it generates `adjutant.yaml` fo
 
 ## Recommended Actions
 
-### Before deployment
+All gaps have been resolved. No blocking actions remain.
 
-1. Fix `setup/wizard.py:234` — change `claude-opus-4-5` to `claude-opus-4-6`
-2. Add `pytestmark = pytest.mark.backend_opencode` to `test_opencode.py` and `test_ndjson.py`
-3. Implement `_warn_nested_opencode_dependencies()` in `control.py` or document its intentional omission
+### Completed fixes (2026-03-26)
 
-### Short-term
-
-4. Create `test_backend_claude_cli.py` with dedicated ClaudeCLIBackend unit tests
-5. Add "Backend Compatibility" section to `docs/guides/knowledge-bases.md`
-6. Audit remaining `claude-opus-4-5` references across docs and tests
+1. Fixed `setup/wizard.py:234` — `claude-opus-4-5` → `claude-opus-4-6`
+2. Fixed all stale `claude-opus-4-5` references across `adjutant.yaml.example`, docs, and tests
+3. Added `pytestmark = pytest.mark.backend_opencode` to `test_opencode.py` and `test_ndjson.py`
+4. Implemented `_warn_nested_opencode_dependencies()` in `control.py` with tests
+5. Created `test_backend_claude_cli.py` with 16 dedicated ClaudeCLIBackend tests
+6. Added "Backend Compatibility" section to `docs/guides/knowledge-bases.md`

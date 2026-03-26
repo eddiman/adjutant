@@ -12,6 +12,7 @@ import yaml
 from adjutant.lifecycle.control import (
     _detect_backend_change,
     _handle_backend_switch,
+    _warn_nested_opencode_dependencies,
 )
 
 
@@ -107,3 +108,58 @@ class TestHandleBackendSwitch:
             lines = _handle_backend_switch(adj_dir, "opencode", "claude-cli")
 
         assert any("switched" in l.lower() for l in lines)
+
+    def test_warns_nested_opencode_deps_on_switch_to_claude(self, adj_dir: Path) -> None:
+        """Switching to claude-cli warns about KBs that internally use opencode."""
+        from adjutant.capabilities.kb.manage import KBEntry
+
+        fake_kbs = [
+            KBEntry(name="portfolio", path="/vol/portfolio-kb"),
+            KBEntry(name="ixda", path="/vol/ixda"),
+        ]
+        with (
+            patch("adjutant.lifecycle.control._kill_by_pattern"),
+            patch("adjutant.capabilities.kb.manage.kb_list", return_value=fake_kbs),
+        ):
+            lines = _handle_backend_switch(adj_dir, "opencode", "claude-cli")
+
+        assert any("portfolio" in l and "OpenCode" in l for l in lines)
+
+    def test_no_nested_warning_on_switch_to_opencode(self, adj_dir: Path) -> None:
+        """Switching to opencode does not warn about nested deps."""
+        with patch("adjutant.lifecycle.control._kill_by_pattern"):
+            lines = _handle_backend_switch(adj_dir, "claude-cli", "opencode")
+
+        assert not any("internally use OpenCode" in l for l in lines)
+
+
+class TestWarnNestedDependencies:
+    def test_warns_for_portfolio_kb(self, adj_dir: Path) -> None:
+        from adjutant.capabilities.kb.manage import KBEntry
+
+        fake_kbs = [
+            KBEntry(name="portfolio", path="/vol/portfolio-kb"),
+            KBEntry(name="hopen", path="/vol/hopen"),
+        ]
+        with patch("adjutant.capabilities.kb.manage.kb_list", return_value=fake_kbs):
+            warnings = _warn_nested_opencode_dependencies(adj_dir)
+
+        assert len(warnings) == 1
+        assert "portfolio" in warnings[0]
+
+    def test_no_warning_without_portfolio(self, adj_dir: Path) -> None:
+        from adjutant.capabilities.kb.manage import KBEntry
+
+        fake_kbs = [
+            KBEntry(name="ixda", path="/vol/ixda"),
+            KBEntry(name="hopen", path="/vol/hopen"),
+        ]
+        with patch("adjutant.capabilities.kb.manage.kb_list", return_value=fake_kbs):
+            warnings = _warn_nested_opencode_dependencies(adj_dir)
+
+        assert warnings == []
+
+    def test_handles_missing_registry(self, adj_dir: Path) -> None:
+        """No crash when registry is unavailable."""
+        warnings = _warn_nested_opencode_dependencies(adj_dir)
+        assert warnings == []

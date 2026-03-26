@@ -482,7 +482,43 @@ def _handle_backend_switch(adj_dir: Path, old_backend: str, new_backend: str) ->
     _adj_log("backend", f"Switched from {old_backend} to {new_backend}")
     lines.append(f"Backend switched: {old_backend} → {new_backend}")
 
+    # 6. Warn about nested opencode dependencies
+    if new_backend == "claude-cli":
+        warnings = _warn_nested_opencode_dependencies(adj_dir)
+        lines.extend(warnings)
+
     return lines
+
+
+def _warn_nested_opencode_dependencies(adj_dir: Path) -> list[str]:
+    """Warn about KBs that internally call opencode, which still need an API key.
+
+    Some KBs (e.g. portfolio-kb) have their own analyze pipelines that internally
+    call ``opencode run`` for LLM signal generation. Switching to claude-cli does
+    NOT affect these nested dependencies — they still require a working OpenCode
+    installation and API key.
+    """
+    warnings: list[str] = []
+    try:
+        from adjutant.capabilities.kb.manage import kb_list
+
+        known_nested_patterns = {"portfolio"}
+        nested_kbs = [
+            kb.name
+            for kb in kb_list(adj_dir)
+            if any(p in kb.name.lower() or p in kb.path.lower() for p in known_nested_patterns)
+        ]
+        if nested_kbs:
+            msg = (
+                f"Warning: KB(s) {nested_kbs} internally use OpenCode for LLM calls. "
+                f"These still require a working `opencode` binary and API key even though "
+                f"the main backend is now claude-cli."
+            )
+            _adj_log("backend", msg)
+            warnings.append(msg)
+    except Exception:  # noqa: BLE001
+        pass  # Registry unavailable — skip warning
+    return warnings
 
 
 def start_backend_service(adj_dir: Path) -> str:
