@@ -125,7 +125,7 @@ Knowledge base sub-agents are never given the ability to self-schedule, send not
 
 ### Adjutant is the sole orchestrator
 
-Only Adjutant's prompts call `send_notify()`. Only Adjutant's prompts write to `insights/` and `state/actions.jsonl`. KBs have `external_directory: deny` in their `opencode.json` — they cannot reach outside their own workspace.
+Only Adjutant's prompts call `send_notify()`. Only Adjutant's prompts write to `insights/` and `state/actions.jsonl`. KBs are sandboxed via workspace permissions (`opencode.json` for OpenCode, `.claude/settings.json` for Claude CLI) — they cannot reach outside their own workspace.
 
 ### Prompt injection guard
 

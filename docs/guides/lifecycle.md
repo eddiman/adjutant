@@ -100,7 +100,7 @@ adjutant kill
 
 What happens:
 1. Creates `$ADJ_DIR/KILLED` lockfile
-2. Terminates all Adjutant-related processes (listener, opencode, any background jobs)
+2. Terminates all Adjutant-related processes (listener, LLM backend, any background jobs)
 3. Disables cron jobs (backed up to `state/crontab.backup`)
 4. Logs the event and sends a Telegram notification
 

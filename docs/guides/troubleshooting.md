@@ -38,7 +38,7 @@ adjutant status
 | `KILLED` lockfile exists | Run `adjutant startup` (not `adjutant start`) |
 | Another listener already running | Run `adjutant stop` first, then `adjutant start` |
 | Missing credentials | Check `.env` has `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` |
-| OpenCode not found | Install [OpenCode](https://opencode.ai) and ensure it's on PATH |
+| LLM backend not found | Install [OpenCode](https://opencode.ai) or [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) and ensure it's on PATH |
 
 **Important**: `adjutant start` will refuse to start if a `KILLED` lockfile is present. Use `adjutant startup` for recovery -- it clears the lockfile, restores crontab, and starts fresh.
 
@@ -58,7 +58,7 @@ Check `state/adjutant.log` and `state/listener.stderr.log` for error details. Co
 
 - Invalid bot token (Telegram returns 401)
 - Network connectivity issues
-- OpenCode process crashes
+- LLM backend process crashes
 
 If using LaunchAgent (macOS), the service will auto-restart. Check crash frequency with:
 
@@ -94,10 +94,10 @@ Look for `[control] Emergency kill` entries.
 2. Check if jobs are enabled: `adjutant schedule list`
 3. Re-sync: `adjutant schedule sync`
 
-### "opencode not found on PATH" in cron
+### "opencode/claude not found on PATH" in cron
 
 Cron runs with a minimal `PATH` (`/usr/bin:/bin`), which typically excludes
-directories like `/opt/homebrew/bin` where `opencode` is installed. Adjutant
+directories like `/opt/homebrew/bin` where your LLM backend binary is installed. Adjutant
 snapshots your interactive shell's `PATH` when installing cron entries (via
 `adjutant schedule sync`), so re-syncing usually fixes this:
 
@@ -105,10 +105,14 @@ snapshots your interactive shell's `PATH` when installing cron entries (via
 adjutant schedule sync
 ```
 
-As a fallback, you can set `OPENCODE_BIN` to the absolute path of the binary:
+As a fallback, you can set the binary path explicitly:
 
 ```bash
+# For OpenCode:
 export OPENCODE_BIN=/opt/homebrew/bin/opencode
+
+# For Claude Code CLI:
+export CLAUDE_CODE_BIN=/usr/local/bin/claude
 ```
 
 ### macOS Full Disk Access
@@ -125,7 +129,7 @@ Check the job's log file (shown in `adjutant schedule list`). The log path is de
 
 ### "Model not found" errors
 
-The configured model may not be available in your OpenCode setup. Check:
+The configured model may not be available in your backend setup. Check:
 
 ```bash
 adjutant status
@@ -151,7 +155,7 @@ llm:
 
 - Check which model is active with `/model` -- expensive models (Opus) are slower
 - Switch to a cheaper model: `/model cheap`
-- Check if OpenCode is healthy: `opencode --version`
+- Check if your backend is healthy: `opencode --version` or `claude --version`
 
 ## Knowledge Base Issues
 
