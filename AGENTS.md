@@ -73,7 +73,7 @@ adjutant/                                 # Monorepo
 │       └── package.json
 │
 ├── site/                                 # Docusaurus documentation site
-│   ├── docs -> ../docs                   # Symlink to source of truth
+│   ├── (reads ../docs via config)         # path: '../docs' in docusaurus.config.ts
 │   ├── docusaurus.config.ts
 │   ├── sidebars.ts
 │   └── package.json

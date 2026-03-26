@@ -7,19 +7,16 @@ const config: Config = {
   tagline: 'A persistent personal AI agent framework',
   favicon: 'img/favicon.ico',
 
-  future: {
-    v4: true,
-  },
-
   url: 'https://eddiman.github.io',
-  baseUrl: '/adjutant-docs/',
+  baseUrl: '/adjutant/',
 
   organizationName: 'eddiman',
-  projectName: 'adjutant-docs',
+  projectName: 'adjutant',
   deploymentBranch: 'gh-pages',
   trailingSlash: false,
 
   onBrokenLinks: 'throw',
+  onBrokenAnchors: 'warn',
 
   i18n: {
     defaultLocale: 'en',
@@ -31,8 +28,15 @@ const config: Config = {
       'classic',
       {
         docs: {
+          path: '../docs',
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/eddiman/adjutant/tree/main/docs/',
+          exclude: [
+            'reference/**',
+            'web/**',
+            'plans/**',
+            'README.md',
+          ],
         },
         blog: false,
         theme: {
@@ -69,7 +73,7 @@ const config: Config = {
         },
         {
           to: '/docs/development/contributing',
-          label: 'Development',
+          label: 'Contribute',
           position: 'left',
         },
 

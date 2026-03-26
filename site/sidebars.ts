@@ -52,7 +52,7 @@ const sidebars: SidebarsConfig = {
         'development/plugin-guide',
         'development/backend-guide',
         'development/testing',
-        'development/setup-wizard-internals',
+        'development/setup-wizard',
       ],
     },
   ],

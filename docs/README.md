@@ -4,20 +4,35 @@ Adjutant is a persistent autonomous agent framework that runs on your local mach
 
 ---
 
+## Getting Started
+
+| Document | What it covers |
+|----------|---------------|
+| [Installation](getting-started/installation.md) | Prerequisites, clone, install, shell alias |
+| [Telegram Setup](getting-started/telegram-setup.md) | Create a bot, get your chat ID |
+| [Setup Wizard](getting-started/setup-wizard.md) | Run `adjutant setup`, backend selection, repair mode |
+| [First Message](getting-started/first-message.md) | Start the listener, send your first message |
+
+Or read the [comprehensive guide](guides/getting-started.md) for all steps on one page.
+
+---
+
 ## Guides
 
 For people using Adjutant.
 
 | Document | What it covers |
 |----------|---------------|
-| [Getting Started](guides/getting-started.md) | Install, setup wizard, send your first message |
 | [Configuration](guides/configuration.md) | `adjutant.yaml`, `.env`, identity files (`soul.md`, `heart.md`, `registry.md`) |
 | [Commands](guides/commands.md) | All Telegram slash commands and `adjutant` CLI subcommands |
+| [Backends](guides/backends.md) | Choosing, configuring, and switching LLM backends (OpenCode / Claude CLI) |
 | [Knowledge Bases](guides/knowledge-bases.md) | Creating, structuring, and querying knowledge bases |
 | [Schedules](guides/schedules.md) | Cron-based scheduled jobs, KB operations, registry management |
 | [Autonomy](guides/autonomy.md) | Autonomous pulse/review cycles, notification budget, dry-run mode |
 | [Lifecycle](guides/lifecycle.md) | Start, stop, pause, kill, recover, and update |
-| [Backends](guides/backends.md) | Choosing, configuring, and switching LLM backends (OpenCode / Claude CLI) |
+| [Memory](guides/memory.md) | Long-term memory: `/remember`, `/forget`, `/recall`, `/digest` |
+| [News](guides/news.md) | News briefing pipeline: sources, filters, delivery |
+| [Troubleshooting](guides/troubleshooting.md) | Common issues and fixes |
 
 ---
 
@@ -43,11 +58,12 @@ For people extending or contributing to Adjutant.
 
 | Document | What it covers |
 |----------|---------------|
+| [Contributing](development/contributing.md) | Dev setup, code conventions, project structure |
 | [Adaptor Guide](development/adaptor-guide.md) | How to build a new messaging backend (Slack, Discord, CLI, etc.) |
 | [Plugin Guide](development/plugin-guide.md) | How to add a new capability script |
+| [Backend Guide](development/backend-guide.md) | Working with the backend abstraction, adding call sites, testing |
 | [Setup Wizard Internals](development/setup-wizard.md) | `adjutant setup` implementation: steps, dry-run, prompt helpers |
 | [Testing](development/testing.md) | Running the test suite, tier overview, isolation model |
-| [Backend Guide](development/backend-guide.md) | Working with the backend abstraction, adding call sites, testing |
 
 ---
 

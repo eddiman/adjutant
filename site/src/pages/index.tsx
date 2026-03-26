@@ -35,7 +35,7 @@ function HeroContent() {
           </Link>
           <Link
             className={clsx('button button--lg button--outline', styles.btnOutline)}
-            to="/docs/intro">
+            to="/docs/">
             Learn More
           </Link>
         </div>
