@@ -119,20 +119,20 @@ class TestPermissionArgs:
 
 
 # ---------------------------------------------------------------------------
-# Vision guard
+# Vision (image path injection)
 # ---------------------------------------------------------------------------
 
 
-class TestVisionGuard:
+class TestVisionPathInjection:
     @pytest.mark.asyncio
-    async def test_rejects_image_files(self) -> None:
+    async def test_injects_image_paths_into_prompt(self, mock_claude: Path) -> None:
         backend = ClaudeCLIBackend()
         result = await backend.run(
             "describe this",
-            files=[Path("photo.jpg")],
+            files=[Path("/tmp/photo.jpg")],
         )
-        assert result.error_type == "vision_unsupported"
-        assert result.text != ""
+        # Should succeed (not rejected) — image path gets injected into prompt
+        assert result.error_type != "vision_unsupported"
 
     @pytest.mark.asyncio
     async def test_allows_non_image_files(self, mock_claude: Path) -> None:
@@ -142,7 +142,6 @@ class TestVisionGuard:
             "analyze this",
             files=[Path("data.csv")],
         )
-        # Mock returns valid JSON, so no vision_unsupported error
         assert result.error_type != "vision_unsupported"
 
 

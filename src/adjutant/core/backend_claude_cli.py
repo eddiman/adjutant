@@ -116,7 +116,7 @@ class ClaudeCLIBackend:
     @property
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
-            vision=False,
+            vision=True,
             model_listing=False,
             reaping=False,
             web_server=True,
@@ -137,16 +137,17 @@ class ClaudeCLIBackend:
         env: dict[str, str] | None = None,
         files: list[Path] | None = None,
     ) -> LLMResult:
-        # Vision guard: Claude CLI has no native image input
+        # Inject image file paths into prompt so Claude CLI reads them via
+        # its built-in Read tool (which supports multimodal image viewing).
         if files:
             image_files = [f for f in files if f.suffix.lower() in _IMAGE_EXTENSIONS]
             if image_files:
-                return LLMResult(
-                    text=(
-                        "Vision (image analysis) is not supported on the Claude CLI backend. "
-                        "Switch to the opencode backend for image analysis."
-                    ),
-                    error_type="vision_unsupported",
+                paths_block = "\n".join(str(f) for f in image_files)
+                prompt = (
+                    f"First, read the following image file(s) using the Read tool, "
+                    f"then answer the user's request.\n\n"
+                    f"Image file(s):\n{paths_block}\n\n"
+                    f"User request: {prompt}"
                 )
 
         claude_bin = _find_claude()

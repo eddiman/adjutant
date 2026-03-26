@@ -142,8 +142,8 @@ class TestCapabilitiesContract:
     def test_opencode_has_vision(self) -> None:
         assert get_backend("opencode").capabilities.vision is True
 
-    def test_claude_cli_no_vision(self) -> None:
-        assert get_backend("claude-cli").capabilities.vision is False
+    def test_claude_cli_has_vision(self) -> None:
+        assert get_backend("claude-cli").capabilities.vision is True
 
     def test_opencode_has_reaping(self) -> None:
         assert get_backend("opencode").capabilities.reaping is True
@@ -171,24 +171,23 @@ class TestCapabilitiesContract:
             caps.vision = True  # type: ignore[misc]
 
 
-class TestVisionGuard:
-    """Claude CLI must return vision_unsupported for image files."""
+class TestVisionPathInjection:
+    """Claude CLI must inject image file paths into the prompt."""
 
-    def test_claude_cli_rejects_images(self, mock_claude: Path) -> None:
+    def test_claude_cli_accepts_images(self, mock_claude: Path) -> None:
         backend = get_backend("claude-cli")
-        result = asyncio.run(backend.run("describe this", files=[Path("photo.jpg")]))
-        assert result.error_type == "vision_unsupported"
-        assert "not supported" in result.text.lower()
+        result = asyncio.run(backend.run("describe this", files=[Path("/tmp/photo.jpg")]))
+        assert result.error_type != "vision_unsupported"
 
-    def test_claude_cli_rejects_png(self, mock_claude: Path) -> None:
+    def test_claude_cli_accepts_png(self, mock_claude: Path) -> None:
         backend = get_backend("claude-cli")
-        result = asyncio.run(backend.run("analyze", files=[Path("screenshot.png")]))
-        assert result.error_type == "vision_unsupported"
+        result = asyncio.run(backend.run("analyze", files=[Path("/tmp/screenshot.png")]))
+        assert result.error_type != "vision_unsupported"
 
-    def test_claude_cli_rejects_webp(self, mock_claude: Path) -> None:
+    def test_claude_cli_accepts_webp(self, mock_claude: Path) -> None:
         backend = get_backend("claude-cli")
-        result = asyncio.run(backend.run("analyze", files=[Path("image.webp")]))
-        assert result.error_type == "vision_unsupported"
+        result = asyncio.run(backend.run("analyze", files=[Path("/tmp/image.webp")]))
+        assert result.error_type != "vision_unsupported"
 
 
 class TestReapContract:
