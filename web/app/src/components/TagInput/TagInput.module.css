@@ -1,0 +1,95 @@
+/* === Tag Input Component === */
+.tag-input-container {
+  display: flex;
+  align-items: flex-start;
+  min-height: 2.25rem;
+  padding: var(--spacing-1-5) var(--spacing-2);
+  border: 0.0625rem solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: text;
+  transition: border-color var(--transition-fast);
+}
+
+.tag-input-container:focus-within {
+  border-color: var(--color-primary);
+}
+
+.tag-input-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-1-5);
+  width: 100%;
+  align-items: center;
+}
+
+.tag-input-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: var(--spacing-0-5) var(--spacing-2);
+  background: var(--color-card);
+  border: 0.0625rem solid var(--color-border);
+  border-radius: 0.75rem;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.tag-input-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+.tag-input-remove:hover {
+  opacity: 1;
+}
+
+.tag-input-field {
+  flex: 1;
+  min-width: 5rem;
+  padding: var(--spacing-0-5) 0;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  outline: none;
+}
+
+.tag-input-field::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
+/* === Mobile Responsive === */
+@media (max-width: 48rem) {
+  .tag-input-container {
+    min-height: var(--touch-target);
+    padding: var(--spacing-2) var(--spacing-2-5);
+  }
+  
+  .tag-input-tag {
+    padding: var(--spacing-1-5) var(--spacing-2-5);
+    font-size: var(--font-size-sm);
+  }
+  
+  .tag-input-remove {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+}
+
+/* === Touch Device Overrides === */
+@media (hover: none) {
+  .tag-input-remove {
+    opacity: 1;
+  }
+}

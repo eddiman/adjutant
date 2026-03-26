@@ -1,0 +1,103 @@
+/* === Sticky Node === */
+.sticky-node {
+  /* Square shape - same height as note card */
+  width: var(--note-height);
+  height: var(--note-height);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-4);
+  position: relative;
+}
+
+.sticky-node:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-0.25rem);
+}
+
+.sticky-node.selected {
+  box-shadow: 0 0 0 0.1875rem var(--color-primary), var(--shadow-card-hover);
+}
+
+/* Pastel colors */
+.white {
+  background: #ffffff;
+}
+/* Pastel colors */
+.yellow {
+  background: #fff9c4;
+}
+
+.pink {
+  background: #f8bbd0;
+}
+
+.blue {
+  background: #bbdefb;
+}
+
+.green {
+  background: #c8e6c9;
+}
+
+.purple {
+  background: #e1bee7;
+}
+
+.orange {
+  background: #ffe0b2;
+}
+
+.mint {
+  background: #b2dfdb;
+}
+
+.peach {
+  background: #ffccbc;
+}
+
+/* Text display */
+.sticky-text {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+  color: rgba(0, 0, 0, 0.7);
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  width: 100%;
+  line-height: 1.4;
+}
+
+/* Edit input */
+.sticky-input {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+  color: rgba(0, 0, 0, 0.7);
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.sticky-input::placeholder {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+/* Touch device overrides */
+@media (hover: none) {
+  .sticky-node:hover {
+    transform: none;
+  }
+}

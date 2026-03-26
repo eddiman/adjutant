@@ -1,0 +1,30 @@
+/* === Placement Hint (Mobile) === */
+.placement-hint {
+  position: fixed;
+  bottom: calc(5.625rem + var(--safe-area-inset-bottom));
+  right: calc(var(--spacing-6) + var(--safe-area-inset-right));
+  z-index: var(--z-hint);
+  background: var(--color-text);
+  color: var(--color-card);
+  padding: var(--spacing-2) var(--spacing-3-5);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
+  animation: placementHintAppear var(--transition-normal);
+}
+
+@keyframes placementHintAppear {
+  from {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.placement-hint-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+}

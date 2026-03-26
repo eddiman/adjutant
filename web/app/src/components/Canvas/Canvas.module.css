@@ -1,0 +1,196 @@
+/* === Canvas === */
+.canvas-container {
+  width: 100%;
+  height: 100%;
+  /* Prevent default touch scrolling - let React Flow handle touch gestures */
+  touch-action: none;
+  -webkit-overflow-scrolling: none;
+  overscroll-behavior: none;
+  /* Prevent text selection on long-press (mobile) */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Pan mode - disable node interactions so only canvas panning works */
+.canvas-container.pan-mode :global(.react-flow__node) {
+  pointer-events: none;
+}
+
+/* Animate node positions when aligning */
+.canvas-container.animating :global(.react-flow__node) {
+  transition: transform var(--transition-smooth);
+}
+
+/* === Canvas Loader === */
+.canvas-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-6);
+  background: var(--color-bg);
+  z-index: var(--z-dialog);
+}
+
+.canvas-loader--exiting {
+  animation: loaderFadeOut 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.canvas-loader-shape {
+  position: relative;
+  width: 3.75rem;
+  height: 3.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-loader-morph {
+  width: 3rem;
+  height: 3rem;
+  background: transparent;
+  border: 0.1875rem solid var(--color-primary);
+  animation: shapeMorph 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  box-shadow: 
+    0 0 1.25rem rgba(0, 102, 204, 0.2),
+    inset 0 0 0.625rem rgba(0, 102, 204, 0.05);
+}
+
+.canvas-loader--exiting .canvas-loader-morph {
+  animation: shapeMorph 3s cubic-bezier(0.4, 0, 0.2, 1) infinite,
+             loaderShapeExit 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.canvas-loader-text {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  letter-spacing: 0.025em;
+  animation: loaderTextPulse 2s ease-in-out infinite;
+}
+
+.canvas-loader--exiting .canvas-loader-text {
+  animation: loaderTextFadeOut 0.3s ease forwards;
+}
+
+/* Shape morphing: circle -> square -> triangle -> diamond */
+@keyframes shapeMorph {
+  0%, 100% {
+    /* Circle */
+    border-radius: 50%;
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    /* Square */
+    border-radius: var(--radius-sm);
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    /* Diamond (rotated square) */
+    border-radius: var(--radius-xs);
+    transform: rotate(45deg) scale(0.85);
+  }
+  75% {
+    /* Rounded diamond */
+    border-radius: 30% 5% 30% 5%;
+    transform: rotate(45deg) scale(0.9);
+  }
+}
+
+/* Exit animations */
+@keyframes loaderFadeOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+@keyframes loaderShapeExit {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+@keyframes loaderTextFadeOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0.625rem);
+  }
+}
+
+@keyframes loaderTextPulse {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Canvas entrance animation */
+.canvas-container--entering {
+  animation: canvasEnter 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes canvasEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* React Flow overrides */
+:global(.react-flow__pane.selection) {
+  cursor: default !important; 
+}
+
+:global(.react-flow__node) {
+  cursor: pointer;
+}
+
+:global(.react-flow__controls) {
+  box-shadow: var(--shadow-card);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+:global(.react-flow__controls-button) {
+  border: none;
+  background: var(--color-card);
+}
+
+:global(.react-flow__controls-button:hover) {
+  background: var(--color-hover-bg);
+}
+
+:global(.react-flow__minimap) {
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+/* Selection rectangle around selected nodes */
+:global(.react-flow__nodesselection-rect) {
+  background: rgba(0, 102, 204, 0) !important;
+  border: 0.125rem solid var(--color-primary) !important;
+  border-radius: var(--radius-sm);
+}

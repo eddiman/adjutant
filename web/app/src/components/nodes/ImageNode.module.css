@@ -1,0 +1,128 @@
+/* === Image Node === */
+.image-node {
+  background: var(--color-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: box-shadow var(--transition-normal), transform var(--transition-normal);
+  overflow: hidden;
+  position: relative;
+}
+
+.image-node:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-0.125rem);
+}
+
+.image-node.selected {
+  box-shadow: 0 0 0 0.1875rem var(--color-primary), var(--shadow-card-hover);
+}
+
+.image-node-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Resize handle */
+.image-node-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: se-resize;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  background: linear-gradient(135deg, transparent 50%, var(--color-primary) 50%);
+  border-bottom-right-radius: var(--radius);
+  z-index: var(--z-dropdown);
+  pointer-events: auto;
+}
+
+.image-node:hover .image-node-resize-handle,
+.image-node.selected .image-node-resize-handle {
+  opacity: 0.6;
+}
+
+.image-node-resize-handle:hover {
+  opacity: 1 !important;
+}
+
+/* Selected image styling via React Flow */
+:global(.react-flow__node.selected) .image-node {
+  box-shadow: 0 0 0 0.1875rem var(--color-primary), var(--shadow-card-hover);
+}
+
+/* Image placeholder states */
+.image-node.uploading {
+  background: var(--color-hover-bg);
+}
+
+.image-node.error {
+  background: var(--color-danger-bg);
+  border: 0.125rem dashed var(--color-danger-bright);
+}
+
+.image-node-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: var(--spacing-3);
+  color: var(--color-text-secondary);
+}
+
+.image-node-placeholder.image-node-error {
+  color: var(--color-danger);
+}
+
+.image-node-placeholder-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+}
+
+.image-node-error-hint {
+  font-size: var(--font-size-xxs);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* Spinner animation */
+.image-node-spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 0.1875rem solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: var(--radius-full);
+  animation: imageSpinner 0.8s linear infinite;
+}
+
+@keyframes imageSpinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* === Touch Device Overrides === */
+@media (hover: none) {
+  /* Image resize handle - always visible on touch */
+  .image-node-resize-handle {
+    opacity: 0.5;
+  }
+  
+  .image-node:hover .image-node-resize-handle,
+  .image-node.selected .image-node-resize-handle {
+    opacity: 0.5;
+  }
+  
+  .image-node-resize-handle:active {
+    opacity: 1;
+  }
+}

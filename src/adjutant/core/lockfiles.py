@@ -8,7 +8,7 @@ Stored as $ADJ_DIR/KILLED and $ADJ_DIR/PAUSED (empty files).
 
 Active operation tracking:
   - state/active_operation.json — written when a pulse/review starts, removed when done.
-  - Allows any client (Mariposa, Telegram, CLI) to observe running state.
+  - Allows any client (adjutant-web, Telegram, CLI) to observe running state.
 
 Matches bash lockfiles.sh behavior exactly:
   - check_* functions emit stderr messages and return False if locked
@@ -192,7 +192,7 @@ def set_active_operation(
 
     Args:
         action: The operation type (e.g. "pulse", "review").
-        source: Where the trigger came from ("cron", "telegram", "mariposa").
+        source: Where the trigger came from ("cron", "telegram", "adjutant-web").
         adj_dir: Adjutant root directory.
     """
     d = adj_dir or _adj_dir()

@@ -1,0 +1,188 @@
+/* ==============================================
+   HOME BACKGROUND STYLES
+   Uses semantic --color-home-* tokens from index.css
+   ============================================== */
+.background {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* Gradient base layer */
+.gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    var(--color-home-gradient-start) 0%,
+    var(--color-home-gradient-mid-1) 25%,
+    var(--color-home-gradient-mid-2) 65%,
+    var(--color-home-gradient-end) 100%
+  );
+}
+
+/* Dot pattern overlay */
+.dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(
+    circle,
+    var(--color-home-dots) 1px,
+    transparent 1px
+  );
+  background-size: var(--spacing-5) var(--spacing-5);
+  opacity: 0.4;
+}
+
+/* Container for floating blobs */
+.blobContainer {
+  position: absolute;
+  inset: 0;
+  filter: blur(60px);
+  opacity: 0.6;
+}
+
+/* Individual blob styling */
+.blob {
+  position: absolute;
+  border-radius: var(--radius-full);
+  will-change: transform;
+}
+
+.blob1 {
+  width: 25rem;
+  height: 25rem;
+  background: radial-gradient(circle, var(--color-home-blob-1) 0%, transparent 70%);
+  top: -10%;
+  left: -5%;
+  animation: float1 25s ease-in-out infinite;
+}
+
+.blob2 {
+  width: 22rem;
+  height: 22rem;
+  background: radial-gradient(circle, var(--color-home-blob-2) 0%, transparent 70%);
+  top: 60%;
+  right: -10%;
+  animation: float2 30s ease-in-out infinite;
+}
+
+.blob3 {
+  width: 19rem;
+  height: 19rem;
+  background: radial-gradient(circle, var(--color-home-blob-3) 0%, transparent 70%);
+  top: 30%;
+  left: 20%;
+  animation: float3 20s ease-in-out infinite;
+}
+
+.blob4 {
+  width: 16rem;
+  height: 16rem;
+  background: radial-gradient(circle, var(--color-home-blob-4) 0%, transparent 70%);
+  bottom: -5%;
+  left: 40%;
+  animation: float4 28s ease-in-out infinite;
+}
+
+.blob5 {
+  width: 17.5rem;
+  height: 17.5rem;
+  background: radial-gradient(circle, var(--color-home-blob-5) 0%, transparent 70%);
+  top: 10%;
+  right: 20%;
+  animation: float5 22s ease-in-out infinite;
+}
+
+/* Frosted glass overlay */
+.glassOverlay {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* Floating animations */
+@keyframes float1 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(30px, 20px) scale(1.05);
+  }
+  50% {
+    transform: translate(60px, -10px) scale(0.95);
+  }
+  75% {
+    transform: translate(20px, -30px) scale(1.02);
+  }
+}
+
+@keyframes float2 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(-40px, -20px) scale(1.03);
+  }
+  50% {
+    transform: translate(-20px, 30px) scale(0.97);
+  }
+  75% {
+    transform: translate(-50px, 10px) scale(1.05);
+  }
+}
+
+@keyframes float3 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(40px, -40px) scale(1.08);
+  }
+  66% {
+    transform: translate(-30px, 20px) scale(0.92);
+  }
+}
+
+@keyframes float4 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(50px, -30px) scale(1.04);
+  }
+  50% {
+    transform: translate(20px, -50px) scale(0.96);
+  }
+  75% {
+    transform: translate(-20px, -20px) scale(1.02);
+  }
+}
+
+@keyframes float5 {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    transform: translate(-30px, 30px) scale(1.06);
+  }
+  40% {
+    transform: translate(-50px, -10px) scale(0.94);
+  }
+  60% {
+    transform: translate(-20px, -40px) scale(1.03);
+  }
+  80% {
+    transform: translate(10px, -20px) scale(0.98);
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .blob {
+    animation: none;
+  }
+}

@@ -1,0 +1,72 @@
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-6);
+  box-shadow: var(--shadow-sm);
+  grid-column: 1 / -1; /* Full width */
+}
+
+[data-theme="bauhaus"] .card {
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.cardTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--spacing-4) 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+}
+
+.count {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-normal);
+}
+
+.empty {
+  text-align: center;
+  padding: var(--spacing-4);
+  color: var(--color-text-secondary);
+}
+
+.feed {
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-3);
+}
+
+[data-theme="bauhaus"] .feed {
+  border-radius: 0;
+}
+
+.entry {
+  display: flex;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.entry:last-child {
+  border-bottom: none;
+}
+
+.entryDot {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.entryText {
+  flex: 1;
+  word-wrap: break-word;
+}

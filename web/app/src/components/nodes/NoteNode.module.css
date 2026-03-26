@@ -1,0 +1,155 @@
+/* === Note Node (Paper Card) === */
+.note-node {
+  /* A4 proportions: 1:1.414 */
+  width: var(--note-width);
+  height: var(--note-height);
+  background: var(--color-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  overflow: hidden;
+  position: relative;
+}
+
+.note-node:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-0.25rem);
+}
+
+/* Highlighted note animation (when navigating from sidebar) */
+.note-node.highlighted {
+  animation: noteHighlightPulse var(--transition-bounce);
+}
+
+@keyframes noteHighlightPulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-primary-60), var(--shadow-card);
+  }
+  50% {
+    box-shadow: 0 0 0 0.75rem rgba(0, 102, 204, 0), var(--shadow-card-hover);
+    transform: translateY(-0.25rem);
+  }
+  100% {
+    box-shadow: var(--shadow-card);
+    transform: translateY(0);
+  }
+}
+
+.note-node-paper {
+  width: 100%;
+  height: 100%;
+  padding: var(--spacing-5) 1.125rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.note-node-title {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--spacing-2-5);
+  line-height: 1.3;
+  color: var(--color-text);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Fade effect at bottom of card */
+.note-node-fade {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--spacing-15);
+  background: linear-gradient(to bottom, transparent 0%, var(--color-card) 100%);
+  pointer-events: none;
+}
+
+/* Read-only content styling in cards - global because TipTap sets this class */
+:global(.note-card-content) {
+  font-size: var(--font-size-xxs);
+  line-height: var(--line-height-normal);
+  color: var(--color-text);
+}
+
+:global(.note-card-content) h1 {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--spacing-2);
+  line-height: var(--line-height-tight);
+}
+
+:global(.note-card-content) h2 {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  margin: var(--spacing-2-5) 0 var(--spacing-1-5);
+  line-height: 1.3;
+}
+
+:global(.note-card-content) h3 {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  margin: var(--spacing-2) 0 var(--spacing-1);
+  line-height: 1.3;
+}
+
+:global(.note-card-content) p {
+  margin: 0 0 var(--spacing-1-5);
+}
+
+:global(.note-card-content) ul,
+:global(.note-card-content) ol {
+  margin: 0 0 var(--spacing-1-5);
+  padding-left: var(--spacing-3-5);
+}
+
+:global(.note-card-content) li {
+  margin: var(--spacing-0-5) 0;
+}
+
+:global(.note-card-content) mark {
+  background: var(--color-highlight);
+  padding: 0.0625rem var(--spacing-0-5);
+}
+
+:global(.note-card-content) strong {
+  font-weight: var(--font-weight-semibold);
+}
+
+:global(.note-card-content) em {
+  font-style: italic;
+}
+
+/* Images in note card preview - global because set via TipTap HTMLAttributes */
+:global(.note-preview-image) {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--spacing-1);
+  margin: var(--spacing-1-5) 0;
+  display: block;
+}
+
+/* Note Node Category */
+.note-node-category {
+  font-size: var(--font-size-xxs);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Selected node styling via React Flow */
+:global(.react-flow__node.selected) .note-node {
+  box-shadow: 0 0 0 0.1875rem var(--color-primary), var(--shadow-card-hover);
+}
+
+/* === Touch Device Overrides === */
+@media (hover: none) {
+  /* Note node - remove hover transform on touch (prevents jank) */
+  .note-node:hover {
+    transform: none;
+  }
+}

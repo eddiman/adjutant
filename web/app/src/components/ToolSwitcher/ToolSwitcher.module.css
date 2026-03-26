@@ -1,0 +1,58 @@
+/* === Tool Switcher (Mobile Canvas Tools) === */
+.tool-switcher {
+  position: fixed;
+  bottom: calc(var(--spacing-4) + var(--safe-area-inset-bottom));
+  left: var(--touch-target-lg);
+  z-index: var(--z-toolbar);
+  display: flex;
+  background: var(--color-card);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: left var(--transition-fast);
+}
+
+.tool-switcher.sidebar-open {
+  left: 19rem;
+}
+
+.tool-switcher-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-target-lg);
+  height: var(--touch-target-lg);
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.tool-switcher-btn:first-child {
+  border-right: 0.0625rem solid var(--color-border);
+}
+
+.tool-switcher-btn:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.tool-switcher-btn.active {
+  background: var(--color-primary);
+  color: var(--color-white);
+}
+
+.tool-switcher-btn.active:active {
+  background: var(--color-primary);
+}
+
+.tool-switcher-btn svg {
+  flex-shrink: 0;
+}
+
+/* === Small Mobile Responsive === */
+@media (max-width: 30rem) {
+  .tool-switcher, .tool-switcher.sidebar-open {
+    left: calc(var(--spacing-4) + var(--safe-area-inset-left));
+  }
+}

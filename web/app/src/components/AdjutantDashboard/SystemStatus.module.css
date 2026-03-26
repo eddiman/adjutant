@@ -1,0 +1,83 @@
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-6);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="bauhaus"] .card {
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.cardTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--spacing-4) 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+}
+
+.statusGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.statusItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-3);
+  background: var(--color-background);
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--color-border);
+}
+
+[data-theme="bauhaus"] .statusItem {
+  border-radius: 0;
+  border: 1px solid var(--color-border);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.value {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  text-transform: uppercase;
+}
+
+.valuePath {
+  font-size: var(--font-size-sm);
+  font-family: var(--font-mono, monospace);
+  color: var(--color-text-secondary);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stateOperational {
+  color: var(--color-success, #10b981);
+}
+
+.statePaused {
+  color: var(--color-warning, #f59e0b);
+}
+
+.stateKilled {
+  color: var(--color-error, #ef4444);
+}
+
+.stateStopped {
+  color: var(--color-text-secondary, #6b7280);
+}

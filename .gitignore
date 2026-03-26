@@ -53,5 +53,18 @@ tmp/
 # Local planning docs — not for tracking
 docs/reference/portfolio-kb-plan.md
 
-# Cloned docs site repo (temporary, for making cross-repo doc updates)
-adjutant-docs/
+# Web dashboard (adjutant-web)
+web/node_modules/
+web/api/node_modules/
+web/api/dist/
+web/api/notes/
+web/app/node_modules/
+web/app/dist/
+
+# Documentation site (Docusaurus)
+site/node_modules/
+site/.docusaurus/
+site/build/
+
+# OpenWebUI integration
+integrations/openwebui/__pycache__/

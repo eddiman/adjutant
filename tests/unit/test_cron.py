@@ -132,11 +132,11 @@ class TestRunCronPrompt:
                 prompt,
                 adj_dir=tmp_path,
                 action="review",
-                source="mariposa",
+                source="adjutant-web",
             )
 
         assert captured_data["action"] == "review"
-        assert captured_data["source"] == "mariposa"
+        assert captured_data["source"] == "adjutant-web"
         assert "started_at" in captured_data
         assert "pid" in captured_data
 
@@ -275,9 +275,9 @@ class TestPulseCron:
             patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
             pytest.raises(SystemExit),
         ):
-            pulse_cron(adj_dir=tmp_path, source="mariposa")
+            pulse_cron(adj_dir=tmp_path, source="adjutant-web")
 
-        assert captured_source == "mariposa"
+        assert captured_source == "adjutant-web"
 
     def test_raises_on_adj_dir_not_found(self) -> None:
         """pulse_cron() should raise SystemExit(1) on AdjutantDirNotFoundError."""
@@ -372,9 +372,9 @@ class TestFormatHeartbeat:
 
     def test_no_issues(self) -> None:
         data = {"kbs_checked": ["ixda"], "issues_found": [], "escalated": False}
-        result = _format_heartbeat(data, "pulse", "mariposa")
+        result = _format_heartbeat(data, "pulse", "adjutant-web")
         assert "Issues:" not in result
-        assert "Source: mariposa" in result
+        assert "Source: adjutant-web" in result
 
     def test_truncates_many_issues(self) -> None:
         data = {
@@ -500,10 +500,10 @@ class TestNotifyCompletion:
             patch("adjutant.lifecycle.cron._notify_completion") as mock_notify,
             pytest.raises(SystemExit) as exc_info,
         ):
-            run_cron_prompt(prompt, adj_dir=tmp_path, action="pulse", source="mariposa")
+            run_cron_prompt(prompt, adj_dir=tmp_path, action="pulse", source="adjutant-web")
 
         assert exc_info.value.code == 0
-        mock_notify.assert_called_once_with(tmp_path, "pulse", "mariposa")
+        mock_notify.assert_called_once_with(tmp_path, "pulse", "adjutant-web")
 
     def test_not_called_for_unknown_action(self, tmp_path: Path) -> None:
         """run_cron_prompt should skip notification for action='unknown'."""

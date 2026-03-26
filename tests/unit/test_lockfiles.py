@@ -211,7 +211,7 @@ class TestActiveOperation:
         assert get_active_operation(adj_dir=adj_dir) is None
 
     def test_clear_removes_file(self, adj_dir: Path) -> None:
-        set_active_operation("pulse", "mariposa", adj_dir=adj_dir)
+        set_active_operation("pulse", "adjutant-web", adj_dir=adj_dir)
         clear_active_operation(adj_dir=adj_dir)
         assert not (adj_dir / "state" / "active_operation.json").exists()
 

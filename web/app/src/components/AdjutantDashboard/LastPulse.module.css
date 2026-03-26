@@ -1,0 +1,116 @@
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-6);
+  box-shadow: var(--shadow-sm);
+}
+
+[data-theme="bauhaus"] .card {
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.cardTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--spacing-4) 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+}
+
+.empty {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+}
+
+.timestamp {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--spacing-4);
+}
+
+.section {
+  margin-bottom: var(--spacing-4);
+}
+
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.sectionLabel {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--spacing-2);
+}
+
+.kbList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-2);
+}
+
+.kbTag {
+  font-size: var(--font-size-xs);
+  padding: var(--spacing-1) var(--spacing-2);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  color: var(--color-text-primary);
+  font-family: var(--font-mono, monospace);
+}
+
+[data-theme="bauhaus"] .kbTag {
+  border-radius: 0;
+}
+
+.issueList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+.issue {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  padding: var(--spacing-2) var(--spacing-3);
+  background: var(--color-background);
+  border-left: 3px solid var(--color-warning, #f59e0b);
+  border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
+}
+
+[data-theme="bauhaus"] .issue {
+  border-radius: 0;
+}
+
+.noIssues {
+  font-size: var(--font-size-sm);
+  color: var(--color-success, #10b981);
+  font-weight: var(--font-weight-medium);
+}
+
+.escalated {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-warning, #f59e0b);
+  padding: var(--spacing-2) var(--spacing-3);
+  background: rgba(245, 158, 11, 0.1);
+  border-radius: var(--border-radius-md);
+}
+
+[data-theme="bauhaus"] .escalated {
+  border-radius: 0;
+  border: 1px solid var(--color-warning, #f59e0b);
+  background: transparent;
+}

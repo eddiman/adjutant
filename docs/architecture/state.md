@@ -22,7 +22,7 @@ All runtime state lives under `ADJ_DIR/state/`. These files are gitignored and u
 | `last_heartbeat.json` | Timestamp and summary of the last `/pulse` or `/reflect` run. |
 | `usage_log.jsonl` | Rolling token usage log for session and weekly estimates. |
 | `actions.jsonl` | JSONL audit log — one record per autonomous cycle or notification. |
-| `active_operation.json` | Marker for a currently running pulse or review. Written before the LLM backend call starts, removed when it finishes. Used by external clients (Mariposa, Telegram) to observe running state. |
+| `active_operation.json` | Marker for a currently running pulse or review. Written before the LLM backend call starts, removed when it finishes. Used by external clients (adjutant-web, Telegram) to observe running state. |
 | `notify_count_YYYY-MM-DD.txt` | Today's notification send counter. Enforces the daily budget. Resets at midnight automatically (date-scoped filename). |
 
 ---
@@ -67,7 +67,7 @@ When a pulse or review starts, Adjutant writes `state/active_operation.json`:
 | Field | Values |
 |-------|--------|
 | `action` | `"pulse"`, `"review"` |
-| `source` | `"cron"` (CLI/crontab), `"telegram"`, `"mariposa"` |
+| `source` | `"cron"` (CLI/crontab), `"telegram"`, `"adjutant-web"` |
 | `pid` | Process ID of the Python wrapper |
 | `started_at` | ISO-8601 UTC timestamp |
 
@@ -89,7 +89,7 @@ Managed by `src/adjutant/core/lockfiles.py`:
 |---------|-----------|-------------|
 | `adjutant pulse` (CLI/crontab) | `lifecycle/cron.py` → `run_cron_prompt()` | `"cron"` |
 | `adjutant review` (CLI/crontab) | `lifecycle/cron.py` → `run_cron_prompt()` | `"cron"` |
-| Mariposa dashboard button | API spawns `adjutant pulse` → same as above | `"cron"` |
+| Web dashboard button | API spawns `adjutant pulse` → same as above | `"cron"` |
 | Telegram `/pulse` | `commands.py` → `cmd_pulse()` | `"telegram"` |
 | Telegram `/reflect` + `/confirm` | `commands.py` → `cmd_reflect_confirm()` | `"telegram"` |
 
@@ -125,9 +125,9 @@ After a successful pulse or review (exit code 0), `run_cron_prompt()` reads `sta
 - **OPERATIONAL → KILLED**: `adjutant kill` or `/kill`. Terminates all processes, creates `KILLED` file, disables cron.
 - **KILLED → OPERATIONAL**: `adjutant startup`. Detects and clears `KILLED` lockfile, restores crontab, then starts the listener fresh. Note: `adjutant start` will refuse if a `KILLED` lockfile is present.
 
-### External State Observation (Mariposa)
+### External State Observation (adjutant-web)
 
-The Mariposa dashboard derives a fourth display state, **STOPPED**, for its UI:
+The web dashboard derives a fourth display state, **STOPPED**, for its UI:
 
 | Condition | Displayed State |
 |-----------|----------------|

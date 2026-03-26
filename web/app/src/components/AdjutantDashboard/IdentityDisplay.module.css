@@ -1,0 +1,83 @@
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-6);
+  box-shadow: var(--shadow-sm);
+  grid-column: 1 / -1; /* Full width */
+}
+
+[data-theme="bauhaus"] .card {
+  border: 2px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.cardTitle {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--spacing-4) 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+}
+
+.loading,
+.empty {
+  text-align: center;
+  padding: var(--spacing-4);
+  color: var(--color-text-secondary);
+}
+
+.tabs {
+  display: flex;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-4);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.tab {
+  padding: var(--spacing-2) var(--spacing-4);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  margin-bottom: -2px;
+}
+
+.tab:hover {
+  color: var(--color-text-primary);
+}
+
+.tabActive {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+.content {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-4);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+[data-theme="bauhaus"] .content {
+  border-radius: 0;
+}
+
+.excerpt {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}

@@ -1,0 +1,217 @@
+/**
+ * Adjutant documentation theme.
+ *
+ * Visual identity: Blue gradient palette with pink/rose accents.
+ * Font: Jost (geometric sans-serif, Futura alternative).
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Primary: Royal blue */
+  --ifm-color-primary: #4670cc;
+  --ifm-color-primary-dark: #3560c2;
+  --ifm-color-primary-darker: #325bb8;
+  --ifm-color-primary-darkest: #2b4fa0;
+  --ifm-color-primary-light: #587dd2;
+  --ifm-color-primary-lighter: #6b8dd8;
+  --ifm-color-primary-lightest: #8dadee;
+
+  /* Accent colours */
+  --adj-accent: #e48dbf;
+  --adj-accent-light: #f7d4ee;
+  --adj-accent-pink: #e8a4d4;
+
+  /* Surface colours */
+  --adj-bg-subtle: #eef1ff;
+  --adj-bg-alt: #e4e9ff;
+  --adj-bg-card: #d4ddff;
+  --adj-border: #b4c6f7;
+
+  --ifm-code-font-size: 95%;
+  --ifm-font-family-base: 'Jost', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ifm-heading-font-family: 'Jost', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --docusaurus-highlighted-code-line-bg: rgba(70, 112, 204, 0.1);
+}
+
+[data-theme='dark'] {
+  /* Primary: Azure for dark mode */
+  --ifm-color-primary: #8dadee;
+  --ifm-color-primary-dark: #6b93e4;
+  --ifm-color-primary-darker: #587dd2;
+  --ifm-color-primary-darkest: #4670cc;
+  --ifm-color-primary-light: #a4bff3;
+  --ifm-color-primary-lighter: #b4c6f7;
+  --ifm-color-primary-lightest: #d4ddff;
+
+  --adj-accent: #e8a4d4;
+  --adj-accent-light: #f7d4ee;
+
+  --adj-bg-subtle: #0e1f3f;
+  --adj-bg-alt: #162d5e;
+  --adj-bg-card: #1e3a6e;
+  --adj-border: #2b4fa0;
+
+  --docusaurus-highlighted-code-line-bg: rgba(141, 173, 238, 0.15);
+}
+
+/* ─── Hero section (standard docs pages) ──────────────── */
+
+.hero--primary {
+  background: linear-gradient(135deg, var(--adj-bg-subtle) 0%, var(--ifm-color-primary-lightest) 50%, var(--adj-accent-light) 100%);
+  color: var(--ifm-color-primary-darkest);
+}
+
+[data-theme='dark'] .hero--primary {
+  background: linear-gradient(135deg, #0e1f3f 0%, #162d5e 50%, #2b4fa0 100%);
+  color: #d4ddff;
+}
+
+.hero__title {
+  font-size: 3rem;
+  font-weight: 700;
+}
+
+.hero__subtitle {
+  font-size: 1.25rem;
+  opacity: 0.85;
+  max-width: 600px;
+}
+
+/* ─── Landing page ─────────────────────────────────────── */
+
+.landing-page .navbar {
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-theme='dark'] .landing-page .navbar {
+  background: transparent;
+}
+
+/* ─── Feature cards ────────────────────────────────────── */
+
+.feature-card {
+  padding: 1.5rem;
+  border-radius: 12px;
+  background: var(--adj-bg-subtle);
+  border: 1px solid var(--adj-border);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(43, 79, 160, 0.12);
+}
+
+[data-theme='dark'] .feature-card {
+  background: var(--adj-bg-alt);
+  border-color: var(--adj-border);
+}
+
+[data-theme='dark'] .feature-card:hover {
+  box-shadow: 0 4px 16px rgba(141, 173, 238, 0.12);
+}
+
+.feature-card h3 {
+  color: var(--ifm-color-primary-darkest);
+  margin-bottom: 0.5rem;
+}
+
+[data-theme='dark'] .feature-card h3 {
+  color: var(--ifm-color-primary-lightest);
+}
+
+/* ─── Accent badge ─────────────────────────────────────── */
+
+.badge--accent {
+  background: var(--adj-accent-light);
+  color: #6b2d5a;
+  border: 1px solid var(--adj-accent);
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+[data-theme='dark'] .badge--accent {
+  background: rgba(228, 141, 191, 0.15);
+  color: var(--adj-accent-light);
+  border-color: var(--adj-accent);
+}
+
+/* ─── Sidebar ──────────────────────────────────────────── */
+
+.menu__link:hover {
+  background: var(--adj-bg-subtle);
+}
+
+[data-theme='dark'] .menu__link:hover {
+  background: var(--adj-bg-alt);
+}
+
+/* ─── Admonitions ──────────────────────────────────────── */
+
+.admonition.admonition-tip {
+  border-left-color: var(--ifm-color-primary);
+}
+
+.admonition.admonition-caution,
+.admonition.admonition-warning {
+  border-left-color: var(--adj-accent);
+}
+
+/* ─── Footer ───────────────────────────────────────────── */
+
+.footer--dark {
+  background: #0e1f3f;
+}
+
+/* ─── Code blocks ──────────────────────────────────────── */
+
+.prism-code {
+  border-radius: 8px;
+}
+
+/* ─── Navbar ───────────────────────────────────────────── */
+
+.navbar {
+  backdrop-filter: blur(8px);
+  position: sticky;
+  z-index: 300;
+}
+
+[data-theme='dark'] .navbar {
+  background: rgba(14, 31, 63, 0.85);
+}
+
+/* Ensure the mobile sidebar/dropdown stays above the 3D canvas */
+.navbar-sidebar {
+  z-index: 400;
+  /* Docusaurus v4 compat: the sidebar is position:fixed inside a
+     position:sticky navbar whose height is only 60px. The sidebar
+     inherits that height and clips its children via overflow:hidden.
+     Force it to cover the full viewport so menu items are visible. */
+  height: 100vh;
+}
+
+.navbar-sidebar__backdrop {
+  z-index: 350;
+}
+
+/* ─── Install command block ────────────────────────────── */
+
+.install-command {
+  background: var(--adj-bg-subtle);
+  border: 1px solid var(--adj-border);
+  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.9rem;
+  display: inline-block;
+}
+
+[data-theme='dark'] .install-command {
+  background: var(--adj-bg-alt);
+}

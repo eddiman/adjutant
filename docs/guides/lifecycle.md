@@ -214,7 +214,7 @@ Recovery from KILLED requires `adjutant startup` -- not `adjutant start`. `adjut
 
 ## Active Operation Tracking
 
-When a pulse or review is running, Adjutant writes a marker file at `state/active_operation.json`. This allows external clients (like the Mariposa dashboard) to observe the running state without holding open an HTTP connection.
+When a pulse or review is running, Adjutant writes a marker file at `state/active_operation.json`. This allows external clients (like the web dashboard) to observe the running state without holding open an HTTP connection.
 
 ```json
 {
@@ -233,7 +233,7 @@ The marker is created before the operation starts and removed when it finishes (
 |--------|---------|
 | `cron` | Triggered from CLI (`adjutant pulse`) or crontab |
 | `telegram` | Triggered via `/pulse` or `/reflect` → `/confirm` in Telegram |
-| `mariposa` | Triggered from the Mariposa dashboard (spawns `adjutant pulse`) |
+| `adjutant-web` | Triggered from the web dashboard (spawns `adjutant pulse`) |
 
 ### Staleness detection
 
@@ -243,7 +243,7 @@ If the marker is older than 30 minutes and the recorded PID is no longer alive, 
 
 ## Post-Operation Notifications
 
-After a successful pulse or review, Adjutant sends a Telegram notification with a summary of results. This happens automatically regardless of how the operation was triggered (CLI, crontab, Mariposa, or Telegram).
+After a successful pulse or review, Adjutant sends a Telegram notification with a summary of results. This happens automatically regardless of how the operation was triggered (CLI, crontab, adjutant-web, or Telegram).
 
 The notification includes:
 - Which KBs were checked

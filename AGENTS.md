@@ -19,43 +19,86 @@ Python-based persistent agent framework. An LLM agent receives messages via Tele
 ## Repo Map
 
 ```
-adjutant/
-├── adjutant                        # CLI shim
-├── adjutant.yaml.example           # Config template (adjutant.yaml gitignored)
-├── .env.example                    # Secrets template (.env gitignored)
-├── .opencode/agents/adjutant.md    # Main agent definition (tracked)
-├── identity/                       # Soul/heart/registry (gitignored)
-├── knowledge_bases/                # registry.yaml (gitignored)
-├── templates/kb/                   # KB scaffold templates
-├── prompts/                        # pulse.md, review.md, escalation.md
-├── src/adjutant/
-│   ├── cli.py                      # Click CLI
+adjutant/                                 # Monorepo
+├── adjutant                              # CLI shim
+├── adjutant.yaml.example                 # Config template (adjutant.yaml gitignored)
+├── .env.example                          # Secrets template (.env gitignored)
+├── .opencode/agents/adjutant.md          # Main agent definition (tracked)
+├── identity/                             # Soul/heart/registry (gitignored)
+├── knowledge_bases/                      # registry.yaml (gitignored)
+├── templates/kb/                         # KB scaffold templates
+├── prompts/                              # pulse.md, review.md, escalation.md
+├── src/adjutant/                         # Python framework
+│   ├── cli.py                            # Click CLI
 │   ├── __main__.py
-│   ├── core/                       # backend, backend_opencode, backend_claude_cli, config, env, lockfiles, logging, model, opencode, paths, platform, process
-│   ├── lib/                        # http, ndjson, claude_json
-│   ├── lifecycle/                  # control, cron, update
-│   ├── observability/              # status, usage_estimate, journal_rotate
+│   ├── core/                             # backend, backend_opencode, backend_claude_cli, config, env, lockfiles, logging, model, opencode, paths, platform, process
+│   ├── lib/                              # http, ndjson, claude_json
+│   ├── lifecycle/                        # control, cron, update
+│   ├── observability/                    # status, usage_estimate, journal_rotate
 │   ├── capabilities/
-│   │   ├── kb/                     # manage, query, run
-│   │   ├── schedule/               # install, manage, notify_wrap
-│   │   ├── screenshot/             # screenshot.py + playwright_screenshot.mjs
-│   │   ├── search/                 # search.py
-│   │   └── vision/                 # vision.py
-│   ├── news/                       # fetch → analyze → briefing pipeline
-│   ├── setup/                      # install, repair, uninstall, wizard + steps/
+│   │   ├── kb/                           # manage, query, run
+│   │   ├── schedule/                     # install, manage, notify_wrap
+│   │   ├── screenshot/                   # screenshot.py + playwright_screenshot.mjs
+│   │   ├── search/                       # search.py
+│   │   └── vision/                       # vision.py
+│   ├── news/                             # fetch → analyze → briefing pipeline
+│   ├── setup/                            # install, repair, uninstall, wizard + steps/
 │   └── messaging/
 │       ├── adaptor.py, dispatch.py
-│       └── telegram/               # chat, commands, listener, notify, photos, send, service
-├── tests/unit/                     # ~54 files, ~1139 tests
-├── tests/integration/              # lifecycle, feature gating, plist tests
-└── docs/                           # development/, architecture/, guides/
+│       └── telegram/                     # chat, commands, listener, notify, photos, send, service
+├── tests/unit/                           # ~56 files, ~1139 tests
+├── tests/integration/                    # lifecycle, feature gating, plist tests
+│
+├── web/                                  # Adjutant Web (KB explorer dashboard)
+│   ├── package.json                      # npm workspace root
+│   ├── api/                              # Express REST API (port 3020)
+│   │   ├── src/
+│   │   │   ├── index.ts                  # Express app setup, createApp(), server start
+│   │   │   ├── config.ts                 # Static config (port, host, ~/.adjutant-web paths)
+│   │   │   ├── routes/                   # config, kbs, folders, notes, assets, adjutant
+│   │   │   ├── services/                 # configService, kbService, folderService, fileNoteService, imageService, registryService
+│   │   │   ├── middleware/               # auth (session token), accessControl (read-only KBs)
+│   │   │   └── types/                    # config, kb, folder (WebSidecar), note
+│   │   ├── vitest.config.ts
+│   │   └── package.json
+│   └── app/                              # React 19 frontend (port 3021)
+│       ├── src/
+│       │   ├── App.tsx                    # Main app: routing, state orchestration
+│       │   ├── types/                    # Shared TypeScript types
+│       │   ├── hooks/                    # useKbs, useFolder, useNotes, useImages, useSettings, useAdjutant, useCanvas*
+│       │   ├── contexts/                 # EditorContext, PlacementContext
+│       │   └── components/               # Canvas, Home, Sidebar, NoteEditor, nodes/, Toolbar, etc.
+│       ├── index.html
+│       ├── vite.config.ts
+│       └── package.json
+│
+├── site/                                 # Docusaurus documentation site
+│   ├── docs -> ../docs                   # Symlink to source of truth
+│   ├── docusaurus.config.ts
+│   ├── sidebars.ts
+│   └── package.json
+│
+├── integrations/
+│   └── openwebui/                        # Open WebUI filter/pipe integration
+│       ├── adjutant_web_filter.py
+│       ├── adjutant_web_pipe.py
+│       └── README.md
+│
+├── docs/                                 # Source-of-truth documentation
+│   ├── architecture/
+│   ├── development/
+│   ├── guides/
+│   ├── plans/
+│   ├── reference/
+│   └── web/                              # Web dashboard docs
+└── pyproject.toml                        # Python build (hatchling)
 ```
 
 ---
 
 ## Never Commit
 
-Gitignored: `identity/`, `state/`, `journal/`, `insights/`, `photos/`, `screenshots/`, `.env`, `adjutant.yaml`, `knowledge_bases/registry.yaml`.
+Gitignored: `identity/`, `state/`, `journal/`, `insights/`, `photos/`, `screenshots/`, `.env`, `adjutant.yaml`, `knowledge_bases/registry.yaml`, `web/*/node_modules/`, `site/node_modules/`, `site/build/`.
 
 ---
 
@@ -161,31 +204,14 @@ Full guide: `docs/guides/knowledge-bases.md`
 
 ## Documentation
 
-Adjutant has a **separate documentation site repository**: `eddiman/adjutant-docs` (Docusaurus, deployed to GitHub Pages).
-
-A clone of the docs site repo lives at **`adjutant-docs/`** in this project root (gitignored). This allows you to update both repos in the same session without external directory permission issues.
-
-When making changes that affect user-facing behavior, **update docs in both places**:
-
-1. **This repo** (`docs/`) — the source-of-truth markdown files
-2. **`adjutant-docs/`** (local clone) — the published documentation site
-
-The docs site clone mirrors the same structure: `adjutant-docs/docs/guides/`, `adjutant-docs/docs/architecture/`, `adjutant-docs/docs/development/`, etc.
+The documentation site lives at `site/` (Docusaurus, deployed to GitHub Pages). Its `docs/` directory is a symlink to the repo's `docs/` — single source of truth, no manual mirroring.
 
 ### Workflow for docs changes
 
 1. Edit the file in `docs/` (source of truth)
-2. Apply the same change to `adjutant-docs/docs/` (the site repo clone)
-3. Commit and push the adjutant-docs changes separately:
-   ```bash
-   cd adjutant-docs && git add -A && git commit -m "docs: ..." && git push
-   ```
-
-### If the clone is missing
-
-```bash
-git clone git@github.com:eddiman/adjutant-docs.git adjutant-docs
-```
+2. The `site/` build picks it up automatically via symlink
+3. To test the site locally: `cd site && npm start`
+4. To build: `cd site && npm run build`
 
 ### Changes that require docs updates
 
@@ -194,8 +220,7 @@ git clone git@github.com:eddiman/adjutant-docs.git adjutant-docs
 - Config changes → `docs/guides/configuration.md`
 - Architecture changes → `docs/architecture/`
 - New slash commands → `docs/guides/commands.md`
-
-The docs site plan is at `docs/reference/documentation-site-plan.md`.
+- Web dashboard changes → `docs/web/`
 
 ---
 
@@ -206,13 +231,89 @@ The docs site plan is at `docs/reference/documentation-site-plan.md`.
 
 ---
 
+## Web Dashboard (`web/`)
+
+Adjutant Web is the local-first KB explorer dashboard. It discovers Adjutant-format KBs and presents them on an infinite spatial canvas.
+
+### Tech Stack
+
+- **API** (`web/api/`): Express 4.x, TypeScript ~5.3, Zod, Sharp, Vitest
+- **Frontend** (`web/app/`): React 19, React Flow (`@xyflow/react`), TipTap, Vite 7.x, CSS Modules
+
+### Commands
+
+```bash
+cd web && npm install           # Install both api + app deps (npm workspaces)
+cd web/api && npm run dev       # API on :3020 (hot reload)
+cd web/app && npm run dev       # Vite on :3021 (hot reload)
+cd web/api && npm test          # API tests (~87 tests)
+cd web/app && npx tsc -b --noEmit  # TypeScript check
+```
+
+### Data Format
+
+- `.adjutant-web.json` — sidecar files in each KB folder storing canvas positions, sections, stickies
+- `<kb>/.adjutant-web/assets/` — uploaded images (WebP + thumbnails)
+- `~/.adjutant-web/config.json` — app config (kbRoot path)
+- Notes are pure `.md` files — no frontmatter
+
+### Key Types
+
+- `WebSidecar` / `WebSidecarSchema` — the `.adjutant-web.json` root schema (items, sections, stickies, images)
+- `NoteFile` / `NoteMeta` — note data structures
+- `KbMeta` — KB metadata from `kb.yaml`
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ADJUTANT_WEB_PORT` | `3020` | API server port |
+| `ADJUTANT_WEB_HOST` | `0.0.0.0` | API server host |
+| `ADJUTANT_WEB_SESSION_TOKEN` | (none) | Session token for auth (set by Adjutant on startup) |
+| `ADJUTANT_DIR` | (auto-detected) | Adjutant root directory. In monorepo, defaults to repo root. |
+
+### Canvas Node Types
+
+| Type | Component | Description |
+|------|-----------|-------------|
+| `note` | `NoteNode` | Note card with title + TipTap preview. Double-click opens editor. |
+| `image` | `ImageNode` | Image with upload/error/ready states. Corner resize. |
+| `section` | `SectionNode` | Grouping rectangle with editable label. Resize handles. |
+| `sticky` | `StickyNode` | Colored sticky with inline text editing. 9 color variants. |
+
+### TypeScript Patterns
+
+- **Strict mode** — avoid `any` types
+- **`.js` extension** for all local imports in the API (ESM requirement)
+- **`import type`** for type-only imports
+- **CSS Modules** for all component styling
+- **Custom hooks** for data fetching — components stay presentational
+- **Optimistic updates** with debounced saves (300ms)
+- **Barrel exports** (`index.ts`) in each component directory
+
+### Adjutant Integration
+
+The web dashboard reads Adjutant's state via `registryService.ts` (resolves `ADJUTANT_DIR` → reads `knowledge_bases/registry.yaml`). The `/api/adjutant/*` routes provide lifecycle control, health checks, schedule management, and journal access — all via Adjutant's CLI or filesystem state.
+
+The `source` field in `active_operation.json` uses `"adjutant-web"` when operations are triggered from the dashboard.
+
+---
+
 ## Testing
 
 ```bash
+# Python tests
 .venv/bin/pytest tests/ -q                          # full suite (~80s, ~1160 tests)
 .venv/bin/pytest tests/unit/ -q                     # unit tests only (~75s, ~1139 tests)
 .venv/bin/pytest tests/integration/ -q              # integration tests only (~5s)
 .venv/bin/pytest tests/unit/test_kb_manage.py -q    # single file
+
+# Web dashboard tests
+cd web/api && npm test                              # API tests (~87 tests)
+cd web/app && npx tsc -b --noEmit                   # TypeScript type check
+
+# Documentation site
+cd site && npm run build                            # Docusaurus build
 ```
 
 All tests must pass before release. No CI. Full guide: `docs/development/testing.md`

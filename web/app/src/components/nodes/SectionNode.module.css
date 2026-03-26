@@ -1,0 +1,174 @@
+/* === Section Node === */
+.section-node {
+  min-width: 100px;
+  min-height: 100px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-section-bg, rgba(0, 0, 0, 0.02));
+  position: relative;
+  cursor: move;
+}
+
+.section-node.selected {
+  border-color: var(--color-primary);
+  border-style: solid;
+}
+
+/* Section colors (same as sticky) */
+.white {
+  background: rgb(255, 255, 255);
+  border-color: rgba(224, 224, 224, 0.5);
+}
+.yellow {
+  background: rgba(255, 249, 196, 1);
+  border-color: rgba(255, 235, 59, 0.5);
+}
+
+.pink {
+  background: rgba(248, 187, 208, 1);
+  border-color: rgba(233, 30, 99, 0.3);
+}
+
+.blue {
+  background: rgba(187, 222, 251, 1);
+  border-color: rgba(33, 150, 243, 0.3);
+}
+
+.green {
+  background: rgba(200, 230, 201, 1);
+  border-color: rgba(76, 175, 80, 0.3);
+}
+
+.purple {
+  background: rgba(225, 190, 231, 1);
+  border-color: rgba(156, 39, 176, 0.3);
+}
+
+.orange {
+  background: rgba(255, 224, 178, 1);
+  border-color: rgba(255, 152, 0, 0.3);
+}
+
+.mint {
+  background: rgba(178, 223, 219, 1);
+  border-color: rgba(0, 150, 136, 0.3);
+}
+
+.peach {
+  background: rgba(255, 204, 188, 1);
+  border-color: rgba(255, 87, 34, 0.3);
+}
+
+/* Section label */
+.section-label {
+  position: absolute;
+  top: var(--spacing-2);
+  left: var(--spacing-3);
+  max-width: calc(100% - var(--spacing-6));
+}
+
+.section-label-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  cursor: text;
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius);
+  background: var(--color-card);
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-label-text:hover {
+  background: var(--color-hover);
+}
+
+.section-label-input {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  padding: var(--spacing-1) var(--spacing-2);
+  border-radius: var(--radius);
+  border: 1px solid var(--color-primary);
+  background: var(--color-card);
+  outline: none;
+  min-width: 100px;
+  max-width: 100%;
+}
+
+/* Corner resize handles - rectangle anchors */
+.handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--color-primary);
+  border: 2px solid var(--color-card);
+  border-radius: 2px;
+  z-index: 10;
+  touch-action: none;
+}
+
+/* Make handles larger on touch devices */
+@media (hover: none) {
+  .handle {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+  }
+  
+  .handle-tl {
+    top: -10px;
+    left: -10px;
+  }
+  
+  .handle-tr {
+    top: -10px;
+    right: -10px;
+  }
+  
+  .handle-bl {
+    bottom: -10px;
+    left: -10px;
+  }
+  
+  .handle-br {
+    bottom: -10px;
+    right: -10px;
+  }
+}
+
+.handle-tl {
+  top: -5px;
+  left: -5px;
+  cursor: nwse-resize;
+}
+
+.handle-tr {
+  top: -5px;
+  right: -5px;
+  cursor: nesw-resize;
+}
+
+.handle-bl {
+  bottom: -5px;
+  left: -5px;
+  cursor: nesw-resize;
+}
+
+.handle-br {
+  bottom: -5px;
+  right: -5px;
+  cursor: nwse-resize;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .section-node {
+  background: var(--color-section-bg, rgba(255, 255, 255, 0.02));
+}
+
+[data-theme="dark"] .section-label-text {
+  background: var(--color-card);
+}

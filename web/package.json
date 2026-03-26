@@ -1,0 +1,5 @@
+{
+  "name": "adjutant-web",
+  "private": true,
+  "workspaces": ["api", "app"]
+}

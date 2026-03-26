@@ -1,0 +1,254 @@
+/* ==============================================
+   HOME PAGE STYLES — KB Browser
+   Uses semantic --color-home-* tokens from index.css
+   ============================================== */
+
+.home {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--spacing-6);
+  padding-top: 15vh;
+  overflow-y: auto;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-6);
+  width: 100%;
+  max-width: 44rem;
+}
+
+.title {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-5xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-home-title);
+  margin: 0;
+  text-align: center;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 16px var(--color-home-title-shadow);
+}
+
+.titleBracket {
+  font-weight: var(--font-weight-normal);
+  opacity: 0.8;
+}
+
+.subtitle {
+  font-family: var(--font-body);
+  font-size: var(--font-size-md);
+  color: var(--color-text-secondary);
+  margin: calc(-1 * var(--spacing-4)) 0 0;
+  letter-spacing: 0.5px;
+}
+
+/* === Search === */
+
+.searchWrapper {
+  width: 100%;
+  max-width: 31.25rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: var(--radius-xl);
+  box-shadow:
+    0 4px 24px color-mix(in srgb, var(--color-home-card-shadow-1) 15%, transparent),
+    0 8px 48px color-mix(in srgb, var(--color-home-card-shadow-2) 10%, transparent);
+  overflow: hidden;
+  transition: box-shadow var(--transition-smooth);
+}
+
+.searchWrapper:focus-within {
+  box-shadow:
+    0 4px 24px color-mix(in srgb, var(--color-home-card-shadow-1) 20%, transparent),
+    0 12px 64px color-mix(in srgb, var(--color-home-card-shadow-2) 15%, transparent);
+}
+
+.searchInput {
+  width: 100%;
+  border: none;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  background: transparent;
+  padding: var(--spacing-4) var(--spacing-5);
+}
+
+.searchInput::placeholder {
+  color: var(--color-placeholder);
+}
+
+.searchResults {
+  width: 100%;
+  max-width: 31.25rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+  max-height: 20rem;
+  overflow-y: auto;
+}
+
+.searchStatus {
+  padding: var(--spacing-4) var(--spacing-5);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-base);
+  margin: 0;
+}
+
+.searchResult {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  width: 100%;
+  padding: var(--spacing-3) var(--spacing-5);
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.searchResult:hover {
+  background: var(--color-home-highlight);
+}
+
+.searchResultTitle {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+}
+
+.searchResultPath {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* === KB Cards === */
+
+.kbGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--spacing-4);
+  width: 100%;
+}
+
+.kbCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  padding: var(--spacing-5);
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  text-align: left;
+  transition: all var(--transition-smooth);
+}
+
+.kbCard:hover {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.kbName {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  margin: 0;
+}
+
+.kbDescription {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.kbDate {
+  font-size: var(--font-size-xxs);
+  color: var(--color-text-muted);
+  margin-top: var(--spacing-1);
+}
+
+/* === Setup prompt (no kbRoot) === */
+
+.setupCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-4);
+  padding: var(--spacing-8);
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
+.setupText {
+  font-size: var(--font-size-base);
+  color: var(--color-text-secondary);
+  margin: 0;
+  text-align: center;
+}
+
+.setupButton {
+  padding: var(--spacing-3) var(--spacing-6);
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.setupButton:hover {
+  background: var(--color-primary-hover);
+}
+
+/* === Loading / Empty === */
+
+.loadingText,
+.emptyText {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-base);
+  padding: var(--spacing-6);
+}
+
+/* === Responsive === */
+
+@media (max-width: 37.5rem) {
+  .content {
+    gap: var(--spacing-5);
+  }
+
+  .title {
+    font-size: var(--font-size-4xl);
+  }
+
+  .kbGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 25rem) {
+  .title {
+    font-size: var(--font-size-3xl);
+  }
+}

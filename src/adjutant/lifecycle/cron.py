@@ -96,7 +96,7 @@ def run_cron_prompt(
         prompt_file: Absolute path to the prompt markdown file.
         adj_dir: Adjutant root directory.  Defaults to $ADJ_DIR.
         action: Operation name for the active-operation marker (e.g. "pulse").
-        source: Trigger source for the marker (e.g. "cron", "mariposa").
+        source: Trigger source for the marker (e.g. "cron", "adjutant-web").
 
     Raises:
         SystemExit: Always — either with the opencode exit code or 1 on error.
