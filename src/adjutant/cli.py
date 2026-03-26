@@ -666,7 +666,36 @@ def doctor(ctx: click.Context) -> None:
     click.echo()
 
     click.echo("Dependencies:")
-    for cmd in ("bash", "curl", "jq", "python3", "opencode"):
+    for cmd in ("bash", "curl", "jq", "python3"):
+        path = shutil.which(cmd)
+        if path:
+            try:
+                ver = subprocess.check_output(
+                    [cmd, "--version"], stderr=subprocess.STDOUT, text=True
+                ).splitlines()[0]
+            except Exception:  # noqa: BLE001
+                ver = "unknown version"
+            click.echo(f"  {cmd:<12} OK ({ver})")
+        else:
+            click.echo(f"  {cmd:<12} MISSING")
+
+    # Backend-aware binary checks
+    try:
+        from adjutant.core.config import load_typed_config
+
+        backend_name = load_typed_config().llm.backend
+    except Exception:  # noqa: BLE001
+        backend_name = "opencode"
+
+    if backend_name == "claude-cli":
+        for cmd in ("claude", "cloudcli"):
+            path = shutil.which(cmd)
+            if path:
+                click.echo(f"  {cmd:<12} OK ({path})")
+            else:
+                click.echo(f"  {cmd:<12} MISSING")
+    else:
+        cmd = "opencode"
         path = shutil.which(cmd)
         if path:
             try:

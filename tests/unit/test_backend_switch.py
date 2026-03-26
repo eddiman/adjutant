@@ -93,14 +93,14 @@ class TestHandleBackendSwitch:
         mock_kill.assert_called()
         assert not (adj_dir / "state" / "opencode_web.pid").exists()
 
-    def test_stops_claude_remote_when_switching_away(self, adj_dir: Path) -> None:
-        (adj_dir / "state" / "claude_remote.pid").write_text("12345")
+    def test_stops_cloudcli_when_switching_away(self, adj_dir: Path) -> None:
+        (adj_dir / "state" / "cloudcli_web.pid").write_text("12345")
 
         with patch("adjutant.lifecycle.control._kill_by_pattern") as mock_kill:
             _handle_backend_switch(adj_dir, "claude-cli", "opencode")
 
         mock_kill.assert_called()
-        assert not (adj_dir / "state" / "claude_remote.pid").exists()
+        assert not (adj_dir / "state" / "cloudcli_web.pid").exists()
 
     def test_no_crash_when_no_session_or_model(self, adj_dir: Path) -> None:
         """Switch works even when there's no session or model file."""

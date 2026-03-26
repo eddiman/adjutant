@@ -95,8 +95,8 @@ class TestClaudeCLICapabilities:
         assert caps.vision is False
         assert caps.model_listing is False
         assert caps.reaping is False
-        assert caps.web_server is False
-        assert caps.remote_session is True
+        assert caps.web_server is True
+        assert caps.remote_session is False
         assert caps.streaming is False
         assert caps.cost_tracking is True
 

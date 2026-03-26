@@ -38,7 +38,7 @@ Natural language processing and long-running agent tasks use the LLM backend. Al
 
 Two backends are supported:
 - **OpenCode** (`opencode`): Uses the OpenCode CLI with an Anthropic API key. Supports vision, streaming, model listing, and process reaping.
-- **Claude Code CLI** (`claude-cli`): Uses the Claude Code CLI with a Claude subscription. Supports cost tracking and remote sessions.
+- **Claude Code CLI** (`claude-cli`): Uses the Claude Code CLI with a Claude subscription. Supports cost tracking and a web server (CloudCLI).
 
 The backend is configured in `adjutant.yaml` under `llm.backend`. See [Backend Architecture](backends.md) for the full protocol and capability system.
 

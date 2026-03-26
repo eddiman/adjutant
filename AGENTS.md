@@ -113,6 +113,8 @@ result = await backend.run(prompt, agent="adjutant", model=model)
 
 Never import `backend_opencode` or `backend_claude_cli` directly. Never call `opencode_run()` from call sites.
 
+**Web server services:** Each backend starts a web UI for remote access. OpenCode starts `opencode web --mdns` (PID: `state/opencode_web.pid`). Claude CLI starts CloudCLI (`cloudcli --port {CLOUDCLI_PORT}`, PID: `state/cloudcli_web.pid`). Both are managed by `lifecycle/control.py` — started on `adjutant start`, killed on `adjutant kill`, watchdogged by the Telegram listener.
+
 **Check capabilities before optional features:**
 
 ```python

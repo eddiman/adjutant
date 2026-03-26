@@ -160,8 +160,9 @@ class TestCapabilitiesContract:
     def test_opencode_web_server(self) -> None:
         assert get_backend("opencode").capabilities.web_server is True
 
-    def test_claude_cli_remote_session(self) -> None:
-        assert get_backend("claude-cli").capabilities.remote_session is True
+    def test_claude_cli_web_server(self) -> None:
+        assert get_backend("claude-cli").capabilities.web_server is True
+        assert get_backend("claude-cli").capabilities.remote_session is False
 
     @pytest.mark.parametrize("backend_name", BACKENDS)
     def test_capabilities_are_frozen(self, backend_name: str) -> None:

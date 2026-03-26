@@ -119,8 +119,8 @@ class ClaudeCLIBackend:
             vision=False,
             model_listing=False,
             reaping=False,
-            web_server=False,
-            remote_session=True,
+            web_server=True,
+            remote_session=False,
             streaming=False,
             cost_tracking=True,
         )
@@ -161,9 +161,7 @@ class ClaudeCLIBackend:
             agent_file = _resolve_agent_file(agent, workdir)
             if agent_file:
                 body = _extract_prompt_body(agent_file)
-                tmp_prompt_file = tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".md", delete=False
-                )
+                tmp_prompt_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False)
                 tmp_prompt_file.write(body)
                 tmp_prompt_file.close()
                 args += ["--system-prompt-file", tmp_prompt_file.name]
@@ -297,8 +295,7 @@ class ClaudeCLIBackend:
 
         adj_log(
             "backend",
-            f"[claude-cli] run_sync completed in {elapsed:.1f}s"
-            f" | returncode={result.returncode}",
+            f"[claude-cli] run_sync completed in {elapsed:.1f}s | returncode={result.returncode}",
         )
         return result.returncode
 
@@ -309,14 +306,25 @@ class ClaudeCLIBackend:
     async def health_check(self, adj_dir: Path) -> bool:
         if not self.find_binary():
             return False
-        # Check if remote-control process is running
-        from adjutant.core.process import read_pid_file, pid_is_alive
+        # Check if CloudCLI web server is running
+        from adjutant.core.process import read_pid_file
 
-        pid_file = adj_dir / "state" / "claude_remote.pid"
+        pid_file = adj_dir / "state" / "cloudcli_web.pid"
         pid = read_pid_file(pid_file)
-        if pid is not None:
-            return pid_is_alive(pid)
-        return True  # No remote session expected
+        if pid is None:
+            return True  # No web server expected if PID file absent
+
+        # PID alive — try HTTP health endpoint
+        port = int(os.environ.get("CLOUDCLI_PORT", "3001"))
+        try:
+            import httpx
+
+            with httpx.Client(timeout=3.0) as client:
+                resp = client.get(f"http://localhost:{port}/health")
+                data = resp.json()
+                return data.get("status") == "ok"
+        except Exception:  # noqa: BLE001 — network/parse errors are a health failure
+            return False
 
     async def list_models(self) -> str:
         return (

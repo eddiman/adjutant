@@ -79,7 +79,7 @@ Wraps the existing `core/opencode.py` module. Delegates to `opencode_run()` for 
 
 Invokes `claude -p --output-format json` directly. Parses JSON output via `lib/claude_json.py`. Handles agent prompts by stripping YAML frontmatter from `.opencode/agents/*.md` and passing the body via `--system-prompt-file`.
 
-**Capabilities:** remote_session, cost_tracking.
+**Capabilities:** web_server, cost_tracking.
 
 ---
 
@@ -118,7 +118,7 @@ Logs go to `state/adjutant.log` via `adj_log("backend", ...)`.
 
 At startup, `lifecycle/control.py` compares `adjutant.yaml`'s `llm.backend` against `state/backend.txt`. On mismatch:
 
-1. Stop the old backend's service (OpenCode web or Claude remote session)
+1. Stop the old backend's service (OpenCode web or CloudCLI web server)
 2. Translate `state/telegram_model.txt` to the new backend's format
 3. Clear `state/telegram_session.json`
 4. Update `state/backend.txt`

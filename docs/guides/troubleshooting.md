@@ -125,6 +125,50 @@ On macOS, cron needs Full Disk Access to run scripts that access files outside s
 
 Check the job's log file (shown in `adjutant schedule list`). The log path is defined in the schedule's YAML config.
 
+## CloudCLI Web Server Issues
+
+### CloudCLI not found on PATH
+
+CloudCLI is the web UI for the `claude-cli` backend. Install it:
+
+```bash
+npm install -g @siteboon/claude-code-ui
+```
+
+Or set the binary path explicitly:
+
+```bash
+export CLOUDCLI_BIN=/path/to/cloudcli
+```
+
+### CloudCLI web server won't start
+
+Check the log:
+
+```bash
+cat state/cloudcli_web.log
+```
+
+Common causes:
+
+| Cause | Fix |
+|-------|-----|
+| Port already in use | Set a different port: `export CLOUDCLI_PORT=4000` |
+| Binary not found | Install CloudCLI or set `CLOUDCLI_BIN` |
+| Node.js version mismatch | CloudCLI requires Node.js 18+. Check `node --version` |
+
+### CloudCLI starts but is unreachable
+
+CloudCLI binds to `0.0.0.0` by default (all interfaces). If accessing over VPN, ensure the VPN routes traffic to the correct IP. Check:
+
+```bash
+curl http://localhost:3001/health
+```
+
+Should return `{"status":"ok",...}`.
+
+---
+
 ## Model / AI Issues
 
 ### "Model not found" errors

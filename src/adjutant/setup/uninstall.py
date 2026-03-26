@@ -94,11 +94,11 @@ def stop_processes(adj_dir: Path) -> None:
     print("\033[1mStopping processes...\033[0m", file=sys.stderr)
     print("", file=sys.stderr)
 
-    # Backend services (opencode web or claude remote-control)
+    # Backend services (opencode web or CloudCLI web)
     print("  Stopping backend services...", file=sys.stderr)
     _pkill("opencode web")
-    _pkill("claude.*remote-control")
-    for pid_name in ("opencode_web.pid", "claude_remote.pid"):
+    _pkill("cloudcli")
+    for pid_name in ("opencode_web.pid", "cloudcli_web.pid"):
         pid_file = adj_dir / "state" / pid_name
         if pid_file.is_file():
             pid_file.unlink(missing_ok=True)

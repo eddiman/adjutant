@@ -92,8 +92,8 @@ async def _poll_once(
 async def _watchdog_check_backend_service(adj_dir: Path) -> None:
     """Check if the backend service is alive; restart if dead.
 
-    Dispatches to the correct backend service (opencode web or claude
-    remote-control) based on the active backend configuration.
+    Dispatches to the correct backend service (opencode web or CloudCLI
+    web server) based on the active backend configuration.
     """
     from adjutant.core.process import read_pid_file
     from adjutant.lifecycle.control import start_backend_service
@@ -107,8 +107,8 @@ async def _watchdog_check_backend_service(adj_dir: Path) -> None:
         backend_name = "opencode"
 
     if backend_name == "claude-cli":
-        pid_file = adj_dir / "state" / "claude_remote.pid"
-        svc_name = "claude remote-control"
+        pid_file = adj_dir / "state" / "cloudcli_web.pid"
+        svc_name = "CloudCLI web server"
     else:
         pid_file = adj_dir / "state" / "opencode_web.pid"
         svc_name = "opencode web"

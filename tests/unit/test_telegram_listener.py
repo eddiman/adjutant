@@ -242,6 +242,68 @@ class TestWatchdogCheckBackendService:
         assert len(started) == 0  # No restart attempted
 
     @pytest.mark.asyncio
+    async def test_restarts_cloudcli_when_pid_stale(self, tmp_path: Path) -> None:
+        """CloudCLI PID file exists but process is dead → watchdog restarts."""
+        adj = tmp_path / ".adjutant"
+        adj.mkdir()
+        state = adj / "state"
+        state.mkdir()
+        # Write config so backend resolves to claude-cli
+        import yaml
+
+        (adj / "adjutant.yaml").write_text(yaml.dump({"llm": {"backend": "claude-cli"}}))
+        pid_file = state / "cloudcli_web.pid"
+        pid_file.write_text("99999999")  # Almost certainly dead
+
+        started = []
+
+        def fake_start(d):
+            started.append(d)
+            return "CloudCLI web server started (PID 12345)"
+
+        with (
+            patch("adjutant.core.process.read_pid_file", return_value=None),
+            patch(
+                "adjutant.lifecycle.control.start_backend_service",
+                side_effect=fake_start,
+            ),
+        ):
+            await _watchdog_check_backend_service(adj)
+
+        assert len(started) == 1
+        assert not pid_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_cloudcli_does_nothing_when_alive(self, tmp_path: Path) -> None:
+        """CloudCLI PID file exists and process alive → watchdog does nothing."""
+        adj = tmp_path / ".adjutant"
+        adj.mkdir()
+        state = adj / "state"
+        state.mkdir()
+        import yaml
+
+        (adj / "adjutant.yaml").write_text(yaml.dump({"llm": {"backend": "claude-cli"}}))
+        pid_file = state / "cloudcli_web.pid"
+        pid_file.write_text(str(os.getpid()))
+
+        started = []
+
+        def fake_start(d):
+            started.append(d)
+            return "started"
+
+        with (
+            patch("adjutant.core.process.read_pid_file", return_value=os.getpid()),
+            patch(
+                "adjutant.lifecycle.control.start_backend_service",
+                side_effect=fake_start,
+            ),
+        ):
+            await _watchdog_check_backend_service(adj)
+
+        assert len(started) == 0
+
+    @pytest.mark.asyncio
     async def test_exception_does_not_propagate(self, tmp_path: Path) -> None:
         """Errors in watchdog should be catchable by the caller."""
         adj = tmp_path / ".adjutant"
