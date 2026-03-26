@@ -327,7 +327,7 @@ Both configs are generated automatically from shared templates during scaffold c
 - **Read-write KBs**: OpenCode allows bash/edit/write but denies external directories. Claude CLI allows the same tools with hook-based `.env` protection.
 - **Vision**: Only supported on the OpenCode backend. Image file attachments return `vision_unsupported` on Claude CLI.
 
-**Nested dependencies**: Some KBs (e.g. portfolio-kb) have internal pipelines that call `opencode run` directly. Switching the main backend to Claude CLI does not affect these nested calls — they still require a working `opencode` binary and API key. Adjutant warns about this during a backend switch.
+**KB-internal LLM calls**: Some KBs (e.g. portfolio-kb) have internal pipelines that call an LLM directly via subprocess. These KBs should read the active backend from Adjutant's config (`ADJ_DIR` env var → `adjutant.yaml` → `llm.backend`) and dispatch to either `opencode` or `claude` accordingly. This ensures switching `llm.backend` in `adjutant.yaml` also switches the KB's internal LLM calls. See `docs/development/backend-guide.md` for the implementation pattern.
 
 ---
 

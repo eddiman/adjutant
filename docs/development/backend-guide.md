@@ -151,6 +151,84 @@ with patch("your_module.get_backend") as mock_gb:
 
 ---
 
+## KB-internal LLM calls
+
+Some KBs have their own Python pipelines that need to call an LLM directly (e.g. portfolio-kb's analyze pipeline generates trade signals via LLM inference). These KBs cannot use `get_backend()` — they are independent projects that don't import Adjutant's code.
+
+### Pattern: read backend from Adjutant's config
+
+KBs should discover the active backend via the `ADJ_DIR` environment variable, which Adjutant always sets when running KB operations:
+
+```python
+import os
+import re
+from pathlib import Path
+
+def _read_adjutant_backend() -> str:
+    """Read the active LLM backend from Adjutant's config."""
+    adj_dir = os.environ.get("ADJ_DIR", "").strip()
+    if not adj_dir:
+        return "opencode"  # fallback for manual invocation
+
+    config_path = Path(adj_dir) / "adjutant.yaml"
+    if not config_path.is_file():
+        return "opencode"
+
+    try:
+        text = config_path.read_text()
+        match = re.search(
+            r'^\s+backend:\s*["\']?(opencode|claude-cli)["\']?',
+            text, re.MULTILINE,
+        )
+        if match:
+            return match.group(1)
+    except OSError:
+        pass
+
+    return "opencode"
+```
+
+Note: This uses a simple regex instead of `yaml.safe_load()` to avoid requiring PyYAML as a KB dependency.
+
+### Model alias translation
+
+OpenCode and Claude CLI use different model ID formats. Embed a simple alias map:
+
+```python
+_OPENCODE_TO_CLAUDE = {
+    "anthropic/claude-haiku-4-5": "haiku",
+    "anthropic/claude-sonnet-4-6": "sonnet",
+    "anthropic/claude-opus-4-6": "opus",
+}
+```
+
+### Agent prompt handling
+
+Both backends read agent definitions from `.opencode/agents/<agent>.md`. For Claude CLI, strip the YAML frontmatter and pass the body via `--system-prompt-file`:
+
+```python
+def _extract_prompt_body(agent_file: Path) -> str:
+    content = agent_file.read_text()
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            return parts[2].strip()
+    return content
+```
+
+### Output format differences
+
+| Backend | Output format | How to parse |
+|---------|--------------|-------------|
+| OpenCode | NDJSON lines with `{"type": "text", "part": {"text": "..."}}` | Iterate lines, extract text parts |
+| Claude CLI | Single JSON `{"result": "...", "is_error": false, "cost_usd": 0.004}` | Parse once, read `.result` field |
+
+### Reference implementation
+
+See `portfolio-kb/src/pipeline/analyze.py` for a complete working example of a KB that supports both backends.
+
+---
+
 ## Adding a new backend (hypothetical)
 
 1. Create `src/adjutant/core/backend_<name>.py`

@@ -181,6 +181,18 @@ On Claude CLI, the hooks are the primary defense. They fire even when `--dangero
 
 ---
 
+## KB compatibility
+
+Switching backends is transparent for all KB interactions:
+
+- **Adjutant querying KBs** (`kb query`, `kb write`): Handled automatically by the backend abstraction in `query.py`.
+- **KB-internal LLM calls**: KBs with their own LLM pipelines (e.g. portfolio-kb's analyze pipeline) read the active backend from `adjutant.yaml` via the `ADJ_DIR` env var and dispatch to the appropriate binary. Switching `llm.backend` switches both Adjutant and KB-internal calls.
+- **Workspace configs**: Both `opencode.json` and `.claude/settings.json` are scaffolded during KB creation. When switching backends, `_handle_backend_switch()` auto-generates any missing scaffold files.
+
+See `docs/development/backend-guide.md` for the implementation pattern for KB-internal LLM calls.
+
+---
+
 ## Known behavioral differences
 
 - **Response style**: Claude CLI responses may feel different from OpenCode responses because OpenCode uses streaming (model sees partial output) while Claude CLI uses single-shot mode.
