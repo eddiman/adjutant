@@ -17,14 +17,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Fetch full history so VERSION and tags are available
           fetch-depth: 0
 
       - name: Read version from tag
         id: version
         run: |
           TAG="${GITHUB_REF_NAME}"
-          # Strip leading 'v' for the tarball name (v1.0.0 → 1.0.0)
           VERSION="${TAG#v}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -47,14 +45,19 @@ jobs:
           TARBALL="${{ steps.version.outputs.tarball }}"
           STAGING="adjutant-${TAG}"
 
-          # Create staging directory with framework files only
-          # Excludes: user-specific data, personal identity, journals,
-          #           CI artifacts, evaluation docs, and development-only files
           mkdir -p "${STAGING}"
 
+          # Include only the core adjutant package and essential files.
+          # Excludes: web dashboard, docs site, personal data, CI artifacts.
           rsync -a \
             --exclude='.git/' \
             --exclude='.github/' \
+            --exclude='web/' \
+            --exclude='site/' \
+            --exclude='integrations/' \
+            --exclude='docs/reference/' \
+            --exclude='docs/web/' \
+            --exclude='docs/plans/' \
             --exclude='adjutant.yaml' \
             --exclude='identity/soul.md' \
             --exclude='identity/heart.md' \
@@ -68,15 +71,15 @@ jobs:
             --exclude='screenshots/' \
             --exclude='.env' \
             --exclude='PAUSED' \
-            --exclude='docs/evaluation/' \
             --exclude='opencode.json' \
+            --exclude='.claude/' \
             --exclude='tmp/' \
+            --exclude='memory/' \
             . "${STAGING}/"
 
           tar -czf "${TARBALL}" "${STAGING}/"
           echo "Built ${TARBALL} ($(du -sh "${TARBALL}" | cut -f1))"
 
-          # Generate SHA256 checksum for integrity verification
           sha256sum "${TARBALL}" > "${TARBALL}.sha256"
           echo "Checksum: $(cat "${TARBALL}.sha256")"
 
@@ -109,15 +112,15 @@ jobs:
 
             ## What's included
 
-            This release contains the Adjutant framework — Python source, setup wizard, templates, and tests.
-            It does **not** include any personal identity files, journals, or configuration.
+            This release contains the Adjutant framework — Python source, setup wizard, templates, prompts, docs, and tests.
+            It does **not** include the web dashboard, docs site, personal identity files, journals, or configuration.
             The setup wizard will create those for you.
 
             ## Requirements
 
             - Python 3.11+
-            - [opencode](https://opencode.ai)
-            - Telegram bot token (optional — CLI-only mode supported)
+            - [OpenCode](https://opencode.ai) or [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)
+            - Telegram bot token
 
             See [README](https://github.com/${{ github.repository }}#readme) for full documentation.
           files: |

@@ -1,74 +1,64 @@
 # Adjutant
 
-A persistent personal agent that runs on your machine and stays in contact with you through Telegram. You send it messages — questions, commands, requests — and it responds using an LLM with full awareness of your projects and priorities.
+A persistent personal AI agent framework that runs on your machine and communicates through Telegram. Send messages, commands, and photos — Adjutant responds using LLM-powered reasoning with full awareness of your projects and knowledge bases.
 
-**Version**: 2.0.0
+Supports two LLM backends: [OpenCode](https://opencode.ai) and [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), switchable via configuration.
 
 ## What It Does
 
-- Responds to natural language queries via Telegram
-- Queries domain-specific knowledge bases via isolated sub-agents
-- Runs on-demand pulse checks (`/pulse`) and deep reflections (`/reflect`)
-- Takes screenshots, analyzes images, and searches the web
-- Stays quiet by default — no background jobs run unless you configure them
-
-Adjutant is **on-demand, not autonomous**. It responds when you message it. Proactive behaviour (project scanning, notifications) only happens when you trigger `/pulse` or `/reflect`, or if you set up a cron job yourself.
+- **Conversational AI** — natural language via Telegram, routed through OpenCode or Claude Code CLI
+- **Knowledge bases** — sandboxed sub-agent workspaces for domain-specific knowledge
+- **Scheduled jobs** — cron-based tasks that run autonomously and notify you of results
+- **Autonomous cycles** — periodic pulse and review operations with configurable notification budgets
+- **Long-term memory** — structured memory system that persists across conversations
+- **News briefings** — aggregated, LLM-ranked news from Hacker News, Reddit, and RSS
+- **Screenshots & vision** — capture and analyze web pages or images (OpenCode backend)
+- **Web search** — Brave Search API integration
+- **Web dashboard** — canvas-based KB explorer and operational dashboard
 
 ## Quick Start
 
-Adjutant can be installed anywhere — there is no hardcoded path.
-
 ```bash
-git clone https://github.com/eddiman/adjutant.git /path/to/adjutant
-cd /path/to/adjutant
+git clone https://github.com/eddiman/adjutant.git
+cd adjutant
 python3 -m venv .venv
 .venv/bin/pip install -e .
 .venv/bin/adjutant setup
 ```
 
-The setup wizard checks prerequisites, asks where Adjutant lives, prompts for your Telegram credentials, and sets up identity files.
+The setup wizard checks prerequisites, configures your LLM backend, prompts for Telegram credentials, and sets up identity files.
 
-**Requirements**: Python 3.11+, [opencode](https://opencode.ai), Telegram bot token
+**Requirements**: Python 3.11+, [OpenCode](https://opencode.ai) or [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), Telegram bot token
 
----
+## Backends
 
-## Starting & Stopping
+| | OpenCode | Claude Code CLI |
+|---|---|---|
+| Auth | Anthropic API key | Claude Pro/Team/Enterprise subscription |
+| Vision | Yes | No |
+| Cost tracking | No | Yes |
+| Model listing | Yes | No |
+| Permission modes | N/A | skip / allowlist |
+
+Switch backends by editing `adjutant.yaml`:
+
+```yaml
+llm:
+  backend: "opencode"    # or "claude-cli"
+```
+
+## Lifecycle
 
 ```bash
-adjutant start      # Start the Telegram listener
-adjutant stop       # Stop the Telegram listener
-adjutant restart    # Stop all services and start fresh
-adjutant startup    # Full startup / recovery from KILLED state
-adjutant pause      # Soft pause — listener stays up, stops processing
-adjutant resume     # Resume from pause
-adjutant kill       # Emergency shutdown — kills all processes, sets KILLED lockfile
-```
-
-After `adjutant kill`, run `adjutant startup` to recover.
-
-## Directory Structure
-
-```
-$ADJ_DIR/                       # Install directory (set by adjutant.yaml)
-├── .opencode/
-│   └── agents/
-│       └── adjutant.md        # Agent definition (tracked)
-├── adjutant                    # CLI shim
-├── adjutant.yaml               # Root marker + unified config (gitignored)
-├── opencode.json               # Workspace permissions
-├── .env                        # Secrets (gitignored)
-├── identity/                   # Identity files (gitignored)
-│   ├── soul.md                 # Identity, values, decision frameworks
-│   ├── heart.md                # Current priorities
-│   └── registry.md             # Registered projects to monitor
-├── knowledge_bases/
-│   └── registry.yaml           # Registered knowledge bases (gitignored)
-├── templates/kb/               # KB scaffold templates (tracked)
-├── prompts/                    # Pulse/review/escalation prompts (tracked)
-├── src/adjutant/               # Python source
-├── journal/                    # Daily entries (gitignored)
-├── insights/                   # Generated insights (gitignored)
-└── state/                      # Runtime state (gitignored)
+adjutant start       # Start the Telegram listener
+adjutant stop        # Stop the Telegram listener
+adjutant restart     # Restart all services
+adjutant pause       # Soft pause — listener stays up, stops processing
+adjutant resume      # Resume from pause
+adjutant kill        # Emergency shutdown
+adjutant startup     # Recovery from KILLED state
+adjutant status      # Show current state
+adjutant doctor      # Health check
 ```
 
 ## Telegram Commands
@@ -76,48 +66,64 @@ $ADJ_DIR/                       # Install directory (set by adjutant.yaml)
 | Command | What it does |
 |---------|-------------|
 | `/status` | Current state, scheduled jobs, last autonomous cycle |
-| `/pause` | Soft pause — stops processing without killing the listener |
-| `/resume` | Resume from pause |
-| `/pulse` | Quick project scan |
-| `/restart` | Restart all services |
-| `/screenshot <url>` | Take full-page screenshot |
+| `/pulse` | Quick project scan across all KBs |
 | `/reflect` | Deep reflection (requires `/confirm`) |
 | `/model` | Show or switch the active model |
-| `/kb` | List knowledge bases |
-| `/kb query <name> <question>` | Query a knowledge base |
+| `/models` | List available models |
+| `/kb list` | List knowledge bases |
+| `/kb <name> <question>` | Query a knowledge base |
 | `/search <query>` | Web search via Brave API |
+| `/screenshot <url>` | Take a full-page screenshot |
+| `/remember <text>` | Store a memory entry |
+| `/memory [query]` | Search or show memory index |
+| `/news` | Run news briefing |
+| `/schedule list` | List scheduled jobs |
+| `/pause` / `/resume` | Pause/resume processing |
 | `/help` | List all commands |
 
-Any other message is treated as natural language.
+Any other message is treated as natural language and routed to the LLM backend.
 
 ## CLI Reference
 
 | Command | What it does |
 |---------|-------------|
-| `adjutant startup` | Full startup / recovery from KILLED state |
+| `adjutant setup` | Interactive setup wizard |
 | `adjutant start` / `stop` / `restart` | Manage the Telegram listener |
 | `adjutant pause` / `resume` / `kill` | Lifecycle control |
-| `adjutant status` | Show current status |
+| `adjutant startup` | Full startup / recovery |
+| `adjutant status` / `adjutant doctor` | Status and health checks |
 | `adjutant logs` | Tail the listener log |
-| `adjutant doctor` | Check health and dependencies |
-| `adjutant notify "msg"` | Send a Telegram notification (respects daily budget) |
-| `adjutant reply "msg"` | Send a Telegram reply (Markdown, no budget cap) |
-| `adjutant screenshot <url>` | Take and send a full-page screenshot |
-| `adjutant search "query"` | Web search via Brave API |
-| `adjutant news` | Run the news briefing manually |
-| `adjutant rotate` | Archive old journal entries and rotate logs |
-| `adjutant update` | Self-update to the latest release |
-| `adjutant setup` | Interactive setup wizard |
-| `adjutant kb list` | List registered knowledge bases |
-| `adjutant kb create` | Create a new knowledge base (interactive wizard) |
-| `adjutant kb query <name> "q"` | Query a knowledge base |
-| `adjutant kb run <name> <op>` | Run a KB-local operation |
-| `adjutant kb remove <name>` | Unregister a knowledge base |
-| `adjutant kb info <name>` | Show details about a knowledge base |
-| `adjutant schedule list` | List all scheduled jobs |
-| `adjutant schedule add` | Register a new scheduled job |
-| `adjutant schedule enable/disable <name>` | Toggle a job |
-| `adjutant schedule run <name>` | Run a job immediately |
+| `adjutant notify "msg"` | Send notification (respects daily budget) |
+| `adjutant reply "msg"` | Send reply (Markdown, no budget cap) |
+| `adjutant screenshot <url>` | Take and send a screenshot |
+| `adjutant search "query"` | Web search |
+| `adjutant news` | Run news briefing |
+| `adjutant rotate` | Archive old journals and rotate logs |
+| `adjutant update` | Self-update to latest release |
+| `adjutant kb list/create/query/run/remove/info` | Knowledge base management |
+| `adjutant schedule list/add/enable/disable/run` | Schedule management |
+| `adjutant memory remember/forget/recall/digest/status` | Memory management |
+
+## Monorepo Structure
+
+```
+adjutant/
+├── src/adjutant/          # Core Python package
+├── web/                   # Web dashboard (Express + React)
+├── site/                  # Documentation site (Docusaurus)
+├── docs/                  # Documentation source
+└── .github/workflows/     # CI/CD (release, docs deploy)
+```
+
+## Documentation
+
+Full docs at [eddiman.github.io/adjutant](https://eddiman.github.io/adjutant/) — or browse `docs/` locally:
+
+- [Getting Started](docs/getting-started/installation.md)
+- [Commands](docs/guides/commands.md)
+- [Backends](docs/guides/backends.md)
+- [Knowledge Bases](docs/guides/knowledge-bases.md)
+- [Architecture](docs/architecture/overview.md)
 
 ## Philosophy
 
@@ -126,10 +132,6 @@ Any other message is treated as natural language.
 - **Cap-conservative** — uses Haiku by default, Opus only on explicit request
 - **No surprises** — surface things before they become emergencies
 - **Install anywhere** — no hardcoded paths; everything resolves from `adjutant.yaml`
-
-## Documentation
-
-Full docs in `docs/` — start with [Getting Started](docs/guides/getting-started.md).
 
 ## License
 
