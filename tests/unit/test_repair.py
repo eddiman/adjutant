@@ -144,12 +144,17 @@ class TestCheckDependencies:
         assert found == 0
 
     def test_increments_found_when_missing(self) -> None:
-        def which_side(cmd):
-            if cmd == "opencode":
-                return None
+        mock_backend = MagicMock()
+        mock_backend.name = "opencode"
+        mock_backend.find_binary.return_value = None
+
+        def which_side(cmd: str) -> str | None:
             return f"/usr/bin/{cmd}"
 
-        with patch("shutil.which", side_effect=which_side):
+        with (
+            patch("shutil.which", side_effect=which_side),
+            patch("adjutant.core.backend.get_backend", return_value=mock_backend),
+        ):
             found = _check_dependencies(0)
         assert found == 1
 
@@ -207,3 +212,50 @@ class TestRunRepair:
                         run_repair(tmp_path, dry_run=True)
         # In dry_run, adjutant.yaml should NOT be created even with Y
         assert not (tmp_path / "adjutant.yaml").is_file()
+
+
+class TestCheckScheduledJobsUsesConfigPath:
+    """schedule_count and schedule_list must receive config_path, not adj_dir."""
+
+    def test_schedule_count_receives_config_path(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock
+
+        mock_count = MagicMock(return_value=0)
+
+        with (
+            patch("adjutant.capabilities.schedule.manage.schedule_count", mock_count),
+            patch(
+                "adjutant.capabilities.schedule.manage.schedule_list",
+                MagicMock(return_value=[]),
+            ),
+            patch("adjutant.capabilities.schedule.install.install_all", MagicMock()),
+        ):
+            from adjutant.setup.repair import _check_scheduled_jobs
+
+            _check_scheduled_jobs(tmp_path, dry_run=True, issues_found=0, issues_fixed=0)
+
+        expected_config = tmp_path / "adjutant.yaml"
+        mock_count.assert_called_once_with(expected_config)
+
+    def test_schedule_list_receives_config_path(self, tmp_path: Path) -> None:
+        from unittest.mock import MagicMock
+
+        mock_count = MagicMock(return_value=1)
+        mock_list = MagicMock(return_value=[{"name": "myjob", "enabled": True}])
+
+        with (
+            patch("adjutant.capabilities.schedule.manage.schedule_count", mock_count),
+            patch("adjutant.capabilities.schedule.manage.schedule_list", mock_list),
+            patch("adjutant.capabilities.schedule.install.install_all", MagicMock()),
+            patch(
+                "subprocess.run",
+                MagicMock(return_value=MagicMock(stdout="", returncode=0)),
+            ),
+            patch("builtins.input", return_value="n"),
+        ):
+            from adjutant.setup.repair import _check_scheduled_jobs
+
+            _check_scheduled_jobs(tmp_path, dry_run=True, issues_found=0, issues_fixed=0)
+
+        expected_config = tmp_path / "adjutant.yaml"
+        mock_list.assert_called_once_with(expected_config)

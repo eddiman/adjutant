@@ -32,12 +32,11 @@ if TYPE_CHECKING:
 
 @dataclass
 class WizardContext:
-    """Shared state bag passed through wizard steps.
+    """Shared state bag read after all steps complete.
 
-    Replaces the module-level ``WIZARD_*`` globals that were previously
-    scattered across messaging.py, features.py, and autonomy.py.
-    Step functions can still write to their module-level globals for
-    backward compatibility, but the context is the canonical source.
+    Steps write to their own module-level ``WIZARD_*`` globals.  After the
+    step loop finishes, the orchestrator syncs those globals into this context
+    so that the completion banner has a single place to read from.
     """
 
     # messaging
@@ -365,25 +364,25 @@ def run_wizard(adj_dir: Path | None = None, *, dry_run: bool = False, repair: bo
             "Run full setup from scratch",
         )
         if choice == 1:
-            _run_repair(adj_dir)
+            _run_repair(adj_dir, dry_run=dry_run)
             return
 
     _run_fresh_setup(adj_dir, dry_run=dry_run)
 
 
-def _run_repair(adj_dir: Path | None) -> None:
+def _run_repair(adj_dir: Path | None, *, dry_run: bool = False) -> None:
     """Delegate to repair module."""
     if adj_dir is None:
         wiz_warn("No adjutant directory found — running fresh setup instead.")
-        _run_fresh_setup(adj_dir)
+        _run_fresh_setup(adj_dir, dry_run=dry_run)
         return
     try:
         from adjutant.setup.repair import run_repair
 
-        run_repair(adj_dir)
+        run_repair(adj_dir, dry_run=dry_run)
     except ImportError:
         wiz_warn("Repair module not yet implemented — running fresh setup instead.")
-        _run_fresh_setup(adj_dir)
+        _run_fresh_setup(adj_dir, dry_run=dry_run)
 
 
 def _run_fresh_setup(adj_dir: Path | None, *, dry_run: bool = False) -> None:
@@ -412,7 +411,7 @@ def _run_fresh_setup(adj_dir: Path | None, *, dry_run: bool = False) -> None:
         try:
             from adjutant.setup.steps.install_path import step_install_path
 
-            adj_dir = step_install_path()
+            adj_dir = step_install_path(dry_run=dry_run)
             if adj_dir is None:
                 wiz_fail("Installation path setup failed.")
                 raise SystemExit(1)
@@ -421,6 +420,14 @@ def _run_fresh_setup(adj_dir: Path | None, *, dry_run: bool = False) -> None:
             adj_dir = Path.home() / ".adjutant"
 
     ensure_config(adj_dir, dry_run=dry_run)
+
+    # Step 3: Backend selection
+    try:
+        from adjutant.setup.steps.backend import step_backend
+
+        step_backend(adj_dir, dry_run=dry_run)
+    except (ImportError, NotImplementedError):
+        wiz_warn("Backend step not available — skipping")
 
     ctx = WizardContext()
 

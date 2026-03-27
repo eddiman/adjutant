@@ -160,7 +160,7 @@ def step_autonomy(adj_dir: Path, *, dry_run: bool = False) -> bool:
     """
     global WIZARD_HEARTBEAT_ENABLED, WIZARD_HEARTBEAT_MAX_PER_DAY
 
-    wiz_step(7, 7, "Heartbeat Configuration")
+    wiz_step(8, 8, "Heartbeat Configuration")
     print("", file=sys.stderr)
 
     print(
@@ -210,7 +210,11 @@ def step_autonomy(adj_dir: Path, *, dry_run: bool = False) -> bool:
         f"  {BOLD}Notification budget{RESET} (hard limit: sends are blocked once this is reached)",
         file=sys.stderr,
     )
-    budget_input = wiz_input("Maximum notifications per day", "3")
+    budget_input = wiz_input(
+        "Max proactive notifications per day"
+        " (pulse/review only — does not limit replies to your messages)",
+        "3",
+    )
     try:
         WIZARD_HEARTBEAT_MAX_PER_DAY = int(budget_input or "3")
     except ValueError:

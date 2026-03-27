@@ -375,7 +375,8 @@ def _check_scheduled_jobs(
             schedule_list,
         )
 
-        count = schedule_count(adj_dir)
+        config_path = adj_dir / "adjutant.yaml"
+        count = schedule_count(config_path)
         if count == 0:
             wiz_info("Scheduled jobs: none registered")
             return issues_found, issues_fixed
@@ -392,7 +393,7 @@ def _check_scheduled_jobs(
         except Exception:  # noqa: BLE001 — fallback to empty crontab
             crontab_text = ""
 
-        schedules = schedule_list(adj_dir)
+        schedules = schedule_list(config_path)
         missing = 0
         for sched in schedules:
             if not sched.get("enabled", False):

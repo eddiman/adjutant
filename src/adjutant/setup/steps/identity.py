@@ -380,7 +380,7 @@ def step_identity(adj_dir: Path, *, dry_run: bool = False) -> bool:
     Returns:
         True always (identity is optional; falls back to templates on any failure).
     """
-    wiz_step(3, 7, "Identity Setup")
+    wiz_step(4, 8, "Identity Setup")
     print("", file=sys.stderr)
 
     identity_dir = adj_dir / "identity"

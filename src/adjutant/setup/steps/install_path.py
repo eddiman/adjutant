@@ -51,7 +51,7 @@ def step_install_path(
         Path to the chosen (and possibly created) installation directory,
         or None if the user cancelled.
     """
-    wiz_step(2, 7, "Installation Path")
+    wiz_step(2, 8, "Installation Path")
     print("", file=sys.stderr)
 
     # Existing install detected

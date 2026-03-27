@@ -318,7 +318,7 @@ def step_service(adj_dir: Path, *, dry_run: bool = False) -> bool:
     Returns:
         True always.
     """
-    wiz_step(6, 7, "Service Installation")
+    wiz_step(7, 8, "Service Installation")
     print("", file=sys.stderr)
 
     os_name = detect_os()

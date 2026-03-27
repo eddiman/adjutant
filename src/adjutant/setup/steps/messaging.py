@@ -183,7 +183,8 @@ def _get_chat_id(dry_run: bool = False) -> bool:
     print("  2. I'll check for it automatically", file=sys.stderr)
     print("", file=sys.stderr)
 
-    if wiz_confirm("Ready? (press Enter after sending a message to the bot)", "Y"):
+    wiz_info("Send any message to your bot in Telegram now.")
+    if wiz_confirm("Done sending? (I'll check for your chat ID)", "Y"):
         if dry_run:
             WIZARD_TELEGRAM_CHAT_ID = "0"
             wiz_ok("[DRY RUN] Would auto-detect chat ID (using placeholder 0)")
@@ -282,7 +283,7 @@ def step_messaging(adj_dir: Path, *, dry_run: bool = False) -> bool:
         True on success or skip; False if setup failed.
     """
     global WIZARD_TELEGRAM_TOKEN, WIZARD_TELEGRAM_CHAT_ID, WIZARD_TELEGRAM_ENABLED
-    wiz_step(4, 7, "Messaging — Telegram Setup")
+    wiz_step(5, 8, "Messaging — Telegram Setup")
     print("", file=sys.stderr)
 
     # Top-level skip

@@ -96,7 +96,7 @@ def step_prerequisites() -> bool:
     Returns:
         True if all required deps are present; False otherwise.
     """
-    wiz_step(1, 7, "Prerequisites Check")
+    wiz_step(1, 8, "Prerequisites Check")
     print("", file=sys.stderr)
 
     required_deps = ["bash", "curl", "jq", "python3"]

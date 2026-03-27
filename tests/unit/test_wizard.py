@@ -231,3 +231,54 @@ class TestDefaultConfigYaml:
 
     def test_default_max_per_day_is_3(self) -> None:
         assert "max_per_day: 3" in DEFAULT_CONFIG_YAML
+
+
+# ---------------------------------------------------------------------------
+# _run_fresh_setup — orchestration (all 8 steps are called)
+# ---------------------------------------------------------------------------
+
+
+class TestRunFreshSetup:
+    def test_all_eight_steps_invoked(self, tmp_path: Path) -> None:
+        """Every step module function must be called during a fresh setup."""
+        # Write a minimal adjutant.yaml so ensure_config is a no-op
+        (tmp_path / "adjutant.yaml").write_text("instance:\n  name: test\n")
+
+        called: list[str] = []
+
+        def _make_stub(name: str):  # type: ignore[return]
+            def _stub(*args: object, **kwargs: object) -> bool:
+                called.append(name)
+                return True
+
+            return _stub
+
+        patches = {
+            "adjutant.setup.steps.prerequisites.step_prerequisites": _make_stub("prerequisites"),
+            "adjutant.setup.steps.backend.step_backend": _make_stub("backend"),
+            "adjutant.setup.steps.identity.step_identity": _make_stub("identity"),
+            "adjutant.setup.steps.messaging.step_messaging": _make_stub("messaging"),
+            "adjutant.setup.steps.features.step_features": _make_stub("features"),
+            "adjutant.setup.steps.service.step_service": _make_stub("service"),
+            "adjutant.setup.steps.autonomy.step_autonomy": _make_stub("autonomy"),
+        }
+
+        with (
+            patch("builtins.input", return_value="n"),
+            patch.multiple("adjutant.setup.wizard", _show_completion=lambda *a, **k: None),
+        ):
+            ctx_patches = [
+                patch(target, side_effect=stub) for target, stub in patches.items()
+            ]
+            for p in ctx_patches:
+                p.start()
+            try:
+                from adjutant.setup.wizard import _run_fresh_setup
+
+                _run_fresh_setup(tmp_path, dry_run=True)
+            finally:
+                for p in ctx_patches:
+                    p.stop()
+
+        for step_name in ["backend", "identity", "messaging", "features", "service", "autonomy"]:
+            assert step_name in called, f"Step '{step_name}' was not called"

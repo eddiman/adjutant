@@ -11,20 +11,21 @@ src/adjutant/setup/
 ├── repair.py          # Repair path — health checks and fix actions
 ├── uninstall.py       # Uninstall logic
 └── steps/
-    ├── prerequisites.py   # Step 0: read-only checks (no side effects)
-    ├── install_path.py    # Step 1: resolve/create install directory
-    ├── identity.py        # Step 2: soul.md, heart.md, registry.md
-    ├── messaging.py       # Step 3/4: Telegram token + chat ID, .env write
-    ├── features.py        # Step 5: news_config.json
-    ├── service.py         # Step 6: chmod, rc-file alias, launchd/systemd/cron
-    ├── autonomy.py        # Step 7: heartbeat.enabled, schedule entries
+    ├── prerequisites.py   # Step 1: read-only dependency checks (no side effects)
+    ├── install_path.py    # Step 2: resolve/create install directory
+    ├── backend.py         # Step 3: LLM backend selection, writes llm.backend to adjutant.yaml
+    ├── identity.py        # Step 4: soul.md, heart.md, registry.md
+    ├── messaging.py       # Step 5: Telegram token + chat ID, .env write
+    ├── features.py        # Step 6: news_config.json, feature flags in adjutant.yaml
+    ├── service.py         # Step 7: chmod, rc-file alias, launchd/systemd/cron
+    ├── autonomy.py        # Step 8: heartbeat.enabled, schedule entries
     ├── kb_wizard.py       # KB creation sub-wizard (called from wizard.py)
     └── schedule_wizard.py # Schedule add sub-wizard
 ```
 
 ### Execution paths
 
-- **Fresh install** (`ADJ_DIR` unset or pointing to a non-existent directory): runs all steps.
+- **Fresh install** (`ADJ_DIR` unset or pointing to a non-existent directory): runs all 8 steps in order.
 - **Repair** (existing install detected): runs health checks and offers to fix each issue found.
 
 ---
@@ -36,10 +37,12 @@ All interactive UI is funnelled through helper functions. These write prompt tex
 | Function | What it does |
 |---|---|
 | `wiz_confirm(prompt, default)` | Yes/No prompt — returns `True`/`False` |
-| `wiz_choose(prompt, options)` | Select from a list — returns chosen item |
+| `wiz_choose(prompt, *options)` | Select from a numbered list — returns 1-based index |
 | `wiz_input(prompt, default)` | Free-text input — returns entered string |
 | `wiz_multiline(prompt)` | Multi-line input — returns full text block |
 | `wiz_secret(prompt)` | Hidden input (no echo) — returns secret string |
+
+> **Note:** `wiz_choose` returns a **1-based** index (minimum 1). Always compare against `1`, `2`, etc. — never `0`.
 
 ---
 
@@ -55,15 +58,14 @@ adjutant setup --dry-run
 
 | Category | Normal | Dry-run |
 |---|---|---|
-| Prompts | Interactive | Auto-accept defaults (UI text still shown) |
+| Prompts | Interactive | Interactive (unchanged) |
 | Filesystem writes | Executed | Suppressed; `[DRY RUN] Would: ...` printed inline |
 | `chmod` calls | Executed | Suppressed; printed inline |
 | HTTP calls | Executed | Suppressed; printed inline |
-| claude run | Executed | Suppressed; printed inline |
+| LLM run | Executed | Suppressed; printed inline |
 | rc-file appends | Executed | Suppressed; printed inline |
 | launchctl/systemctl | Executed | Suppressed; printed inline |
 | crontab edits | Executed | Suppressed; printed inline |
-| Completion banner | Normal text | `[DRY RUN] Simulation complete. No changes were made.` |
 
 ### Guard pattern for side-effectful actions
 
@@ -71,7 +73,7 @@ Every action that would modify the filesystem, network, or system config is wrap
 
 ```python
 if dry_run:
-    print(f"[DRY RUN] Would: write {target_file}")
+    wiz_info(f"[DRY RUN] Would write {target_file}")
 else:
     target_file.write_text(content)
 ```

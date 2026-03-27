@@ -182,7 +182,7 @@ def step_features(adj_dir: Path, *, dry_run: bool = False) -> bool:
     global WIZARD_FEATURES_NEWS, WIZARD_FEATURES_SCREENSHOT
     global WIZARD_FEATURES_VISION, WIZARD_FEATURES_SEARCH, WIZARD_FEATURES_USAGE
 
-    wiz_step(5, 7, "Features")
+    wiz_step(6, 8, "Features")
     print("", file=sys.stderr)
 
     # ── News briefing ────────────────────────────────────────────────────────
@@ -249,7 +249,11 @@ def step_features(adj_dir: Path, *, dry_run: bool = False) -> bool:
         WIZARD_FEATURES_VISION = False
         wiz_info("Vision disabled (requires Telegram)")
     else:
-        if wiz_confirm("Enable vision capability? (analyze photos sent to bot)", "Y"):
+        if wiz_confirm(
+            "Enable vision capability?"
+            " (send photos to bot for AI analysis — requires a multimodal model)",
+            "Y",
+        ):
             WIZARD_FEATURES_VISION = True
             wiz_ok("Vision enabled")
         else:
@@ -295,7 +299,11 @@ def step_features(adj_dir: Path, *, dry_run: bool = False) -> bool:
     print("", file=sys.stderr)
 
     # ── Usage tracking ───────────────────────────────────────────────────────
-    if wiz_confirm("Enable usage tracking?", "Y"):
+    if wiz_confirm(
+        "Enable usage tracking?"
+        " (logs token counts per session to state/usage.json — no data leaves your machine)",
+        "Y",
+    ):
         WIZARD_FEATURES_USAGE = True
         wiz_ok("Usage tracking enabled")
     else:

@@ -1,4 +1,4 @@
-"""Setup wizard: backend selection step.
+"""Setup wizard: backend selection step (Step 3 of 8).
 
 Asks the user which LLM backend to use (OpenCode or Claude CLI) and,
 if Claude CLI, which permission mode. Writes the selection to
@@ -8,9 +8,37 @@ adjutant.yaml under llm.backend and llm.permission_mode.
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
-from adjutant.setup.wizard import wiz_choose, wiz_ok, wiz_step, wiz_warn
+from adjutant.setup.wizard import wiz_choose, wiz_info, wiz_ok, wiz_step, wiz_warn
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _write_backend_to_yaml(adj_dir: Path, result: dict[str, str]) -> None:
+    """Write llm.backend (and optionally llm.permission_mode) to adjutant.yaml."""
+    config_path = adj_dir / "adjutant.yaml"
+    if not config_path.is_file():
+        return
+    try:
+        import yaml
+
+        with open(config_path) as f:
+            data = yaml.safe_load(f)
+        if not isinstance(data, dict):
+            return
+        llm = data.setdefault("llm", {})
+        if not isinstance(llm, dict):
+            data["llm"] = {}
+            llm = data["llm"]
+        llm["backend"] = result["backend"]
+        if "permission_mode" in result:
+            llm["permission_mode"] = result["permission_mode"]
+        with open(config_path, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    except Exception:  # noqa: BLE001 — best-effort config write
+        pass
 
 
 def step_backend(adj_dir: Path, *, dry_run: bool = False) -> dict[str, str]:
@@ -19,7 +47,7 @@ def step_backend(adj_dir: Path, *, dry_run: bool = False) -> dict[str, str]:
     Returns:
         Dict with keys 'backend' and optionally 'permission_mode'.
     """
-    wiz_step(2, 7, "LLM Backend")
+    wiz_step(3, 8, "LLM Backend")
     print("", file=sys.stderr)
 
     choice = wiz_choose(
@@ -30,7 +58,7 @@ def step_backend(adj_dir: Path, *, dry_run: bool = False) -> dict[str, str]:
 
     result: dict[str, str] = {}
 
-    if choice == 0:
+    if choice == 1:
         result["backend"] = "opencode"
         wiz_ok("Backend: OpenCode")
     else:
@@ -44,7 +72,7 @@ def step_backend(adj_dir: Path, *, dry_run: bool = False) -> dict[str, str]:
             "Skip all permissions (default, recommended) — non-interactive, hooks guard .env",
             "Use allowlist — .claude/settings.json deny rules stay active",
         )
-        if perm_choice == 0:
+        if perm_choice == 1:
             result["permission_mode"] = "skip"
             wiz_ok("Permission mode: skip (hooks are primary defense)")
         else:
@@ -57,6 +85,11 @@ def step_backend(adj_dir: Path, *, dry_run: bool = False) -> dict[str, str]:
         backend = get_backend("claude-cli")
         if not backend.find_binary():
             wiz_warn("claude binary not found — install Claude Code CLI before use")
+
+    if dry_run:
+        wiz_info(f"[DRY RUN] Would write llm.backend: {result['backend']} to adjutant.yaml")
+    else:
+        _write_backend_to_yaml(adj_dir, result)
 
     print("", file=sys.stderr)
     return result
