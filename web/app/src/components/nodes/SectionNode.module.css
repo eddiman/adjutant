@@ -59,12 +59,33 @@
   border-color: rgba(255, 87, 34, 0.3);
 }
 
+/* Directory-backed section styling */
+.directory-section {
+  border-style: solid;
+  border-width: 1.5px;
+  border-color: var(--color-border);
+}
+
+.directory-section.selected {
+  border-color: var(--color-primary);
+  border-width: 2px;
+}
+
+/* Folder icon in label */
+.folder-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  margin-right: var(--spacing-1);
+}
+
 /* Section label */
 .section-label {
   position: absolute;
   top: var(--spacing-2);
   left: var(--spacing-3);
   max-width: calc(100% - var(--spacing-6));
+  display: flex;
+  align-items: center;
 }
 
 .section-label-text {

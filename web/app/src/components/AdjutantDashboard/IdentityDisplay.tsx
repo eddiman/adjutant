@@ -17,7 +17,7 @@ export function IdentityDisplay({ identity }: IdentityDisplayProps) {
   if (!identity) {
     return (
       <div className={styles.card}>
-        <h2 className={styles.cardTitle}>Identity</h2>
+        <h3 className={styles.cardTitle}>Identity</h3>
         <p className={styles.loading}>Loading...</p>
       </div>
     );
@@ -28,7 +28,7 @@ export function IdentityDisplay({ identity }: IdentityDisplayProps) {
   if (!hasAnyContent) {
     return (
       <div className={styles.card}>
-        <h2 className={styles.cardTitle}>Identity</h2>
+        <h3 className={styles.cardTitle}>Identity</h3>
         <p className={styles.empty}>No identity files found</p>
       </div>
     );
@@ -47,27 +47,19 @@ export function IdentityDisplay({ identity }: IdentityDisplayProps) {
 
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Identity</h2>
-
-      <div className={styles.tabs}>
-        <button
-          className={`${styles.tab} ${activeTab === 'soul' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('soul')}
-        >
-          Soul
-        </button>
-        <button
-          className={`${styles.tab} ${activeTab === 'heart' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('heart')}
-        >
-          Heart
-        </button>
-        <button
-          className={`${styles.tab} ${activeTab === 'registry' ? styles.tabActive : ''}`}
-          onClick={() => setActiveTab('registry')}
-        >
-          Registry
-        </button>
+      <div className={styles.header}>
+        <h3 className={styles.cardTitle}>Identity</h3>
+        <div className={styles.tabs}>
+          {(['soul', 'heart', 'registry'] as const).map(tab => (
+            <button
+              key={tab}
+              className={`${styles.tab} ${activeTab === tab ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className={styles.content}>

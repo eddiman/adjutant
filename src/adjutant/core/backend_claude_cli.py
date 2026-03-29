@@ -117,7 +117,7 @@ class ClaudeCLIBackend:
     def capabilities(self) -> BackendCapabilities:
         return BackendCapabilities(
             vision=True,
-            model_listing=False,
+            model_listing=True,
             reaping=False,
             web_server=True,
             remote_session=False,
@@ -328,12 +328,7 @@ class ClaudeCLIBackend:
             return False
 
     async def list_models(self) -> str:
-        return (
-            "Available models (Claude CLI):\n"
-            "  haiku   — Claude Haiku 4.5 (fast, cheap)\n"
-            "  sonnet  — Claude Sonnet 4.6 (balanced)\n"
-            "  opus    — Claude Opus 4.6 (most capable)\n"
-        )
+        return "haiku\nsonnet\nopus"
 
     def find_binary(self) -> str | None:
         try:

@@ -81,6 +81,8 @@ export interface NoteFile {
   tags: string[];
   position?: Position;
   section?: string;
+  preview?: string;
+  dirPath?: string;
   size: number;
   mtime: string;
 }
@@ -110,6 +112,7 @@ export interface SectionData {
   width: number;
   height: number;
   color?: string;
+  dirPath?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,6 +124,7 @@ export interface Section {
   width: number;
   height: number;
   color?: string;
+  dirPath?: string;
   position?: Position;
   createdAt: string;
   updatedAt: string;
@@ -179,4 +183,40 @@ export interface Settings {
   snapToObject: boolean;
   showSnapLines: boolean;
   kbRoot?: string;
+}
+
+// === Explorer (server-side folder browsing) ===
+
+export interface DirectoryEntry {
+  name: string;
+  path: string;
+  hasChildren: boolean;
+}
+
+export interface ExplorerRoots {
+  roots: { path: string; label: string }[];
+  home: string;
+  current?: string;
+}
+
+export interface KbRootValidation {
+  valid: boolean;
+  kbCount: number;
+  kbNames: string[];
+}
+
+// === Recursive folder types ===
+
+export interface RecursiveFolderEntry extends FolderEntry {
+  relativePath: string;
+  preview?: string;
+  children?: RecursiveFolderEntry[];
+  meta?: WebSidecar;
+}
+
+export interface RecursiveFolderListing {
+  kb: string;
+  path: string;
+  entries: RecursiveFolderEntry[];
+  meta: WebSidecar;
 }

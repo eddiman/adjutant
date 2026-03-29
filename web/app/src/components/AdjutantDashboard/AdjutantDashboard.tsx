@@ -15,7 +15,6 @@ interface AdjutantDashboardProps {
 }
 
 export function AdjutantDashboard({ sidebarOpen = false, data }: AdjutantDashboardProps) {
-  // Guard for HMR / undefined race conditions
   if (!data) return null;
 
   const {
@@ -40,7 +39,6 @@ export function AdjutantDashboard({ sidebarOpen = false, data }: AdjutantDashboa
       <div className={dashboardClass}>
         <AnimatedBackground />
         <div className={styles.content}>
-          <h1 className={styles.title}>Adjutant Dashboard</h1>
           <p className={styles.loading}>Loading...</p>
         </div>
       </div>
@@ -52,7 +50,9 @@ export function AdjutantDashboard({ sidebarOpen = false, data }: AdjutantDashboa
       <div className={dashboardClass}>
         <AnimatedBackground />
         <div className={styles.content}>
-          <h1 className={styles.title}>Adjutant Dashboard</h1>
+          <nav className={styles.topNav}>
+            <h1 className={styles.logo}>Adjutant</h1>
+          </nav>
           <div className={styles.error}>
             <p>{error || 'Adjutant integration not available'}</p>
             <p className={styles.errorHint}>
@@ -68,32 +68,49 @@ export function AdjutantDashboard({ sidebarOpen = false, data }: AdjutantDashboa
     <div className={dashboardClass}>
       <AnimatedBackground />
       <div className={styles.content}>
-        <header className={styles.header}>
-          <h1 className={styles.title}>
-            <span className={styles.titleBracket}>&lt;</span>
-            Adjutant
-            <span className={styles.titleBracket}>&gt;</span>
-          </h1>
-          <p className={styles.subtitle}>Agent Control Center</p>
-        </header>
+        <nav className={styles.topNav}>
+          <h1 className={styles.logo}>Adjutant</h1>
+          <div className={styles.navTabs}>
+            <button className={`${styles.navTab} ${styles.navTabActive}`}>Pulse</button>
+            <button className={styles.navTab}>Schedules</button>
+            <button className={styles.navTab}>System Logs</button>
+          </div>
+          <div className={styles.navSpacer} />
+          <div className={styles.navIcons}>
+            <button className={styles.navIcon} title="Settings">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+              </svg>
+            </button>
+          </div>
+        </nav>
 
-        <div className={styles.grid}>
-          <SystemStatus status={status} />
-          <QuickActions
-            lifecycleState={status.lifecycleState}
-            actionStates={actionStates}
-            onAction={runLifecycleAction}
-          />
-          <LastPulse heartbeat={status.lastHeartbeat} />
-          <HealthChecks health={health} onRefresh={fetchHealth} />
-          <SchedulesManager
-            schedules={schedules}
-            onToggle={handleScheduleToggle}
-            onRun={handleScheduleRun}
-          />
-          <IdentityDisplay identity={identity} />
-          <ActivityFeed entries={journalEntries} />
+        <div className={styles.columns}>
+          {/* Left: Hero status + Findings feed + Identity */}
+          <div className={styles.mainColumn}>
+            <SystemStatus status={status} />
+            <ActivityFeed entries={journalEntries} />
+            <IdentityDisplay identity={identity} />
+          </div>
+
+          {/* Right: Telemetry, actions, pulse, schedules */}
+          <div className={styles.sideColumn}>
+            <HealthChecks health={health} onRefresh={fetchHealth} />
+            <QuickActions
+              lifecycleState={status.lifecycleState}
+              actionStates={actionStates}
+              onAction={runLifecycleAction}
+            />
+            <LastPulse heartbeat={status.lastHeartbeat} />
+            <SchedulesManager
+              schedules={schedules}
+              onToggle={handleScheduleToggle}
+              onRun={handleScheduleRun}
+            />
+          </div>
         </div>
+
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ export interface SectionNodeData extends Section {
   onRename?: (slug: string, name: string) => void;
   onColorChange?: (slug: string, color: StickyColor) => void;
   isPanMode?: boolean;
+  isDirectory?: boolean;
   [key: string]: unknown;
 }
 
@@ -176,10 +177,11 @@ function SectionNodeComponent({ data, selected }: SectionNodeProps) {
 
   const handleNameClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!data.isPanMode) {
+    // Don't allow inline rename for directory sections
+    if (!data.isPanMode && !data.isDirectory) {
       setIsEditing(true);
     }
-  }, [data.isPanMode]);
+  }, [data.isPanMode, data.isDirectory]);
 
   const handleNameBlur = useCallback(() => {
     setIsEditing(false);
@@ -200,11 +202,12 @@ function SectionNodeComponent({ data, selected }: SectionNodeProps) {
 
   // Get the CSS color class if using a preset color
   const colorClass = data.color && styles[data.color as StickyColor] ? styles[data.color as StickyColor] : '';
+  const dirClass = data.isDirectory ? styles['directory-section'] : '';
 
   return (
     <div
       ref={nodeRef}
-      className={`${styles['section-node']} ${colorClass} ${selected ? styles.selected : ''}`}
+      className={`${styles['section-node']} ${colorClass} ${dirClass} ${selected ? styles.selected : ''}`}
       style={{
         width: currentSize.width,
         height: currentSize.height,
@@ -220,6 +223,11 @@ function SectionNodeComponent({ data, selected }: SectionNodeProps) {
           transformOrigin: 'top left',
         }}
       >
+        {data.isDirectory && (
+          <svg className={styles['folder-icon']} width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3.879a1.5 1.5 0 0 1 1.06.44l1.122 1.12A1.5 1.5 0 0 0 9.62 4H13.5A1.5 1.5 0 0 1 15 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9z" />
+          </svg>
+        )}
         {isEditing ? (
           <input
             type="text"

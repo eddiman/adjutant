@@ -1,10 +1,9 @@
 .card {
-  background: var(--color-surface);
+  background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
+  border-radius: var(--radius-lg);
   padding: var(--spacing-6);
   box-shadow: var(--shadow-sm);
-  grid-column: 1 / -1; /* Full width */
 }
 
 [data-theme="bauhaus"] .card {
@@ -13,60 +12,156 @@
   box-shadow: none;
 }
 
-.cardTitle {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  margin: 0 0 var(--spacing-4) 0;
-  color: var(--color-text-primary);
-  font-family: var(--font-heading);
+/* ===== Header ===== */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-5);
 }
 
-.count {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  font-weight: var(--font-weight-normal);
+.cardTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  font-style: italic;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.liveTag {
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
 }
 
 .empty {
   text-align: center;
-  padding: var(--spacing-4);
+  padding: var(--spacing-8);
   color: var(--color-text-secondary);
 }
 
+/* ===== Feed ===== */
+
 .feed {
-  max-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 520px;
   overflow-y: auto;
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
-  padding: var(--spacing-3);
 }
 
-[data-theme="bauhaus"] .feed {
-  border-radius: 0;
-}
+/* ===== Entry ===== */
 
 .entry {
   display: flex;
-  gap: var(--spacing-2);
-  padding: var(--spacing-2);
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-xs);
-  line-height: 1.5;
-  color: var(--color-text-primary);
-  border-bottom: 1px solid var(--color-border);
+  gap: var(--spacing-4);
+  padding: var(--spacing-5) 0;
+  border-bottom: 1px solid var(--color-border-light);
+  align-items: flex-start;
 }
 
 .entry:last-child {
   border-bottom: none;
 }
 
-.entryDot {
-  color: var(--color-primary);
+.entryIcon {
   flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
 }
 
-.entryText {
+[data-theme="bauhaus"] .entryIcon {
+  border-radius: 0;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-text-muted);
+}
+
+[data-theme="bauhaus"] .dot {
+  border-radius: 0;
+}
+
+.entryContent {
   flex: 1;
-  word-wrap: break-word;
+  min-width: 0;
+}
+
+.entryMeta {
+  margin-bottom: var(--spacing-1);
+}
+
+.entryComponent {
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.entryMessage {
+  margin: 0 0 var(--spacing-2) 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  line-height: var(--line-height-normal);
+  word-break: break-word;
+}
+
+/* ===== Badges ===== */
+
+.badge {
+  display: inline-block;
+  padding: var(--spacing-0-5) var(--spacing-2);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: var(--radius-xs);
+}
+
+[data-theme="bauhaus"] .badge {
+  border-radius: 0;
+}
+
+.badgeChecked {
+  background: rgba(46, 204, 113, 0.12);
+  color: var(--color-success);
+}
+
+.badgeEscalated {
+  background: rgba(231, 76, 60, 0.12);
+  color: var(--color-danger);
+}
+
+.badgeError {
+  background: rgba(192, 57, 43, 0.12);
+  color: var(--color-danger);
+}
+
+.badgeDebug {
+  background: rgba(0, 102, 204, 0.08);
+  color: var(--color-primary);
+}
+
+/* ===== Timestamp ===== */
+
+.entryTime {
+  flex-shrink: 0;
+  font-size: var(--font-size-xxs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
 }

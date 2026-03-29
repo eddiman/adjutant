@@ -90,6 +90,9 @@ interface CanvasProps {
   onFocusOnNodeRef?: (handler: (nodeId: string, options?: FocusOnNodeOptions) => void) => void;
   onEnterPlacementMode?: (type: PlacementType) => void;
   onHistoryChange?: (history: CanvasHistoryHandle) => void;
+  onSectionSelected?: (sectionId: string | null) => void;
+  focusOnSectionId?: string | null;
+  onFocusComplete?: () => void;
   loading: boolean;
   settings: Settings;
 }
@@ -165,6 +168,9 @@ function CanvasInner({
   onFocusOnNodeRef,
   onEnterPlacementMode,
   onHistoryChange,
+  onSectionSelected,
+  focusOnSectionId,
+  onFocusComplete,
   loading,
   settings,
 }: CanvasProps) {
@@ -265,27 +271,34 @@ function CanvasInner({
     const isPanMode = isTouch && activeTool === 'pan';
 
     // Sections render first (behind everything else)
-    const sectionNodes: Node<SectionNodeData>[] = sections.map((section, index) => ({
-      id: `section-${section.id}`,
-      type: 'section',
-      position: section.position || getDefaultPosition(index),
-      data: {
-        ...section,
-        onResize: onSectionResize,
-        onRename: onSectionRename,
-        isPanMode,
-      },
-      draggable: !isPanMode,
-      selected: false,
-      zIndex: -1, // Ensure sections are behind other nodes
-    }));
+    // Directory sections get deeper zIndex based on nesting depth
+    const sectionNodes: Node<SectionNodeData>[] = sections.map((section, index) => {
+      const isDir = !!section.dirPath;
+      const nestingDepth = isDir ? (section.dirPath!.split('/').length - 1) : 0;
+      return {
+        id: `section-${section.id}`,
+        type: 'section',
+        position: section.position || getDefaultPosition(index),
+        data: {
+          ...section,
+          onResize: onSectionResize,
+          onRename: onSectionRename,
+          isPanMode,
+          isDirectory: isDir,
+        },
+        draggable: !isPanMode,
+        selected: false,
+        zIndex: -10 + nestingDepth, // Nested sections render above parent sections
+      };
+    });
 
     const noteNodes: Node<NoteNodeData>[] = notes.map((note, index) => ({
-      id: `note-${note.filename}`,
+      id: `note-${note.path}`,
       type: 'note',
       position: note.position || getDefaultPosition(index),
       data: {
         ...note,
+        content: note.preview || note.content || '',
         onOpen: onNoteOpen,
         isPanMode,
       },
@@ -326,7 +339,7 @@ function CanvasInner({
   }, [notes, images, sections, stickies, categories, onNoteOpen, onImageResize, onSectionResize, onSectionRename, onStickyTextChange, isTouch, activeTool]);
 
   const nodeStructureKey = useMemo(() => {
-    const noteKey = notes.map(n => `${n.filename}:${n.kb}`).join('|');
+    const noteKey = notes.map(n => `${n.path}:${n.kb}`).join('|');
     const imageKey = images.map(i => `${i.id}:${i.displayWidth}:${i.status}`).join('|');
     const sectionKey = sections.map(s => `${s.id}:${s.width}:${s.height}`).join('|');
     const stickyKey = stickies.map(s => `${s.id}:${s.color}`).join('|');
@@ -354,7 +367,7 @@ function CanvasInner({
 
   // Sync node data when content changes
   useEffect(() => {
-    const noteDataMap = new Map(notes.map(n => [`note-${n.filename}`, n]));
+    const noteDataMap = new Map(notes.map(n => [`note-${n.path}`, n]));
     const imageDataMap = new Map(images.map(i => [`image-${i.id}`, i]));
     const sectionDataMap = new Map(sections.map(s => [`section-${s.id}`, s]));
     const stickyDataMap = new Map(stickies.map(s => [`sticky-${s.id}`, s]));
@@ -438,6 +451,25 @@ function CanvasInner({
   const clearSelection = useCallback(() => {
     setNodes(currentNodes => currentNodes.map(n => ({ ...n, selected: false })));
   }, [setNodes]);
+
+  // Focus on a section when requested (sidebar click)
+  useEffect(() => {
+    if (!focusOnSectionId) return;
+    const sectionNodeId = `section-${focusOnSectionId}`;
+    const node = nodes.find(n => n.id === sectionNodeId);
+    if (node) {
+      const sectionData = node.data as SectionNodeData;
+      const centerX = node.position.x + (sectionData.width || 500) / 2;
+      const centerY = node.position.y + (sectionData.height || 400) / 2;
+      setCenter(centerX, centerY, { zoom: 0.8, duration: 500 });
+      // Select the section
+      setNodes(current => current.map(n => ({
+        ...n,
+        selected: n.id === sectionNodeId,
+      })));
+    }
+    onFocusComplete?.();
+  }, [focusOnSectionId, nodes, setCenter, setNodes, onFocusComplete]);
 
   // Handle section creation with nodes context
   const handleSectionCreateWithNodes = useCallback((position: Position) => {
@@ -561,7 +593,17 @@ function CanvasInner({
       const selectedNodes = nodes.filter(n => n.selected);
       onSelectionChange(selectedNodes);
     }
-  }, [nodes, onSelectionChange]);
+    // Notify about directory section selection
+    if (onSectionSelected) {
+      const selectedSection = nodes.find(n => n.selected && n.type === 'section');
+      if (selectedSection) {
+        const sectionId = selectedSection.id.replace('section-', '');
+        onSectionSelected(sectionId);
+      } else {
+        onSectionSelected(null);
+      }
+    }
+  }, [nodes, onSelectionChange, onSectionSelected]);
 
   // Expose history handle
   const historyHandleRef = useRef<CanvasHistoryHandle>({

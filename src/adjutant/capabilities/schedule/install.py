@@ -18,7 +18,6 @@ Backwards compatibility: lines containing ".adjutant" but without
 from __future__ import annotations
 
 import contextlib
-import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -157,19 +156,26 @@ def install_one(adj_dir: Path, name: str) -> None:
 
     marker = _marker(name)
     path_env = _snapshot_path()
+    env_file = adj_dir / ".env"
 
     if notify:
         wrap_py = adj_dir / "src" / "adjutant" / "capabilities" / "schedule" / "notify_wrap.py"
         venv_py = adj_dir / ".venv" / "bin" / "python"
         python = str(venv_py) if venv_py.exists() else "python3"
+        inner_cmd = f"{python} {wrap_py} {name} {script_path}"
+    else:
+        inner_cmd = script_path
+
+    if env_file.is_file():
         cron_line = (
             f"{sched} PATH={path_env} ADJ_DIR={adj_dir} "
-            f"{python} {wrap_py} {name} {script_path} "
-            f">> {log_path} 2>&1  {marker}"
+            f"/bin/bash -c 'set -a; source {env_file}; set +a; "
+            f"exec {inner_cmd} >> {log_path} 2>&1'  {marker}"
         )
     else:
         cron_line = (
-            f"{sched} PATH={path_env} ADJ_DIR={adj_dir} {script_path} >> {log_path} 2>&1  {marker}"
+            f"{sched} PATH={path_env} ADJ_DIR={adj_dir} "
+            f"{inner_cmd} >> {log_path} 2>&1  {marker}"
         )
 
     # Remove any existing entry for this job, then append new one

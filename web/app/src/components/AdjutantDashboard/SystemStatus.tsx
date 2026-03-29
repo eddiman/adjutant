@@ -12,51 +12,35 @@ interface SystemStatusProps {
 }
 
 export function SystemStatus({ status }: SystemStatusProps) {
-  const getStateColor = (state?: string) => {
-    switch (state) {
-      case 'OPERATIONAL':
-        return styles.stateOperational;
-      case 'PAUSED':
-        return styles.statePaused;
-      case 'KILLED':
-        return styles.stateKilled;
-      case 'STOPPED':
-        return styles.stateStopped;
-      default:
-        return '';
-    }
-  };
+  const stateClass = {
+    OPERATIONAL: styles.stateOperational,
+    PAUSED: styles.statePaused,
+    KILLED: styles.stateKilled,
+    STOPPED: styles.stateStopped,
+  }[status.lifecycleState ?? ''] ?? '';
 
   return (
-    <div className={styles.card}>
-      <h2 className={styles.cardTitle}>System Status</h2>
-      
-      <div className={styles.statusGrid}>
-        <div className={styles.statusItem}>
-          <span className={styles.label}>Mode</span>
-          <span className={styles.value}>{status.mode}</span>
-        </div>
+    <div className={styles.hero}>
+      <div className={styles.heroContent}>
+        <span className={styles.statusLabel}>Status:</span>
+        <h2 className={`${styles.stateText} ${stateClass}`}>
+          {status.lifecycleState || 'UNKNOWN'}
+        </h2>
 
-        <div className={styles.statusItem}>
-          <span className={styles.label}>State</span>
-          <span className={`${styles.value} ${getStateColor(status.lifecycleState)}`}>
-            {status.lifecycleState || 'UNKNOWN'}
+        <div className={styles.badges}>
+          <span className={styles.badge}>
+            Backend: {status.mode === 'adjutant' ? 'Claude-CLI' : 'Standalone'}
+          </span>
+          <span className={`${styles.badge} ${status.processRunning ? styles.badgeActive : styles.badgeInactive}`}>
+            Process: {status.processRunning ? 'Running' : 'Stopped'}
           </span>
         </div>
+      </div>
 
-        <div className={styles.statusItem}>
-          <span className={styles.label}>Process</span>
-          <span className={`${styles.value} ${status.processRunning ? styles.stateOperational : styles.stateStopped}`}>
-            {status.processRunning ? `Running (PID ${status.listenerPid})` : 'Not running'}
-          </span>
+      <div className={styles.heroVisual}>
+        <div className={`${styles.orb} ${stateClass}`}>
+          <div className={styles.orbInner} />
         </div>
-
-        {status.adjutantDir && (
-          <div className={styles.statusItem}>
-            <span className={styles.label}>Directory</span>
-            <span className={styles.valuePath}>{status.adjutantDir}</span>
-          </div>
-        )}
       </div>
     </div>
   );

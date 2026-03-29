@@ -1,10 +1,9 @@
 .card {
-  background: var(--color-surface);
+  background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  padding: var(--spacing-6);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-5) var(--spacing-6);
   box-shadow: var(--shadow-sm);
-  grid-column: 1 / -1; /* Full width */
 }
 
 [data-theme="bauhaus"] .card {
@@ -13,71 +12,90 @@
   box-shadow: none;
 }
 
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-4);
+}
+
 .cardTitle {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  margin: 0 0 var(--spacing-4) 0;
-  color: var(--color-text-primary);
   font-family: var(--font-heading);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-semibold);
+  margin: 0;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 .loading,
 .empty {
   text-align: center;
   padding: var(--spacing-4);
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
 }
+
+/* ===== Tabs ===== */
 
 .tabs {
   display: flex;
-  gap: var(--spacing-2);
-  margin-bottom: var(--spacing-4);
-  border-bottom: 2px solid var(--color-border);
+  gap: var(--spacing-1);
 }
 
 .tab {
-  padding: var(--spacing-2) var(--spacing-4);
+  padding: var(--spacing-1) var(--spacing-3);
   background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-medium);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   cursor: pointer;
   transition: all var(--transition-fast);
-  margin-bottom: -2px;
+}
+
+[data-theme="bauhaus"] .tab {
+  border-radius: 0;
 }
 
 .tab:hover {
-  color: var(--color-text-primary);
+  color: var(--color-text);
+  background: var(--color-hover-bg);
 }
 
 .tabActive {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  color: var(--color-text);
+  background: var(--color-hover-bg);
+  border-color: var(--color-border);
 }
 
+/* ===== Content ===== */
+
 .content {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-md);
+  background: var(--color-hover-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
   padding: var(--spacing-4);
-  max-height: 400px;
+  max-height: 300px;
   overflow-y: auto;
 }
 
 [data-theme="bauhaus"] .content {
   border-radius: 0;
+  border: 1px solid var(--color-border);
 }
 
 .excerpt {
   margin: 0;
-  font-family: var(--font-mono, monospace);
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--color-text-primary);
+  font-family: monospace;
+  font-size: var(--font-size-xs);
+  line-height: 1.7;
+  color: var(--color-text);
   white-space: pre-wrap;
   word-wrap: break-word;
 }

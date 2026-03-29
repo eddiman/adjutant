@@ -4,6 +4,7 @@
 1. **NEVER read KB files directly.** Query via CLI: `.venv/bin/python -m adjutant kb query <name> "<question>"`.
 2. **NEVER read `.env` directly.** Use `get_credential()` from `core/env.py`.
 3. **NEVER commit** gitignored files: `identity/`, `state/`, `journal/`, `insights/`, `photos/`, `screenshots/`, `.env`, `adjutant.yaml`, `knowledge_bases/registry.yaml`.
+4. **NEVER add AI attribution** in commits — no `Co-Authored-By` or similar AI credit lines.
 
 ## Dev Commands
 ```bash

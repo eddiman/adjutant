@@ -85,6 +85,40 @@ def _fuzzy_match(query: str, models: list[str]) -> list[str]:
     return matches
 
 
+async def _llm_suggest_model(query: str, models: list[str], adj_dir: Path) -> str | None:
+    """Use the current LLM to find the closest model match for *query*.
+
+    Returns the best matching model name from *models*, or None if the LLM
+    cannot determine a match.
+    """
+    from adjutant.core.backend import get_backend
+    from adjutant.messaging.telegram.chat import get_model
+
+    model_list = "\n".join(models)
+    prompt = (
+        f"The user asked to switch to model: \"{query}\"\n"
+        f"Available models:\n{model_list}\n\n"
+        f"Which model from the list above is the closest match? "
+        f"Reply with ONLY the exact model name from the list, nothing else. "
+        f"If none are a reasonable match, reply with NONE."
+    )
+    try:
+        backend = get_backend()
+        result = await backend.run(
+            prompt,
+            agent="adjutant",
+            workdir=adj_dir,
+            model=get_model(adj_dir),
+            timeout=30,
+        )
+        answer = result.text.strip()
+        if answer and answer != "NONE" and answer in models:
+            return answer
+    except Exception:  # noqa: BLE001 — best-effort suggestion
+        adj_log("telegram", f"LLM model suggestion failed for query: {query}")
+    return None
+
+
 def _save_pending_model(adj_dir: Path, matches: list[str], query: str) -> None:
     state = adj_dir / "state" / _PENDING_MODEL_FILE
     state.parent.mkdir(parents=True, exist_ok=True)
@@ -662,6 +696,17 @@ async def cmd_model(
             )
             return
 
+        # "yes" / "y" → confirm when there's exactly 1 pending match (LLM suggestion)
+        if query.lower() in ("yes", "y", "yeah", "yep", "sure", "ok") and len(prev_matches) == 1:
+            _switch_model(adj_dir, prev_matches[0])
+            _send(
+                f"Switched to *{prev_matches[0]}*.",
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
+
         # Narrow previous matches with new tokens
         narrowed = _fuzzy_match(query, prev_matches)
 
@@ -765,6 +810,18 @@ async def cmd_model(
         return
 
     if len(matches) == 0:
+        # Use LLM to find the closest match from the available list
+        suggestion = await _llm_suggest_model(query, available, adj_dir)
+        if suggestion:
+            _save_pending_model(adj_dir, [suggestion], query)
+            _send(
+                f'No exact match for "{query}". Did you mean *{suggestion}*?\n\n'
+                f'Reply "yes" to switch, or "cancel" to keep the current model.',
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
         _send(
             f'No models match "{query}". Run /model to see the full list.',
             message_id,

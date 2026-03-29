@@ -2,15 +2,6 @@
   box-sizing: border-box;
 }
 
-/* Futura Classic font */
-@font-face {
-  font-family: 'Futura Classic';
-  src: url('/fonts/futura_classic.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
-}
-
 :root {
   /* ===== NON-THEMEABLE TOKENS ===== */
   
@@ -218,7 +209,7 @@
   /* ===== TYPOGRAPHY ===== */
   
   /* Font families */
-  --font-heading: 'Futura Classic', 'Jost', 'Nunito Sans', sans-serif;
+  --font-heading: 'Jost', 'Nunito Sans', sans-serif;
   --font-body: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   
   /* ===== BORDER RADIUS ===== */
@@ -361,7 +352,7 @@ html, body {
   height: 100%;
 }
 
-/* Headings use Futura Classic */
+/* Headings use Jost */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
 }

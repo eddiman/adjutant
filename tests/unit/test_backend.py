@@ -92,8 +92,8 @@ class TestClaudeCLICapabilities:
     def test_capabilities(self):
         backend = get_backend("claude-cli")
         caps = backend.capabilities
-        assert caps.vision is False
-        assert caps.model_listing is False
+        assert caps.vision is True
+        assert caps.model_listing is True
         assert caps.reaping is False
         assert caps.web_server is True
         assert caps.remote_session is False

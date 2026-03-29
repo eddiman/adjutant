@@ -127,3 +127,21 @@ export interface FolderListing {
   entries: FolderEntry[];
   meta: WebSidecar;
 }
+
+// === Recursive folder entry (for tree listing) ===
+
+export interface RecursiveFolderEntry extends FolderEntry {
+  relativePath: string;
+  preview?: string;
+  children?: RecursiveFolderEntry[];
+  meta?: WebSidecar;
+}
+
+// === Recursive folder listing response ===
+
+export interface RecursiveFolderListing {
+  kb: string;
+  path: string;
+  entries: RecursiveFolderEntry[];
+  meta: WebSidecar;
+}

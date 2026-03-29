@@ -12,90 +12,54 @@ export function QuickActions({ lifecycleState, actionStates, onAction }: QuickAc
   const isKilled = lifecycleState === 'KILLED';
   const isStopped = lifecycleState === 'STOPPED';
 
-  const getButtonContent = (action: LifecycleAction, icon: string, label: string) => {
+  const renderButton = (action: LifecycleAction, label: string, variant: string) => {
     const state = actionStates[action];
+    const isRunning = state === 'running';
+    const isSuccess = state === 'success';
+    const isError = state === 'error';
 
-    switch (state) {
-      case 'running':
-        return (
-          <>
-            <span className={`${styles.actionIcon} ${styles.spinning}`}>⟳</span>
-            <span className={styles.actionLabel}>Running...</span>
-          </>
-        );
-      case 'success':
-        return (
-          <>
-            <span className={`${styles.actionIcon} ${styles.successIcon}`}>✓</span>
-            <span className={`${styles.actionLabel} ${styles.successLabel}`}>Done</span>
-          </>
-        );
-      case 'error':
-        return (
-          <>
-            <span className={`${styles.actionIcon} ${styles.errorIcon}`}>✗</span>
-            <span className={`${styles.actionLabel} ${styles.errorLabel}`}>Failed</span>
-          </>
-        );
-      default:
-        return (
-          <>
-            <span className={styles.actionIcon}>{icon}</span>
-            <span className={styles.actionLabel}>{label}</span>
-          </>
-        );
+    let displayLabel = label;
+    let stateClass = '';
+
+    if (isRunning) {
+      displayLabel = 'Running...';
+      stateClass = styles.running;
+    } else if (isSuccess) {
+      displayLabel = 'Done';
+      stateClass = styles.success;
+    } else if (isError) {
+      displayLabel = 'Failed';
+      stateClass = styles.error;
     }
-  };
 
-  const getButtonClass = (action: LifecycleAction, baseClass: string) => {
-    const state = actionStates[action];
-    const classes = [styles.actionButton, baseClass];
-    if (state === 'running') classes.push(styles.actionRunning);
-    if (state === 'success') classes.push(styles.actionSuccess);
-    if (state === 'error') classes.push(styles.actionError);
-    return classes.join(' ');
+    return (
+      <button
+        className={`${styles.actionButton} ${styles[variant] ?? ''} ${stateClass}`}
+        onClick={() => onAction(action)}
+        disabled={isRunning}
+      >
+        {isRunning && <span className={styles.spinner} />}
+        {displayLabel}
+      </button>
+    );
   };
 
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Quick Actions</h2>
+      <h3 className={styles.cardTitle}>Quick Actions</h3>
 
-      <div className={styles.actionsGrid}>
-        {!isPaused && !isKilled && !isStopped && (
-          <button
-            className={getButtonClass('pause', styles.actionPause)}
-            onClick={() => onAction('pause')}
-            disabled={actionStates.pause === 'running'}
-          >
-            {getButtonContent('pause', '⏸', 'Pause')}
-          </button>
-        )}
+      <div className={styles.actions}>
+        {renderButton('review', 'Review Findings', 'primary')}
 
-        {isPaused && (
-          <button
-            className={getButtonClass('resume', styles.actionResume)}
-            onClick={() => onAction('resume')}
-            disabled={actionStates.resume === 'running'}
-          >
-            {getButtonContent('resume', '▶', 'Resume')}
-          </button>
-        )}
-
-        <button
-          className={getButtonClass('pulse', styles.actionPulse)}
-          onClick={() => onAction('pulse')}
-          disabled={actionStates.pulse === 'running'}
-        >
-          {getButtonContent('pulse', '💓', 'Pulse')}
-        </button>
-
-        <button
-          className={getButtonClass('review', styles.actionReview)}
-          onClick={() => onAction('review')}
-          disabled={actionStates.review === 'running'}
-        >
-          {getButtonContent('review', '📋', 'Review')}
-        </button>
+        <div className={styles.row}>
+          {!isPaused && !isKilled && !isStopped && (
+            renderButton('pause', 'Pause', 'secondary')
+          )}
+          {isPaused && (
+            renderButton('resume', 'Resume', 'secondary')
+          )}
+          {renderButton('pulse', 'Pulse', 'secondary')}
+        </div>
       </div>
     </div>
   );

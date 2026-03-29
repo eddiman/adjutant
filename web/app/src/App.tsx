@@ -7,6 +7,7 @@ import { GhostSection } from './components/GhostSection';
 import { GhostSticky } from './components/GhostSticky';
 import { PlacementHint } from './components/PlacementHint';
 import { Canvas } from './components/Canvas';
+import { Dialog } from './components/Dialog';
 import { AdjutantDashboard } from './components/AdjutantDashboard';
 
 const NoteEditor = lazy(() => import('./components/NoteEditor/NoteEditor'));
@@ -15,12 +16,13 @@ const SettingsDialog = lazy(() => import('./components/SettingsDialog/SettingsDi
 import { useCanvas } from './hooks/useCanvas';
 import { useKbs } from './hooks/useKbs';
 import { useFolder } from './hooks/useFolder';
+import { useRecursiveFolder } from './hooks/useRecursiveFolder';
 import { useNotes } from './hooks/useNotes';
 import { useImages } from './hooks/useImages';
 import { useSettings } from './hooks/useSettings';
 import { useAdjutant } from './hooks/useAdjutant';
 import { EditorProvider, useEditor, PlacementProvider, usePlacement } from './contexts';
-import type { Position, StickyColor, NoteFile } from './types';
+import type { Position, StickyColor, NoteFile, Section } from './types';
 
 function AppContent() {
   const location = useLocation();
@@ -68,45 +70,49 @@ function AppContent() {
     path: currentPath,
   }), [currentKb, currentPath]);
 
+  // Recursive folder data for the canvas (includes subdirectories as sections)
   const {
-    entries,
-    meta,
-    sections,
+    allNotes: canvasNotes,
+    dirSections,
+    manualSections,
     stickies,
+    meta,
+    rootEntries,
     loading: loadingFolder,
     refetch: refetchFolder,
     updateItemPosition,
-    createSection,
     updateSection,
+    updateDirSectionPosition,
+    updateDirSectionSize,
+    createSection,
     deleteSection,
     createSticky,
     updateSticky,
     deleteSticky,
+    moveEntry,
+  } = useRecursiveFolder(folderOptions);
+
+  // Keep flat folder listing for sidebar navigation
+  const {
+    entries: sidebarEntries,
+    meta: sidebarMeta,
   } = useFolder(folderOptions);
+
+  // Merge directory sections + manual sections
+  const allSections: Section[] = useMemo(() => {
+    return [...dirSections, ...manualSections];
+  }, [dirSections, manualSections]);
 
   const { images, uploadImage, updateImagePosition, updateImageSize, deleteImage } = useImages({ kb: currentKb, path: currentPath });
 
-  // Build NoteFile[] from folder entries + metadata for the canvas
-  const canvasNotes: NoteFile[] = useMemo(() => {
-    if (!meta || !currentKb) return [];
-    return entries
-      .filter(e => e.type === 'file' && e.name.endsWith('.md'))
-      .map(e => {
-        const itemMeta = meta.items[e.name] || {};
-        return {
-          filename: e.name,
-          path: currentPath ? `${currentPath}/${e.name}` : e.name,
-          kb: currentKb,
-          content: '', // Content loaded on demand when opening
-          title: itemMeta.title || e.name.replace(/\.md$/, ''),
-          tags: itemMeta.tags || [],
-          position: itemMeta.position,
-          section: itemMeta.section,
-          size: e.size || 0,
-          mtime: e.mtime || '',
-        };
-      });
-  }, [entries, meta, currentKb, currentPath]);
+  // Move confirmation dialog state
+  const [pendingMove, setPendingMove] = useState<{
+    noteId: string;
+    noteName: string;
+    sourceDirPath: string;
+    destDirPath: string;
+    revertPosition: Position;
+  } | null>(null);
 
   // === Note handlers ===
 
@@ -124,8 +130,8 @@ function AppContent() {
 
   // === Position handlers ===
 
-  const handleItemPositionChange = useCallback((itemName: string, position: Position) => {
-    updateItemPosition(itemName, position);
+  const handleItemPositionChange = useCallback((itemName: string, position: Position, dirPath?: string) => {
+    updateItemPosition(itemName, position, dirPath);
   }, [updateItemPosition]);
 
   const handleImagePositionChange = useCallback((id: string, position: Position) => {
@@ -147,12 +153,20 @@ function AppContent() {
   }, [createSection]);
 
   const handleSectionPositionChange = useCallback((id: string, position: Position) => {
-    updateSection(id, { position });
-  }, [updateSection]);
+    if (id.startsWith('dirsection-')) {
+      updateDirSectionPosition(id, position);
+    } else {
+      updateSection(id, { position });
+    }
+  }, [updateSection, updateDirSectionPosition]);
 
   const handleSectionResize = useCallback((id: string, width: number, height: number) => {
-    updateSection(id, { width, height });
-  }, [updateSection]);
+    if (id.startsWith('dirsection-')) {
+      updateDirSectionSize(id, width, height);
+    } else {
+      updateSection(id, { width, height });
+    }
+  }, [updateSection, updateDirSectionSize]);
 
   const handleSectionRename = useCallback((id: string, name: string) => {
     updateSection(id, { name });
@@ -163,7 +177,9 @@ function AppContent() {
   }, [updateSection]);
 
   const handleSectionsDelete = useCallback(async (ids: string[]) => {
-    await Promise.all(ids.map(id => deleteSection(id)));
+    // Only delete manual sections, not directory-backed ones
+    const manualIds = ids.filter(id => !id.startsWith('dirsection-'));
+    await Promise.all(manualIds.map(id => deleteSection(id)));
   }, [deleteSection]);
 
   // === Sticky handlers ===
@@ -249,7 +265,7 @@ function AppContent() {
       exitPlacementMode();
       await createSticky({ position });
     }
-  }, [placementType, exitPlacementMode, createSection, createSticky]);
+  }, [placementType, exitPlacementMode, handleNoteCreate, createSection, createSticky]);
 
   // === Home page handler ===
 
@@ -266,6 +282,43 @@ function AppContent() {
     }, 100);
   }, [navigateToFolder, setFocusedNote]);
 
+  // === Sidebar-Canvas sync state ===
+  const [selectedDirPath, setSelectedDirPath] = useState<string | null>(null);
+  const [focusOnSectionId, setFocusOnSectionId] = useState<string | null>(null);
+
+  const handleFolderFocus = useCallback((folderName: string) => {
+    // When clicking a folder in sidebar, focus the corresponding section on canvas
+    const dirPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+    const sectionId = `dirsection-${dirPath.replace(/\//g, '-')}`;
+    setFocusOnSectionId(sectionId);
+  }, [currentPath]);
+
+  const handleSectionSelected = useCallback((sectionId: string | null) => {
+    if (!sectionId) {
+      setSelectedDirPath(null);
+      return;
+    }
+    // Find the dir section and extract its dirPath
+    const dirSection = dirSections.find(s => s.id === sectionId);
+    setSelectedDirPath(dirSection?.dirPath || null);
+  }, [dirSections]);
+
+  // === Move confirmation handlers ===
+  const handleMoveConfirm = useCallback(async () => {
+    if (!pendingMove) return;
+    const { noteName, sourceDirPath, destDirPath } = pendingMove;
+    const sourcePath = sourceDirPath ? `${sourceDirPath}/${noteName}` : noteName;
+    const destPath = destDirPath ? `${destDirPath}/${noteName}` : noteName;
+    await moveEntry(sourcePath, destPath);
+    setPendingMove(null);
+  }, [pendingMove, moveEntry]);
+
+  const handleMoveCancel = useCallback(() => {
+    // Revert by refetching
+    refetchFolder();
+    setPendingMove(null);
+  }, [refetchFolder]);
+
   const isOnCanvas = currentKb !== null && !isAdjutantPage;
 
   return (
@@ -276,10 +329,11 @@ function AppContent() {
         kbs={kbs}
         currentKb={currentKb}
         currentPath={currentPath}
-        entries={entries}
-        meta={meta}
+        entries={sidebarEntries}
+        meta={sidebarMeta}
         onKbSelect={setCurrentKb}
         onFolderOpen={handleFolderOpen}
+        onFolderFocus={handleFolderFocus}
         onNoteOpen={(notePath) => {
           if (!currentKb) return;
           handleNoteOpen(
@@ -290,6 +344,7 @@ function AppContent() {
         onSettingsClick={() => setSettingsOpen(true)}
         onNavigateToFolder={navigateToFolder}
         loading={loadingKbs}
+        highlightedDirPath={selectedDirPath}
       />
 
       {isAdjutantPage ? (
@@ -311,7 +366,7 @@ function AppContent() {
           <Canvas
             notes={canvasNotes}
             images={images}
-            sections={sections}
+            sections={allSections}
             stickies={stickies}
             categories={kbs}
             activeTool="pan"
@@ -319,8 +374,12 @@ function AppContent() {
             onPlacementClick={handlePlacementClick}
             onNoteOpen={handleNoteOpen}
             onNotePositionChange={(nodeId, position) => {
-              const filename = nodeId.replace('note-', '');
-              handleItemPositionChange(filename, position);
+              // nodeId is 'note-<relativePath>' — extract filename and dirPath
+              const relPath = nodeId.replace('note-', '');
+              const parts = relPath.split('/');
+              const filename = parts[parts.length - 1];
+              const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : undefined;
+              handleItemPositionChange(filename, position, dirPath);
             }}
             onImagePositionChange={handleImagePositionChange}
             onImageResize={handleImageResize}
@@ -349,6 +408,9 @@ function AppContent() {
             onStickyColorChange={handleStickyColorChange}
             onStickiesDelete={handleStickiesDelete}
             onEnterPlacementMode={enterPlacementMode}
+            onSectionSelected={handleSectionSelected}
+            focusOnSectionId={focusOnSectionId}
+            onFocusComplete={() => setFocusOnSectionId(null)}
             loading={loadingFolder}
             settings={settings}
           />
@@ -369,6 +431,16 @@ function AppContent() {
           <PlacementHint visible={isPlacementMode} />
         </>
       )}
+
+      <Dialog
+        open={!!pendingMove}
+        title="Move file?"
+        message={pendingMove ? `Move "${pendingMove.noteName}" from "${pendingMove.sourceDirPath || 'root'}" to "${pendingMove.destDirPath || 'root'}"?` : ''}
+        confirmLabel="Move"
+        cancelLabel="Cancel"
+        onConfirm={handleMoveConfirm}
+        onCancel={handleMoveCancel}
+      />
 
       <Suspense fallback={null}>
         {settingsOpen && (

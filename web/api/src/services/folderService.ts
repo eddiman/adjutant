@@ -3,7 +3,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { kbService } from './kbService.js';
 import { WebSidecarSchema } from '../types/folder.js';
-import type { WebSidecar, FolderEntry, FolderListing } from '../types/folder.js';
+import type { WebSidecar, FolderEntry, FolderListing, RecursiveFolderEntry, RecursiveFolderListing } from '../types/folder.js';
 
 const SIDECAR_FILENAME = '.adjutant-web.json';
 
@@ -224,6 +224,194 @@ class FolderService {
     delete meta.images[imageId];
     await this.writeSidecar(absPath, meta);
     return true;
+  }
+
+  // === Recursive listing ===
+
+  /**
+   * Recursively list folder contents as a tree.
+   * Each .md file includes a short content preview.
+   * Each subfolder includes its own sidecar metadata.
+   */
+  async listRecursive(kb: string, folderPath: string = '', maxDepth: number = 3): Promise<RecursiveFolderListing | null> {
+    const absPath = await this.resolveFolder(kb, folderPath);
+    if (!absPath) return null;
+
+    const entries = await this.readDirRecursive(absPath, '', maxDepth);
+    const meta = await this.readSidecar(absPath);
+
+    return { kb, path: folderPath, entries, meta };
+  }
+
+  private async readDirRecursive(absDir: string, relativeTo: string, depth: number): Promise<RecursiveFolderEntry[]> {
+    if (depth < 0) return [];
+
+    let dirEntries;
+    try {
+      dirEntries = await fs.readdir(absDir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+
+    const results: RecursiveFolderEntry[] = [];
+
+    for (const entry of dirEntries) {
+      if (entry.name.startsWith('.')) continue;
+
+      const relPath = relativeTo ? `${relativeTo}/${entry.name}` : entry.name;
+      const absEntry = path.join(absDir, entry.name);
+
+      if (entry.isDirectory()) {
+        const children = depth > 0
+          ? await this.readDirRecursive(absEntry, relPath, depth - 1)
+          : [];
+        const dirMeta = await this.readSidecar(absEntry);
+
+        results.push({
+          name: entry.name,
+          type: 'folder',
+          relativePath: relPath,
+          children,
+          meta: dirMeta,
+        });
+      } else if (entry.isFile()) {
+        const rec: RecursiveFolderEntry = {
+          name: entry.name,
+          type: 'file',
+          relativePath: relPath,
+        };
+
+        try {
+          const stat = await fs.stat(absEntry);
+          rec.size = stat.size;
+          rec.mtime = stat.mtime.toISOString();
+        } catch { /* ignore */ }
+
+        // Read preview for markdown files
+        if (entry.name.endsWith('.md')) {
+          rec.preview = await this.readPreview(absEntry);
+        }
+
+        results.push(rec);
+      }
+    }
+
+    // Sort: folders first, then files, alphabetically within each group
+    results.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return results;
+  }
+
+  /**
+   * Read the first ~200 characters of a markdown file for preview.
+   * Strips leading heading markers and truncates at a word boundary.
+   */
+  private async readPreview(absPath: string): Promise<string> {
+    try {
+      const fd = await fs.open(absPath, 'r');
+      try {
+        const buf = Buffer.alloc(500);
+        const { bytesRead } = await fd.read(buf, 0, 500, 0);
+        let text = buf.toString('utf-8', 0, bytesRead);
+
+        // Strip YAML frontmatter if present
+        if (text.startsWith('---')) {
+          const endIdx = text.indexOf('---', 3);
+          if (endIdx !== -1) {
+            text = text.slice(endIdx + 3).trimStart();
+          }
+        }
+
+        // Strip leading heading markers (# Title)
+        text = text.replace(/^#{1,6}\s+.*\n?/, '').trimStart();
+
+        // Truncate to ~200 chars at word boundary
+        if (text.length > 200) {
+          const cutoff = text.lastIndexOf(' ', 200);
+          text = text.slice(0, cutoff > 100 ? cutoff : 200) + '...';
+        }
+
+        return text.trim();
+      } finally {
+        await fd.close();
+      }
+    } catch {
+      return '';
+    }
+  }
+
+  // === Move entry ===
+
+  /**
+   * Move a file or folder from sourcePath to destPath within a KB.
+   * Migrates sidecar metadata from the source directory to the destination.
+   */
+  async moveEntry(kb: string, sourcePath: string, destPath: string): Promise<{ newPath: string } | null> {
+    const kbRoot = await kbService.resolveKbPath(kb);
+    if (!kbRoot) return null;
+
+    // Validate and resolve paths
+    const normSource = path.normalize(sourcePath);
+    const normDest = path.normalize(destPath);
+    if (normSource.startsWith('..') || normDest.startsWith('..') ||
+        path.isAbsolute(normSource) || path.isAbsolute(normDest)) {
+      return null;
+    }
+
+    const absSrc = path.join(kbRoot, normSource);
+    const absDst = path.join(kbRoot, normDest);
+
+    // Ensure both are within the KB
+    if (!absSrc.startsWith(kbRoot) || !absDst.startsWith(kbRoot)) {
+      return null;
+    }
+
+    // Ensure source exists
+    try {
+      await fs.access(absSrc);
+    } catch {
+      return null;
+    }
+
+    // Ensure destination directory exists
+    const destDir = path.dirname(absDst);
+    try {
+      await fs.mkdir(destDir, { recursive: true });
+    } catch { /* ignore if exists */ }
+
+    // Move the file/folder
+    await fs.rename(absSrc, absDst);
+
+    // Migrate sidecar metadata
+    const srcDir = path.dirname(absSrc);
+    const srcName = path.basename(absSrc);
+    const dstName = path.basename(absDst);
+
+    try {
+      // Remove from source sidecar
+      const srcMeta = await this.readSidecar(srcDir);
+      const itemMeta = srcMeta.items[srcName];
+      if (itemMeta) {
+        delete srcMeta.items[srcName];
+        await this.writeSidecar(srcDir, srcMeta);
+      }
+
+      // Add to destination sidecar (preserve position if same name, clear if different dir)
+      const dstMeta = await this.readSidecar(destDir);
+      if (itemMeta) {
+        // Clear section reference since it may not apply in the new location
+        const { section: _, ...rest } = itemMeta;
+        dstMeta.items[dstName] = rest;
+        await this.writeSidecar(destDir, dstMeta);
+      }
+    } catch {
+      // Sidecar migration is best-effort; the file move already succeeded
+    }
+
+    return { newPath: normDest };
   }
 
   // === Private ===

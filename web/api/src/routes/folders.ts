@@ -26,6 +26,52 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/folders/tree?kb=:kb&path=:path&depth=:depth — Recursive folder listing
+router.get('/tree', async (req: Request, res: Response) => {
+  try {
+    const kb = req.query.kb as string;
+    const folderPath = (req.query.path as string) || '';
+    const depth = Math.min(parseInt(req.query.depth as string) || 3, 5);
+
+    if (!kb) {
+      res.status(400).json({ error: 'Missing required query parameter: kb' });
+      return;
+    }
+
+    const listing = await folderService.listRecursive(kb, folderPath, depth);
+    if (!listing) {
+      res.status(404).json({ error: 'Folder not found' });
+      return;
+    }
+
+    res.json(listing);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list folder tree' });
+  }
+});
+
+// POST /api/folders/move — Move a file or folder within a KB
+router.post('/move', async (req: Request, res: Response) => {
+  try {
+    const { kb, sourcePath, destPath } = req.body;
+
+    if (!kb || !sourcePath || !destPath) {
+      res.status(400).json({ error: 'Missing required fields: kb, sourcePath, destPath' });
+      return;
+    }
+
+    const result = await folderService.moveEntry(kb, sourcePath, destPath);
+    if (!result) {
+      res.status(404).json({ error: 'Source not found or invalid paths' });
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to move entry' });
+  }
+});
+
 // GET /api/folders/meta?kb=:kb&path=:path — Get .adjutant-web.json
 router.get('/meta', async (req: Request, res: Response) => {
   try {

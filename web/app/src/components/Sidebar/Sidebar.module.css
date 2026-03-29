@@ -867,3 +867,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.sidebar-entry-highlighted {
+  background: var(--color-primary-bg);
+  border-left: 2px solid var(--color-primary);
+}

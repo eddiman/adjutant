@@ -1,8 +1,8 @@
 .card {
-  background: var(--color-surface);
+  background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  padding: var(--spacing-6);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-5);
   box-shadow: var(--shadow-sm);
 }
 
@@ -20,21 +20,24 @@
 }
 
 .cardTitle {
-  font-size: var(--font-size-xl);
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-semibold);
   margin: 0;
-  color: var(--color-text-primary);
-  font-family: var(--font-heading);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 .refreshButton {
   background: transparent;
   border: none;
-  font-size: var(--font-size-2xl);
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
   cursor: pointer;
-  transition: all var(--transition-fast);
   padding: var(--spacing-1);
+  display: flex;
+  align-items: center;
+  transition: all var(--transition-fast);
 }
 
 .refreshButton:hover {
@@ -46,74 +49,58 @@
   text-align: center;
   padding: var(--spacing-4);
   color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
 }
 
-.overallStatus {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-3);
-  background: var(--color-background);
-  border-radius: var(--border-radius-md);
-  margin-bottom: var(--spacing-4);
-}
-
-[data-theme="bauhaus"] .overallStatus {
-  border-radius: 0;
-}
-
-.statusIndicator {
-  font-size: var(--font-size-xl);
-  line-height: 1;
-}
-
-.statusHealthy {
-  color: var(--color-success, #10b981);
-}
-
-.statusUnhealthy {
-  color: var(--color-error, #ef4444);
-}
-
-.statusText {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
+/* ===== Check rows ===== */
 
 .checksList {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-2);
+  gap: var(--spacing-1);
 }
 
-.checkItem {
+.checkRow {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: var(--spacing-2) var(--spacing-3);
-  border-radius: var(--border-radius-sm);
-  background: var(--color-background);
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-3);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
 }
 
-[data-theme="bauhaus"] .checkItem {
+[data-theme="bauhaus"] .checkRow {
   border-radius: 0;
 }
 
-.checkLabel {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+.checkRow:hover {
+  background: var(--color-hover-bg);
 }
 
-.checkStatus {
-  font-size: var(--font-size-lg);
+.checkIcon {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.checkLabel {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.checkValue {
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
   font-weight: var(--font-weight-bold);
+  font-variant-numeric: tabular-nums;
 }
 
 .checkPass {
-  color: var(--color-success, #10b981);
+  color: var(--color-success);
 }
 
 .checkFail {
-  color: var(--color-error, #ef4444);
+  color: var(--color-danger);
 }

@@ -14,10 +14,12 @@ interface SidebarProps {
   meta: WebSidecar | null;
   onKbSelect: (kb: string | null) => void;
   onFolderOpen: (folderName: string) => void;
+  onFolderFocus?: (folderName: string) => void;
   onNoteOpen: (notePath: string) => void;
   onSettingsClick: () => void;
   onNavigateToFolder: (kb: string, path: string) => void;
   loading?: boolean;
+  highlightedDirPath?: string | null;
 }
 
 export function Sidebar({
@@ -29,10 +31,12 @@ export function Sidebar({
   entries,
   onKbSelect,
   onFolderOpen,
+  onFolderFocus,
   onNoteOpen,
   onSettingsClick,
   onNavigateToFolder,
   loading = false,
+  highlightedDirPath,
 }: SidebarProps) {
   const location = useLocation();
   const isAdjutantPage = location.pathname === '/adjutant';
@@ -48,9 +52,14 @@ export function Sidebar({
   }, [onKbSelect, open, onToggle]);
 
   const handleFolderClick = useCallback((folderName: string) => {
-    onFolderOpen(folderName);
+    // If onFolderFocus is available (canvas is active), focus the section on canvas
+    if (onFolderFocus) {
+      onFolderFocus(folderName);
+    } else {
+      onFolderOpen(folderName);
+    }
     if (isMobileViewport() && open) onToggle();
-  }, [onFolderOpen, open, onToggle]);
+  }, [onFolderOpen, onFolderFocus, open, onToggle]);
 
   const handleNoteClick = useCallback((filename: string) => {
     const notePath = currentPath ? `${currentPath}/${filename}` : filename;
@@ -184,10 +193,12 @@ export function Sidebar({
                 <div className={styles['sidebar-loading']}>Loading...</div>
               ) : (
                 <div className={styles['sidebar-entries']}>
-                  {entries.map(entry => (
+                  {entries.map(entry => {
+                    const isHighlighted = entry.type === 'folder' && highlightedDirPath === (currentPath ? `${currentPath}/${entry.name}` : entry.name);
+                    return (
                     <button
                       key={entry.name}
-                      className={styles['sidebar-entry']}
+                      className={`${styles['sidebar-entry']} ${isHighlighted ? styles['sidebar-entry-highlighted'] : ''}`}
                       onClick={() => entry.type === 'folder' ? handleFolderClick(entry.name) : entry.name.endsWith('.md') ? handleNoteClick(entry.name) : undefined}
                     >
                       {entry.type === 'folder' ? (
@@ -209,7 +220,8 @@ export function Sidebar({
                       )}
                       <span className={styles['sidebar-entry-text']}>{entry.name}</span>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

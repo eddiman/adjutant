@@ -25,7 +25,6 @@ function formatTimestamp(iso: string): string {
     const diffHours = Math.floor(diffMin / 60);
     if (diffHours < 24) return `${diffHours}h ago`;
 
-    // Older than 24h — show date
     return date.toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
@@ -41,60 +40,61 @@ export function LastPulse({ heartbeat }: LastPulseProps) {
   if (!heartbeat) {
     return (
       <div className={styles.card}>
-        <h2 className={styles.cardTitle}>Last Pulse</h2>
+        <h3 className={styles.cardTitle}>Observation Summary</h3>
         <p className={styles.empty}>No pulse data yet</p>
       </div>
     );
   }
 
   const { type, timestamp, kbs_checked, issues_found, escalated } = heartbeat;
-  const title = type === 'review' ? 'Last Review' : 'Last Pulse';
   const issues = issues_found?.filter(Boolean) ?? [];
+  const kbCount = kbs_checked?.length ?? 0;
+
+  // Build summary text
+  let summaryText = '';
+  if (type === 'review') {
+    summaryText = `Last review completed${timestamp ? ` ${formatTimestamp(timestamp)}` : ''}. `;
+  } else {
+    summaryText = `Last pulse completed${timestamp ? ` ${formatTimestamp(timestamp)}` : ''}. `;
+  }
+
+  if (kbCount > 0) {
+    summaryText += `${kbCount} knowledge base${kbCount !== 1 ? 's' : ''} checked. `;
+  }
+
+  if (issues.length > 0) {
+    summaryText += `${issues.length} finding${issues.length !== 1 ? 's' : ''} detected.`;
+  } else {
+    summaryText += 'No significant deviations detected.';
+  }
 
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>{title}</h2>
+      <h3 className={styles.cardTitle}>Observation Summary</h3>
 
-      {timestamp && (
-        <p className={styles.timestamp}>{formatTimestamp(timestamp)}</p>
-      )}
+      <p className={styles.summary}>{summaryText}</p>
 
       {kbs_checked && kbs_checked.length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionLabel}>KBs checked</div>
-          <div className={styles.kbList}>
-            {kbs_checked.map((kb) => (
-              <span key={kb} className={styles.kbTag}>{kb}</span>
-            ))}
-          </div>
+        <div className={styles.kbRow}>
+          {kbs_checked.map((kb) => (
+            <span key={kb} className={styles.kbTag}>{kb}</span>
+          ))}
         </div>
       )}
 
-      <div className={styles.section}>
-        <div className={styles.sectionLabel}>Findings</div>
-        {issues.length > 0 ? (
-          <ul className={styles.issueList}>
-            {issues.slice(0, 6).map((issue, i) => (
-              <li key={i} className={styles.issue}>{issue}</li>
-            ))}
-            {issues.length > 6 && (
-              <li className={styles.issue}>
-                ... and {issues.length - 6} more
-              </li>
-            )}
-          </ul>
-        ) : (
-          <p className={styles.noIssues}>No issues found</p>
-        )}
-      </div>
+      {issues.length > 0 && (
+        <div className={styles.findings}>
+          {issues.slice(0, 4).map((issue, i) => (
+            <div key={i} className={styles.finding}>{issue}</div>
+          ))}
+          {issues.length > 4 && (
+            <span className={styles.more}>+{issues.length - 4} more</span>
+          )}
+        </div>
+      )}
 
       {escalated && (
-        <div className={styles.section}>
-          <span className={styles.escalated}>
-            <span>&#x26A0;&#xFE0F;</span>
-            Escalated
-          </span>
-        </div>
+        <div className={styles.escalated}>Escalated</div>
       )}
     </div>
   );

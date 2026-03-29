@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import type { Settings, Theme } from '../../types';
+import { FolderExplorer } from '../FolderExplorer/FolderExplorer';
 import styles from './SettingsDialog.module.css';
 
 interface SettingsDialogProps {
@@ -22,6 +23,7 @@ export function SettingsDialog({
   const [kbRootSaving, setKbRootSaving] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const browsingRef = useRef(false);
+  const [explorerOpen, setExplorerOpen] = useState(false);
 
   // Sync input when settings load
   useEffect(() => {
@@ -90,6 +92,12 @@ export function SettingsDialog({
     }
   }, []);
 
+  const handleExplorerSelect = useCallback((path: string) => {
+    setKbRootInput(path);
+    setKbRootError(null);
+    setExplorerOpen(false);
+  }, []);
+
   if (!open) return null;
 
   return (
@@ -140,6 +148,16 @@ export function SettingsDialog({
                       <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
                     </svg>
                   )}
+                </button>
+                <button
+                  className={styles['settings-browse-btn']}
+                  onClick={() => setExplorerOpen(true)}
+                  title="Explore server directories"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8"/>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                  </svg>
                 </button>
                 <button
                   className={styles['settings-kb-root-save']}
@@ -232,6 +250,12 @@ export function SettingsDialog({
           </div>
         </div>
       </div>
+      <FolderExplorer
+        open={explorerOpen}
+        onSelect={handleExplorerSelect}
+        onClose={() => setExplorerOpen(false)}
+        initialPath={kbRootInput || undefined}
+      />
     </div>
   );
 }

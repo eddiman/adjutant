@@ -1,5 +1,5 @@
 import type { Node } from '@xyflow/react';
-import type { Position, Section } from '../types';
+import type { Position, Section, RecursiveFolderEntry, WebSidecar } from '../types';
 
 // Default sizes for different node types
 const NOTE_WIDTH = 200;
@@ -254,4 +254,219 @@ export function findNotesInsideSectionBounds(
   }
 
   return noteSlugs;
+}
+
+// === Directory-section auto-layout ===
+
+const SECTION_PADDING = 40;
+const SECTION_LABEL_HEIGHT = 32;
+const NOTE_GAP = 20;
+const SECTION_GAP = 40;
+
+interface DirSectionLayout {
+  id: string;
+  dirPath: string;
+  name: string;
+  position: Position;
+  width: number;
+  height: number;
+  notePositions: Map<string, Position>;
+  childSections: DirSectionLayout[];
+}
+
+/**
+ * Estimate how large a section needs to be for a given number of notes and child sections.
+ */
+function estimateSectionSize(
+  noteCount: number,
+  childSizes: { width: number; height: number }[],
+): { width: number; height: number } {
+  // Layout notes in a grid (3 columns)
+  const cols = 3;
+  const noteRows = Math.ceil(noteCount / cols);
+  const notesWidth = cols * (NOTE_WIDTH + NOTE_GAP) - NOTE_GAP + SECTION_PADDING * 2;
+  const notesHeight = noteRows * (NOTE_HEIGHT + NOTE_GAP) - (noteRows > 0 ? NOTE_GAP : 0);
+
+  // Child sections laid out horizontally below the notes
+  let childrenWidth = 0;
+  let childrenHeight = 0;
+  for (const cs of childSizes) {
+    childrenWidth += cs.width + SECTION_GAP;
+    childrenHeight = Math.max(childrenHeight, cs.height);
+  }
+  if (childSizes.length > 0) {
+    childrenWidth -= SECTION_GAP; // remove trailing gap
+  }
+
+  const innerWidth = Math.max(notesWidth, childrenWidth + SECTION_PADDING * 2);
+  const innerHeight =
+    SECTION_LABEL_HEIGHT +
+    (noteRows > 0 ? notesHeight + SECTION_PADDING : 0) +
+    (childSizes.length > 0 ? childrenHeight + SECTION_PADDING : 0) +
+    SECTION_PADDING;
+
+  return {
+    width: Math.max(innerWidth, 300),
+    height: Math.max(innerHeight, 200),
+  };
+}
+
+/**
+ * Recursively build layout data for directory sections from a recursive folder tree.
+ * Bottom-up: leaf directories are sized first, then parents.
+ * If saved positions exist in the sidecar, they are used.
+ */
+export function layoutDirectoryTree(
+  entries: RecursiveFolderEntry[],
+  rootMeta: WebSidecar,
+  kb: string,
+  basePath: string,
+): DirSectionLayout[] {
+  const folders = entries.filter(e => e.type === 'folder');
+  if (folders.length === 0) return [];
+
+  const layouts: DirSectionLayout[] = [];
+
+  for (const folder of folders) {
+    const dirPath = folder.relativePath;
+    const sectionId = `dirsection-${dirPath.replace(/\//g, '-')}`;
+
+    // Recurse into children
+    const childLayouts = folder.children
+      ? layoutDirectoryTree(folder.children, folder.meta || rootMeta, kb, dirPath)
+      : [];
+
+    // Count notes in this folder
+    const noteFiles = (folder.children || []).filter(
+      e => e.type === 'file' && e.name.endsWith('.md'),
+    );
+
+    // Calculate size based on contents
+    const childSizes = childLayouts.map(cl => ({ width: cl.width, height: cl.height }));
+    const { width, height } = estimateSectionSize(noteFiles.length, childSizes);
+
+    // Check if there's a saved position/size in the parent's sidecar
+    const savedSection = rootMeta.sections[sectionId];
+    const finalWidth = savedSection?.width || width;
+    const finalHeight = savedSection?.height || height;
+
+    // Position notes inside the section (grid layout)
+    const notePositions = new Map<string, Position>();
+    const cols = 3;
+    const notesStartX = SECTION_PADDING;
+    const notesStartY = SECTION_LABEL_HEIGHT + SECTION_PADDING;
+
+    for (let i = 0; i < noteFiles.length; i++) {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const noteKey = noteFiles[i].name;
+
+      // Check if there's a saved position in the subfolder's sidecar
+      const subMeta = folder.meta;
+      const savedPos = subMeta?.items[noteKey]?.position;
+
+      notePositions.set(noteKey, savedPos || {
+        x: notesStartX + col * (NOTE_WIDTH + NOTE_GAP),
+        y: notesStartY + row * (NOTE_HEIGHT + NOTE_GAP),
+      });
+    }
+
+    // Position child sections below notes
+    const noteRows = Math.ceil(noteFiles.length / cols);
+    let childStartY =
+      SECTION_LABEL_HEIGHT +
+      SECTION_PADDING +
+      (noteRows > 0 ? noteRows * (NOTE_HEIGHT + NOTE_GAP) : 0);
+    let childX = SECTION_PADDING;
+
+    for (const child of childLayouts) {
+      child.position = { x: childX, y: childStartY };
+      childX += child.width + SECTION_GAP;
+    }
+
+    layouts.push({
+      id: sectionId,
+      dirPath,
+      name: folder.name,
+      position: savedSection?.position || { x: 0, y: 0 },
+      width: finalWidth,
+      height: finalHeight,
+      notePositions,
+      childSections: childLayouts,
+    });
+  }
+
+  // Auto-position root-level sections that don't have saved positions
+  let nextX = 100;
+  const startY = 100;
+
+  for (const layout of layouts) {
+    const savedSection = rootMeta.sections[layout.id];
+    if (!savedSection?.position) {
+      layout.position = { x: nextX, y: startY };
+      nextX += layout.width + SECTION_GAP;
+    }
+  }
+
+  return layouts;
+}
+
+/**
+ * Flatten a layout tree into arrays of sections and note positions
+ * suitable for building React Flow nodes.
+ */
+export function flattenDirLayouts(
+  layouts: DirSectionLayout[],
+  parentPosition?: Position,
+): {
+  sections: Array<{
+    id: string;
+    dirPath: string;
+    name: string;
+    position: Position;
+    width: number;
+    height: number;
+  }>;
+  notePositions: Map<string, Position>;
+} {
+  const sections: Array<{
+    id: string;
+    dirPath: string;
+    name: string;
+    position: Position;
+    width: number;
+    height: number;
+  }> = [];
+  const notePositions = new Map<string, Position>();
+
+  for (const layout of layouts) {
+    // Absolute position = parent offset + own position
+    const absPos = parentPosition
+      ? { x: parentPosition.x + layout.position.x, y: parentPosition.y + layout.position.y }
+      : layout.position;
+
+    sections.push({
+      id: layout.id,
+      dirPath: layout.dirPath,
+      name: layout.name,
+      position: absPos,
+      width: layout.width,
+      height: layout.height,
+    });
+
+    // Convert relative note positions to absolute
+    for (const [noteKey, relPos] of layout.notePositions) {
+      notePositions.set(
+        `${layout.dirPath}/${noteKey}`,
+        { x: absPos.x + relPos.x, y: absPos.y + relPos.y },
+      );
+    }
+
+    // Recurse into children
+    const childResult = flattenDirLayouts(layout.childSections, absPos);
+    for (const s of childResult.sections) sections.push(s);
+    for (const [k, v] of childResult.notePositions) notePositions.set(k, v);
+  }
+
+  return { sections, notePositions };
 }

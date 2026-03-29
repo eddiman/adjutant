@@ -2,18 +2,16 @@
   position: fixed;
   inset: 0;
   overflow-y: auto;
-  background: var(--color-background);
+  background: var(--color-bg);
   z-index: 1;
   transition: left var(--transition-medium);
 }
 
-/* Shift everything right when sidebar is open */
 .sidebarOpen {
   left: var(--sidebar-width);
 }
 
-/* Pin the animated background to the viewport so it doesn't
-   clip at the first screenful when the dashboard scrolls. */
+/* Pin animated background to viewport */
 .dashboard > :global([class*="background"]) {
   position: fixed;
   inset: 0;
@@ -23,35 +21,118 @@
 .content {
   position: relative;
   z-index: 1;
-  max-width: 1400px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: var(--spacing-12) var(--spacing-6);
+  padding: var(--spacing-8) var(--spacing-6) var(--spacing-12);
 }
 
-.header {
-  text-align: center;
-  margin-bottom: var(--spacing-12);
+/* ===== Top Nav ===== */
+
+.topNav {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  padding-bottom: var(--spacing-6);
+  margin-bottom: var(--spacing-8);
+  border-bottom: 1px solid var(--color-border);
 }
 
-.title {
-  font-size: var(--font-size-5xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin: 0 0 var(--spacing-2) 0;
+.logo {
   font-family: var(--font-heading);
-}
-
-.titleBracket {
-  color: var(--color-primary);
-  font-weight: var(--font-weight-normal);
-}
-
-.subtitle {
-  font-size: var(--font-size-lg);
-  color: var(--color-text-secondary);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
   margin: 0;
-  font-weight: var(--font-weight-medium);
 }
+
+.navTabs {
+  display: flex;
+  gap: var(--spacing-6);
+}
+
+.navTab {
+  background: none;
+  border: none;
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: var(--spacing-1) 0;
+  transition: color var(--transition-fast);
+}
+
+.navTab:hover {
+  color: var(--color-text);
+}
+
+.navTabActive {
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.navSpacer {
+  flex: 1;
+}
+
+.navIcons {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
+.navIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  background: var(--color-hover-bg);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.navIcon:hover {
+  background: var(--color-active-bg);
+  color: var(--color-text);
+}
+
+/* ===== Two-column layout ===== */
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--spacing-8);
+  align-items: start;
+}
+
+.mainColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+  min-width: 0;
+}
+
+.sideColumn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+  min-width: 0;
+}
+
+/* ===== Full-width bottom section ===== */
+
+.fullWidth {
+  margin-top: var(--spacing-8);
+}
+
+/* ===== Loading / Error ===== */
 
 .loading,
 .error {
@@ -62,9 +143,9 @@
 }
 
 .error {
-  background: var(--color-error-background, rgba(239, 68, 68, 0.1));
-  border-radius: var(--border-radius-lg);
-  color: var(--color-error, #ef4444);
+  background: rgba(239, 68, 68, 0.06);
+  border-radius: var(--radius-lg);
+  color: #c0392b;
   max-width: 600px;
   margin: var(--spacing-12) auto;
 }
@@ -75,43 +156,29 @@
   opacity: 0.8;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: var(--spacing-6);
-  margin-top: var(--spacing-8);
+/* ===== Responsive ===== */
+
+@media (max-width: 1024px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+
+  .sideColumn {
+    order: -1;
+  }
 }
 
 @media (max-width: 768px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-  
   .content {
-    padding: var(--spacing-6) var(--spacing-4);
+    padding: var(--spacing-4) var(--spacing-3) var(--spacing-8);
   }
-}
 
-/* Card base styles for child components */
-.card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  padding: var(--spacing-6);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-fast);
-}
+  .topNav {
+    gap: var(--spacing-4);
+    flex-wrap: wrap;
+  }
 
-[data-theme="bauhaus"] .card {
-  border: 2px solid var(--color-border);
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-[data-theme="bauhaus"] .card:hover {
-  box-shadow: none;
+  .navTabs {
+    gap: var(--spacing-4);
+  }
 }

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "adjutant"
-version = "0.2.0"
+dynamic = ["version"]
 requires-python = ">=3.11"
 
 dependencies = [
@@ -37,6 +37,10 @@ screenshot = [
     "playwright>=1.40",
 ]
 news = []
+
+[tool.hatch.version]
+path = "VERSION"
+pattern = "(?P<version>.+)"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/adjutant"]

@@ -203,6 +203,54 @@ This is a one-time system setting and survives reboots. It does not affect porta
 
 ---
 
+## Claude CLI authentication for cron
+
+When using the `claude-cli` backend, cron jobs need access to your Claude authentication token. The Claude CLI normally authenticates via OAuth stored in the macOS keychain, which cron cannot access. Without this, jobs fail with:
+
+```
+ERROR: LLM did not return valid JSON array. Response: Not logged in · Please run /login
+```
+
+**Fix:**
+
+1. Generate a long-lived token (valid for 1 year, requires a Claude Pro or Max subscription):
+
+   ```bash
+   claude setup-token
+   ```
+
+2. Add the token to your `.env` file:
+
+   ```
+   CLAUDE_CODE_OAUTH_TOKEN=<token from step 1>
+   ```
+
+3. Ensure your crontab entries source `.env` before running. Wrap the command in a bash subshell:
+
+   ```
+   35 14 * * 1-5 HOME=... PATH=... ADJ_DIR=/path/to/adjutant /bin/bash -c 'set -a; source /path/to/adjutant/.env; set +a; exec /path/to/adjutant/.venv/bin/python ...'  # adjutant:job_name
+   ```
+
+   `set -a` exports all variables from `.env` into the subprocess environment so the `claude` binary sees `CLAUDE_CODE_OAUTH_TOKEN`.
+
+4. Sync your crontab to pick up the new format:
+
+   ```bash
+   adjutant schedule sync
+   ```
+
+**Testing:** Change a job's schedule to a few minutes from now and watch the log file:
+
+```bash
+tail -f state/news_briefing.log
+```
+
+If the job runs and you receive a Telegram notification, authentication is working.
+
+**Token renewal:** The token expires after 1 year. Run `claude setup-token` again and update `.env` when it does. A symptom of expiry is the same "Not logged in" error returning.
+
+---
+
 ## Troubleshooting
 
 **Job shows `[not in crontab]` in `adjutant status`**

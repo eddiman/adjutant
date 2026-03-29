@@ -10,6 +10,7 @@ import foldersRouter from './routes/folders.js';
 import notesRouter from './routes/notes.js';
 import assetsRouter from './routes/assets.js';
 import adjutantRouter from './routes/adjutant.js';
+import explorerRouter from './routes/explorer.js';
 
 export function createApp() {
   const app = express();
@@ -68,6 +69,7 @@ export function createApp() {
   app.use('/api/notes', notesRouter);
   app.use('/api/assets', assetsRouter);
   app.use('/api/adjutant', adjutantRouter);
+  app.use('/api/explorer', explorerRouter);
 
   // Health check
   app.get('/health', (_req, res) => {

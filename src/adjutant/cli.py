@@ -15,6 +15,7 @@ Subcommands:
   reply <message>     — Send a Telegram reply (Markdown)
   notify <message>    — Send a proactive Telegram notification (budget-guarded)
   screenshot <url>    — Take and send a screenshot via Telegram
+  web                 — Start the web UI (API + frontend)
   news                — Run the news briefing
   update              — Self-update Adjutant from GitHub releases
   logs                — Tail the listener log
@@ -45,6 +46,7 @@ Subcommands:
 from __future__ import annotations
 
 import contextlib
+from importlib.metadata import version as pkg_version
 
 import click
 
@@ -52,7 +54,7 @@ from adjutant.core.paths import AdjutantDirNotFoundError, init_adj_dir
 
 
 @click.group()
-@click.version_option(version="0.1.0", prog_name="adjutant")
+@click.version_option(version=pkg_version("adjutant"), prog_name="adjutant")
 @click.pass_context
 def main(ctx: click.Context) -> None:
     """Adjutant — autonomous agent framework."""
@@ -275,6 +277,28 @@ def update(
             raise
         click.echo(f"ERROR: {exc}", err=True)
         raise SystemExit(1) from exc
+
+
+# ---------------------------------------------------------------------------
+# bump
+# ---------------------------------------------------------------------------
+
+
+@main.command(name="bump")
+@click.argument("level", type=click.Choice(["major", "minor", "patch"]))
+@click.option("--no-commit", is_flag=True, default=False, help="Don't create a git commit.")
+@click.option("--no-tag", is_flag=True, default=False, help="Don't create a git tag.")
+@click.pass_context
+def bump_cmd(ctx: click.Context, level: str, no_commit: bool, no_tag: bool) -> None:
+    """Bump the project version (major, minor, or patch)."""
+    from adjutant.core.version import do_bump, read_version
+
+    root = ctx.obj.get("adj_dir")
+    current = read_version(root)
+    new = do_bump(level, root, commit=not no_commit, tag=not no_tag)
+    click.echo(f"{current} → {new}")
+    if not no_tag:
+        click.echo(f"Tagged v{new}")
 
 
 # ---------------------------------------------------------------------------
@@ -558,6 +582,94 @@ def screenshot(ctx: click.Context, url: str, caption: str | None) -> None:
     else:
         click.echo(result[7:] if result.startswith("ERROR:") else result, err=True)
         raise SystemExit(1)
+
+
+# ---------------------------------------------------------------------------
+# web
+# ---------------------------------------------------------------------------
+
+
+@main.command()
+@click.option("--port", "-p", default=3020, help="API port (default: 3020).")
+@click.option("--host", default="0.0.0.0", help="API host (default: 0.0.0.0).")
+@click.option("--no-open", is_flag=True, default=False, help="Don't open browser.")
+def web(port: int, host: str, no_open: bool) -> None:
+    """Start the Adjutant web UI (API + frontend)."""
+    import os
+    import signal
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    # Walk up from this file to find the project root containing web/api + web/app
+    web_dir = None
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "web"
+        if (candidate / "api").exists() and (candidate / "app").exists():
+            web_dir = candidate
+            break
+    if web_dir is None:
+        click.echo("Web directory not found (searched parent directories of cli.py)", err=True)
+        raise SystemExit(1)
+    api_dir = web_dir / "api"
+    app_dir = web_dir / "app"
+
+    # Check node_modules exist
+    if not (web_dir / "node_modules").exists():
+        click.echo("Installing dependencies...")
+        subprocess.run(["npm", "install"], cwd=str(web_dir), check=True)
+
+    env = {**os.environ, "ADJUTANT_WEB_PORT": str(port), "ADJUTANT_WEB_HOST": host}
+
+    procs: list[subprocess.Popen[bytes]] = []
+    try:
+        click.echo(f"Starting API on {host}:{port}...")
+        procs.append(
+            subprocess.Popen(  # noqa: S603, S607
+                ["npm", "run", "dev"],
+                cwd=str(api_dir),
+                env=env,
+            )
+        )
+
+        click.echo("Starting frontend on https://localhost:3021...")
+        procs.append(
+            subprocess.Popen(  # noqa: S603, S607
+                ["npm", "run", "dev"],
+                cwd=str(app_dir),
+                env=env,
+            )
+        )
+
+        if not no_open:
+            import time
+
+            time.sleep(2)
+            import webbrowser
+
+            webbrowser.open("https://localhost:3021")
+
+        click.echo()
+        click.echo("Adjutant Web is running. Press Ctrl+C to stop.")
+        click.echo()
+
+        # Wait for either process to exit
+        while all(p.poll() is None for p in procs):
+            import time
+
+            time.sleep(0.5)
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for p in procs:
+            with contextlib.suppress(OSError):
+                p.send_signal(signal.SIGTERM)
+        for p in procs:
+            with contextlib.suppress(OSError):
+                p.wait(timeout=5)
+
+        click.echo("\nStopped.")
 
 
 # ---------------------------------------------------------------------------

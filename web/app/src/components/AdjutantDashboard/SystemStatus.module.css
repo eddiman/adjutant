@@ -1,83 +1,189 @@
-.card {
-  background: var(--color-surface);
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-8) var(--spacing-8) var(--spacing-6);
+  background: var(--color-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  padding: var(--spacing-6);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  gap: var(--spacing-6);
 }
 
-[data-theme="bauhaus"] .card {
+[data-theme="bauhaus"] .hero {
   border: 2px solid var(--color-border);
   border-radius: 0;
   box-shadow: none;
 }
 
-.cardTitle {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  margin: 0 0 var(--spacing-4) 0;
-  color: var(--color-text-primary);
-  font-family: var(--font-heading);
+.heroContent {
+  flex: 1;
 }
 
-.statusGrid {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.statusItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-3);
-  background: var(--color-background);
-  border-radius: var(--border-radius-md);
-  border: 1px solid var(--color-border);
-}
-
-[data-theme="bauhaus"] .statusItem {
-  border-radius: 0;
-  border: 1px solid var(--color-border);
-}
-
-.label {
+.statusLabel {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
   color: var(--color-text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: var(--spacing-1);
 }
 
-.value {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
+.stateText {
+  font-family: var(--font-heading);
+  font-size: 3rem;
+  font-weight: var(--font-weight-bold);
+  font-style: italic;
+  margin: 0 0 var(--spacing-5) 0;
+  letter-spacing: -0.5px;
+  line-height: 1;
   text-transform: uppercase;
 }
 
-.valuePath {
-  font-size: var(--font-size-sm);
-  font-family: var(--font-mono, monospace);
-  color: var(--color-text-secondary);
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .stateOperational {
-  color: var(--color-success, #10b981);
+  color: var(--color-text);
 }
 
 .statePaused {
-  color: var(--color-warning, #f59e0b);
+  color: var(--color-warning, #e67e22);
 }
 
 .stateKilled {
-  color: var(--color-error, #ef4444);
+  color: var(--color-danger, #c0392b);
 }
 
 .stateStopped {
-  color: var(--color-text-secondary, #6b7280);
+  color: var(--color-text-muted);
+}
+
+/* ===== Badges ===== */
+
+.badges {
+  display: flex;
+  gap: var(--spacing-2);
+  flex-wrap: wrap;
+}
+
+.badge {
+  display: inline-block;
+  padding: var(--spacing-1) var(--spacing-3);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  background: #1a2332;
+  color: #ffffff;
+  border-radius: var(--radius-xs);
+}
+
+[data-theme="bauhaus"] .badge {
+  border-radius: 0;
+  background: var(--color-text);
+}
+
+.badgeActive {
+  background: #1a3a2a;
+  color: #4ade80;
+}
+
+[data-theme="bauhaus"] .badgeActive {
+  background: var(--color-text);
+  color: var(--color-success);
+}
+
+.badgeInactive {
+  background: #3a1a1a;
+  color: #f87171;
+}
+
+[data-theme="bauhaus"] .badgeInactive {
+  background: var(--color-text);
+  color: var(--color-danger);
+}
+
+/* ===== Orb visual ===== */
+
+.heroVisual {
+  flex-shrink: 0;
+}
+
+.orb {
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--color-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+[data-theme="bauhaus"] .orb {
+  border: 2px solid var(--color-border);
+}
+
+.orbInner {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--color-border-light);
+  transition: all 0.6s ease;
+}
+
+.stateOperational .orbInner {
+  background: var(--color-success);
+  box-shadow: 0 0 12px rgba(46, 204, 113, 0.4);
+}
+
+.statePaused .orbInner {
+  background: var(--color-warning, #e67e22);
+  box-shadow: 0 0 12px rgba(230, 126, 34, 0.4);
+}
+
+.stateKilled .orbInner {
+  background: var(--color-danger, #c0392b);
+  box-shadow: 0 0 12px rgba(192, 57, 43, 0.4);
+}
+
+.stateStopped .orbInner {
+  background: var(--color-text-muted);
+}
+
+[data-theme="bauhaus"] .orbInner {
+  box-shadow: none;
+}
+
+[data-theme="bauhaus"] .stateOperational .orbInner {
+  box-shadow: none;
+}
+
+[data-theme="bauhaus"] .statePaused .orbInner {
+  box-shadow: none;
+}
+
+[data-theme="bauhaus"] .stateKilled .orbInner {
+  box-shadow: none;
+}
+
+/* ===== Responsive ===== */
+
+@media (max-width: 480px) {
+  .hero {
+    padding: var(--spacing-6);
+  }
+
+  .stateText {
+    font-size: 2rem;
+  }
+
+  .orb {
+    width: 64px;
+    height: 64px;
+  }
+
+  .orbInner {
+    width: 14px;
+    height: 14px;
+  }
 }
