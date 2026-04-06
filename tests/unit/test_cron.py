@@ -353,11 +353,11 @@ class TestFormatHeartbeat:
             "escalated": False,
         }
         result = _format_heartbeat(data, "pulse", "cron")
-        assert "Pulse completed" in result
-        assert "ixda, portfolio" in result
+        assert "2 KBs" in result
+        assert "2 issues" in result
         assert "IxDA: deadline Friday" in result
-        assert "Source: cron" in result
-        assert "Escalated" not in result
+        assert "Portfolio: high concentration" in result
+        assert "Flagged" not in result
 
     def test_review_with_escalation(self) -> None:
         data = {
@@ -366,15 +366,15 @@ class TestFormatHeartbeat:
             "escalated": True,
         }
         result = _format_heartbeat(data, "review", "telegram")
-        assert "Review completed" in result
-        assert "Escalated" in result
-        assert "Source: telegram" in result
+        assert "portfolio" in result
+        assert "All clear" in result
+        assert "Flagged" in result
 
     def test_no_issues(self) -> None:
         data = {"kbs_checked": ["ixda"], "issues_found": [], "escalated": False}
         result = _format_heartbeat(data, "pulse", "adjutant-web")
-        assert "Issues:" not in result
-        assert "Source: adjutant-web" in result
+        assert "ixda" in result
+        assert "All clear" in result
 
     def test_truncates_many_issues(self) -> None:
         data = {
@@ -385,12 +385,21 @@ class TestFormatHeartbeat:
         result = _format_heartbeat(data, "pulse", "cron")
         assert "issue 7" in result  # 8th issue (0-indexed) is included
         assert "issue 8" not in result  # 9th is truncated
-        assert "and 4 more" in result
+        assert "plus 4 more" in result
 
     def test_empty_data(self) -> None:
         result = _format_heartbeat({}, "pulse", "cron")
-        assert "Pulse completed" in result
-        assert "Source: cron" in result
+        assert "nothing to check" in result
+
+    def test_single_issue_inlined(self) -> None:
+        data = {
+            "kbs_checked": ["ixda"],
+            "issues_found": ["deadline approaching"],
+            "escalated": False,
+        }
+        result = _format_heartbeat(data, "pulse", "cron")
+        assert "one issue" in result
+        assert "deadline approaching" in result
 
 
 # ---------------------------------------------------------------------------
@@ -421,8 +430,8 @@ class TestNotifyCompletion:
 
         mock_notify.assert_called_once()
         msg = mock_notify.call_args[0][0]
-        assert "Pulse completed" in msg
         assert "ixda" in msg
+        assert "All clear" in msg
 
     def test_silent_when_no_heartbeat(self, tmp_path: Path) -> None:
         """Should not crash when heartbeat file is missing."""

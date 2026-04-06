@@ -36,9 +36,10 @@ class KBEntry:
     model: str = "inherit"
     access: str = "read-only"
     created: str = ""
+    query_hint: str = ""
 
     def as_dict(self) -> dict[str, str]:
-        return {
+        d = {
             "name": self.name,
             "path": self.path,
             "description": self.description,
@@ -46,6 +47,9 @@ class KBEntry:
             "access": self.access,
             "created": self.created,
         }
+        if self.query_hint:
+            d["query_hint"] = self.query_hint
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +89,8 @@ def _load_registry(registry_path: Path) -> list[KBEntry]:
                     current.access = fval
                 elif fname == "created":
                     current.created = fval
+                elif fname == "query_hint":
+                    current.query_hint = fval
 
     if current is not None:
         entries.append(current)
@@ -107,6 +113,8 @@ def _write_registry(registry_path: Path, entries: list[KBEntry]) -> None:
         lines.append(f'    model: "{e.model}"')
         lines.append(f'    access: "{e.access}"')
         lines.append(f'    created: "{e.created}"')
+        if e.query_hint:
+            lines.append(f'    query_hint: "{e.query_hint}"')
     registry_path.write_text("\n".join(lines) + "\n")
 
 
@@ -209,6 +217,7 @@ def kb_register(
     model: str = "inherit",
     access: str = "read-only",
     created: str | None = None,
+    query_hint: str = "",
 ) -> None:
     """Register a KB in the registry.
 
@@ -228,6 +237,7 @@ def kb_register(
         model=model,
         access=access,
         created=created or date.today().isoformat(),
+        query_hint=query_hint,
     )
     entries.append(new_entry)
     _write_registry(reg, entries)
@@ -536,6 +546,7 @@ def kb_create(
     description: str,
     model: str = "inherit",
     access: str = "read-only",
+    query_hint: str = "",
 ) -> None:
     """Scaffold + register a new KB.
 
@@ -546,6 +557,7 @@ def kb_create(
         description: Human-readable description.
         model: LLM model string or 'inherit'.
         access: 'read-only' or 'read-write'.
+        query_hint: Optional hint for pulse/review queries (what to ask about).
 
     Raises:
         ValueError: If name invalid, path relative, or name already registered.
@@ -565,7 +577,7 @@ def kb_create(
         raise ValueError(f"Knowledge base '{name}' already registered.")
 
     kb_scaffold(adj_dir, name, kb_path, description, model, access)
-    kb_register(adj_dir, name, str(kb_path), description, model, access)
+    kb_register(adj_dir, name, str(kb_path), description, model, access, query_hint=query_hint)
 
 
 def kb_remove(adj_dir: Path, name: str) -> None:

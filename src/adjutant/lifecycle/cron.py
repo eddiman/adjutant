@@ -25,35 +25,46 @@ from adjutant.core.paths import AdjutantDirNotFoundError, get_adj_dir, init_adj_
 
 
 def _format_heartbeat(data: dict, action: str, source: str) -> str:  # noqa: C901
-    """Format last_heartbeat.json into a human-readable notification."""
-    lines: list[str] = []
-
-    # Header
-    emoji = "\U0001f4e1" if action == "pulse" else "\U0001f4dd"  # 📡 or 📝
-    lines.append(f"{emoji} {action.title()} completed")
-
-    # KBs checked
+    """Format last_heartbeat.json into a natural-language notification."""
     kbs = data.get("kbs_checked", [])
-    if kbs:
-        lines.append(f"\nChecked: {', '.join(kbs)}")
-
-    # Issues found
     issues = data.get("issues_found", [])
-    if issues:
-        lines.append("\nIssues:")
-        for issue in issues[:8]:  # Cap at 8 to stay under Telegram limit
-            lines.append(f"\u2022 {issue}")
-        if len(issues) > 8:
-            lines.append(f"  ... and {len(issues) - 8} more")
+    escalated = data.get("escalated", False)
 
-    # Escalation
-    if data.get("escalated"):
-        lines.append("\n\u26a0\ufe0f Escalated — check insights/pending/")
+    emoji = "\U0001f4e1" if action == "pulse" else "\U0001f4dd"  # 📡 or 📝
+    kb_count = len(kbs)
+    issue_count = len(issues)
 
-    # Source tag
-    lines.append(f"\nSource: {source}")
+    # Build a natural opening line
+    if kb_count == 0:
+        opening = f"{emoji} Ran a {action}, nothing to check."
+    elif issue_count == 0:
+        if kb_count == 1:
+            opening = f"{emoji} Checked {kbs[0]}. All clear."
+        else:
+            opening = f"{emoji} Checked {kb_count} KBs. Everything looks good."
+    else:
+        if kb_count == 1:
+            opening = f"{emoji} Checked {kbs[0]}."
+        else:
+            opening = f"{emoji} Checked {kb_count} KBs."
+        if issue_count == 1:
+            opening += f" Found one issue: {issues[0]}"
+        else:
+            opening += f" Found {issue_count} issues."
 
-    return "\n".join(lines)
+    parts = [opening]
+
+    # List issues only when there are multiple (single already inlined above)
+    if issue_count > 1:
+        for issue in issues[:8]:
+            parts.append(f"\u2022 {issue}")
+        if issue_count > 8:
+            parts.append(f"  ...plus {issue_count - 8} more")
+
+    if escalated:
+        parts.append("\n\u26a0\ufe0f Flagged for your attention.")
+
+    return "\n".join(parts)
 
 
 def _notify_completion(adj_dir: Path, action: str, source: str) -> None:
