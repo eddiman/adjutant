@@ -38,22 +38,21 @@ Read the most recent journal file(s) from `journal/` to understand what the last
 
 Read `knowledge_bases/registry.yaml` to get the list of all registered knowledge bases, including their access level (`read-only` or `read-write`).
 
-### 4. Query each KB in depth
+### 4. Query all KBs in depth (parallel)
 
-For each KB in the registry, build a targeted deep query using its `query_hint` field (if present). The hint tells you what topics and questions are most meaningful for that specific KB.
-
-- **If `query_hint` is set:** Incorporate the hint into a deep-review query. Example: if the hint says "Ask about open issues, measurements, and upcoming deadlines", query with those specifics plus the standard depth questions.
-- **If `query_hint` is empty or missing:** Fall back to the generic deep query.
+Run a single command to query all registered KBs in parallel with a deep-review question:
 
 ```bash
-.venv/bin/python -m adjutant kb query "<name>" "Full reflection: thorough status report. What's on track, at risk, stale, or missing? Deadlines in 2-4 weeks? If data files are outdated, update them. Be specific — cite files and sections. <append query_hint-specific questions here if hint exists>"
+.venv/bin/python -m adjutant kb query-all -q "Full reflection: thorough status report. What's on track, at risk, stale, or missing? Deadlines in 2-4 weeks? If data files are outdated, update them. Be specific — cite files and sections."
 ```
+
+This queries every KB concurrently using each KB's `query_hint` (appended to your question if set). The result is a combined response with one section per KB. This is much faster than querying KBs one at a time.
 
 The KB sub-agent for read-write KBs has write and bash access — it can update `data/current.md`, run data-refresh scripts, rebuild rendered views, run reconciliation, and make corrections directly. If the KB's data is visibly stale, the sub-agent should act on it during this call.
 
 Important: for safety-sensitive or operational KBs, this does not authorize sensitive real-world side effects. Refreshing, repairing, and reconciling data is allowed. External actions with real-world consequences still require explicit user intent.
 
-Collect each response. If a KB is unreachable or returns an error, note it as unavailable.
+Collect the combined response. Note any KBs that returned errors.
 
 ### 5. Check for pending insights
 

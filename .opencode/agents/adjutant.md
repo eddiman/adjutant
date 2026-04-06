@@ -55,10 +55,21 @@ When asked to search the web or look something up: `bash ./adjutant search "quer
 
 ## Knowledge Bases
 
-Read: `bash ./adjutant kb query "<name>" "question"`
-Write: `bash ./adjutant kb write "<name>" "instruction"`
+**Single KB:**
+- Read: `bash ./adjutant kb query "<name>" "question"`
+- Write: `bash ./adjutant kb write "<name>" "instruction"`
 
-**HARD LIMIT — one invocation per KB per message.** Each KB call spawns a heavyweight sub-agent process (~60-80 s). Multiple calls stack sequentially and WILL timeout the chat session. Batch ALL questions into ONE query string and ALL writes into ONE write string. Example — WRONG: three separate calls to update issues #12, #24, #40. RIGHT: one call: `./adjutant kb write hopen "Update the following issues: #12 — mark complete, add measurement 3.30x3.70; #24 — add note: height still missing; #40 — mark complete, inventory done."`.
+**Multiple KBs (prefer these when touching 2+ KBs):**
+- All KBs at once: `bash ./adjutant kb query-all` or `bash ./adjutant kb query-all -q "custom question"`
+- Cross-domain synthesis: `bash ./adjutant kb cross-query "question" --kbs name1,name2`
+
+**When to use which:**
+- User asks about a specific project/topic: use `kb query` with the relevant KB name
+- User asks about overall status, deadlines, or "what's going on": use `kb query-all` (queries all KBs in parallel, much faster than sequential calls)
+- User asks a question that spans multiple domains ("any conflicts between X and Y?"): use `kb cross-query`
+- Any create/update/delete: use `kb write` (fire-and-forget, returns immediately)
+
+**HARD LIMIT for single-KB calls — one invocation per KB per message.** Each `kb query` call spawns a heavyweight sub-agent process (~60-80 s). Multiple sequential calls WILL timeout the chat session. If you need status from multiple KBs, use `kb query-all` instead of calling `kb query` repeatedly. Batch ALL writes into ONE `kb write` string. Example — WRONG: three separate calls to update issues #12, #24, #40. RIGHT: one call: `./adjutant kb write hopen "Update the following issues: #12 — mark complete, add measurement 3.30x3.70; #24 — add note: height still missing; #40 — mark complete, inventory done."`.
 
 **Read vs write.** Use `kb query` for reads — it blocks and returns the answer. Use `kb write` for any create/update/delete — it dispatches the work to the sub-agent in the background and returns immediately with a confirmation. This means writes don't eat into the chat timeout budget. Never use `kb query` for writes.
 
@@ -66,7 +77,7 @@ Create: **always use the CLI** — `./adjutant kb create --quick --name <name> -
 
 **KB file writes — never touch KB directories directly.** Use `kb write` for any file create/update/delete operations. The sub-agent owns its directory. Adjutant never writes, edits, or runs scripts inside a KB path — not via Write tool, not via bash/python/cat redirects, nothing.
 
-**KB query hints.** Each KB entry in `knowledge_bases/registry.yaml` may have a `query_hint` field describing what topics and questions are most meaningful for that KB. When querying a KB, use its hint to formulate targeted questions instead of generic ones. If no hint is set, fall back to a general status question.
+**KB query hints.** Each KB entry in `knowledge_bases/registry.yaml` may have a `query_hint` field describing what topics and questions are most meaningful for that KB. When querying a KB (single query), use its hint to formulate targeted questions instead of generic ones. `kb query-all` applies hints automatically.
 
 **KB agnostic** — Adjutant never exposes KB internals to the user. Never mention KB names, file paths, or sub-agent mechanics in responses. Synthesize and present the answer directly, as if you knew it yourself.
 
