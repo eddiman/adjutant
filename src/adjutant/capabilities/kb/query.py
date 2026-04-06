@@ -295,17 +295,23 @@ async def kb_query_all(
     return "\n\n".join(parts)
 
 
+_CROSS_QUERY_KB_TIMEOUT = 60.0  # tighter than single-query — budget shared with synthesis
+_CROSS_QUERY_SYNTH_TIMEOUT = 45.0  # synthesis is lightweight, just combining responses
+
+
 async def kb_cross_query(
     kb_names: list[str],
     question: str,
     adj_dir: Path,
     *,
-    timeout: float = KB_QUERY_TIMEOUT,
+    timeout: float = _CROSS_QUERY_KB_TIMEOUT,
 ) -> str:
     """Query multiple KBs in parallel and synthesize a unified answer.
 
     Queries selected KBs concurrently, then runs a synthesis prompt
-    through the backend to produce a single cross-domain answer.
+    through the backend using the cheap model (synthesis is lightweight).
+    Total budget: ~60s (parallel KB queries) + ~45s (synthesis) = ~105s,
+    well within the 240s Telegram chat timeout.
 
     Args:
         kb_names: List of registered KB names to query.
@@ -353,8 +359,19 @@ async def kb_cross_query(
         "connections and any conflicts between the sources."
     )
 
+    # Use cheap model for synthesis — it's just combining two responses,
+    # not deep reasoning.  Saves tokens and avoids the timeout ceiling.
+    from adjutant.core.config import load_typed_config
+
+    cheap_model = load_typed_config(adj_dir / "adjutant.yaml").llm.models.cheap
+
     backend = get_backend()
-    result = await backend.run(synthesis_prompt, workdir=adj_dir, timeout=timeout)
+    result = await backend.run(
+        synthesis_prompt,
+        workdir=adj_dir,
+        model=cheap_model,
+        timeout=_CROSS_QUERY_SYNTH_TIMEOUT,
+    )
 
     if result.text:
         return result.text
