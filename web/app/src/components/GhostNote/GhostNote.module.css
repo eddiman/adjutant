@@ -1,0 +1,58 @@
+/* === Ghost Note (Placement Mode) === */
+.ghost-note {
+  position: fixed;
+  z-index: var(--z-context-menu);
+  pointer-events: none;
+  width: var(--ghost-note-width);
+  height: var(--ghost-note-height);
+  background: var(--color-surface);
+  border: 2px dashed var(--color-primary);
+  border-radius: var(--radius);
+  opacity: 0.7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  animation: ghostNoteAppear var(--transition-fast);
+}
+
+@keyframes ghostNoteAppear {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+}
+
+.ghost-note-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 60%;
+}
+
+.ghost-note-lines span {
+  display: block;
+  height: 2px;
+  background: var(--color-primary);
+  border-radius: 1px;
+  opacity: 0.5;
+}
+
+.ghost-note-lines span:nth-child(2) {
+  width: 80%;
+}
+
+.ghost-note-lines span:nth-child(3) {
+  width: 50%;
+}
+
+.ghost-note-hint {
+  font-size: var(--font-size-xxs);
+  color: var(--color-text-secondary);
+  margin: 0;
+}

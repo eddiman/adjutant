@@ -12,12 +12,13 @@ interface SystemStatusProps {
 }
 
 export function SystemStatus({ status }: SystemStatusProps) {
-  const stateClass = {
+  const stateClassMap: Record<string, string> = {
     OPERATIONAL: styles.stateOperational,
     PAUSED: styles.statePaused,
     KILLED: styles.stateKilled,
     STOPPED: styles.stateStopped,
-  }[status.lifecycleState ?? ''] ?? '';
+  };
+  const stateClass = stateClassMap[status.lifecycleState ?? ''] ?? '';
 
   return (
     <div className={styles.hero}>

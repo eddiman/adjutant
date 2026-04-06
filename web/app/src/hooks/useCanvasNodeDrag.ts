@@ -20,7 +20,7 @@ interface UseCanvasNodeDragProps<T extends Record<string, unknown>> {
   onImagePositionChange: (id: string, position: Position) => void;
   onSectionPositionChange: (slug: string, position: Position) => void;
   onStickyPositionChange: (slug: string, position: Position) => void;
-  onNoteSectionChange?: (noteSlug: string, sectionSlug: string | null) => void;
+  onNoteSectionChange?: (noteSlug: string, sectionSlug: string | null, startPosition: Position) => void;
 }
 
 
@@ -92,6 +92,8 @@ export function useCanvasNodeDrag<T extends Record<string, unknown>>({
 
       const allNodes = getNodes();
       for (const n of allNodes) {
+        // Don't include the dragged section itself
+        if (n.id === draggedSection.id) continue;
         if (isNodeInsideSection(n, draggedSection)) {
           containedNodesRef.current.add(n.id);
           // Also capture start positions for contained nodes
@@ -159,6 +161,9 @@ export function useCanvasNodeDrag<T extends Record<string, unknown>>({
     const nodePositionMap = new Map(allNodes.map(n => [n.id, n.position]));
     const nodeMap = new Map(allNodes.map(n => [n.id, n]));
 
+    // Snapshot start positions before history block clears them
+    const savedStartPositions = new Map(dragStartPositionsRef.current);
+
     // Build history action from captured start positions
     if (dragStartPositionsRef.current.size > 0) {
       const beforeSnapshots: NodeSnapshot[] = [];
@@ -218,43 +223,25 @@ export function useCanvasNodeDrag<T extends Record<string, unknown>>({
       }
 
     // Detect section membership changes for notes
+    // Skip notes that moved as part of their parent section (they didn't change section)
     if (onNoteSectionChange) {
       for (const [noteId, startSection] of dragStartSectionsRef.current) {
+        // If this note was a contained node of a dragged section, skip the check
+        if (containedNodesRef.current.has(noteId)) continue;
+
         const node = nodeMap.get(noteId);
         if (!node) continue;
-        
+
         const currentSection = getSectionContainingNode(node, sections);
-        
-        // If section membership changed, notify the callback
+
+        // If section membership changed, notify with start position for revert
         if (startSection !== currentSection) {
-          onNoteSectionChange(noteId, currentSection ?? null);
+          const startPos = savedStartPositions.get(noteId) || { x: node.position.x, y: node.position.y };
+          onNoteSectionChange(noteId, currentSection ?? null, startPos);
         }
       }
     }
     dragStartSectionsRef.current.clear();
-
-    // Check if section was dragged over new notes that should be included
-    if (draggedSectionRef.current && onNoteSectionChange) {
-      const draggedSectionNode = nodeMap.get(draggedSectionRef.current);
-      if (draggedSectionNode && draggedSectionNode.type === 'section') {
-        const sectionData = draggedSectionNode.data as unknown as { slug: string };
-        const sectionSlug = sectionData.slug;
-        
-        // Find all notes and check if they're now inside this section
-        for (const [nodeId, node] of nodeMap) {
-          if (node.type === 'note') {
-            // Skip if note is already in a section
-            const noteData = node.data as { section?: string };
-            if (noteData.section) continue;
-            
-            // Check if note is now inside the dragged section
-            if (isNodeInsideSection(node, draggedSectionNode)) {
-              onNoteSectionChange(nodeId, sectionSlug);
-            }
-          }
-        }
-      }
-    }
 
     // Clear section drag tracking
     containedNodesRef.current.clear();

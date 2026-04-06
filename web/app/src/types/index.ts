@@ -109,8 +109,8 @@ export interface NotesSearchResponse {
 export interface SectionData {
   name: string;
   position?: Position;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
   color?: string;
   dirPath?: string;
   createdAt: string;

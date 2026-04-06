@@ -2,11 +2,14 @@ import { useCallback, useState } from 'react';
 import type { Node } from '@xyflow/react';
 import type { GuideLine } from '../components/SnapGuides';
 
-// Node dimensions for snap calculations
-const NODE_DIMENSIONS = {
+// Default dimensions for snap calculations (fallbacks when measured size unavailable)
+const DEFAULT_DIMENSIONS: Record<string, { width: number; height: number }> = {
   note: { width: 200, height: 283 },
   folder: { width: 220, height: 100 },
-} as const;
+  section: { width: 500, height: 400 },
+  sticky: { width: 150, height: 150 },
+  image: { width: 300, height: 200 },
+};
 
 // Snap threshold in pixels
 const SNAP_THRESHOLD = 8;
@@ -21,10 +24,28 @@ interface NodeBounds {
   centerY: number;
 }
 
+function getNodeDimensions(node: Node): { width: number; height: number } {
+  // Prefer measured dimensions from React Flow
+  if (node.measured?.width && node.measured?.height) {
+    return { width: node.measured.width, height: node.measured.height };
+  }
+  // Try node data (sections store width/height, images store displayWidth/displayHeight)
+  const data = node.data as Record<string, unknown> | undefined;
+  if (data) {
+    const dw = data.displayWidth as number | undefined;
+    const dh = data.displayHeight as number | undefined;
+    if (dw && dh) return { width: dw, height: dh };
+    const w = data.width as number | undefined;
+    const h = data.height as number | undefined;
+    if (w && h) return { width: w, height: h };
+  }
+  // Fall back to type-specific defaults
+  return DEFAULT_DIMENSIONS[node.type || 'note'] || DEFAULT_DIMENSIONS.note;
+}
+
 function getNodeBounds(node: Node): NodeBounds {
-  const type = node.type as keyof typeof NODE_DIMENSIONS;
-  const dims = NODE_DIMENSIONS[type] || NODE_DIMENSIONS.note;
-  
+  const dims = getNodeDimensions(node);
+
   return {
     id: node.id,
     left: node.position.x,
@@ -34,11 +55,6 @@ function getNodeBounds(node: Node): NodeBounds {
     centerX: node.position.x + dims.width / 2,
     centerY: node.position.y + dims.height / 2,
   };
-}
-
-function getNodeDimensions(node: Node) {
-  const type = node.type as keyof typeof NODE_DIMENSIONS;
-  return NODE_DIMENSIONS[type] || NODE_DIMENSIONS.note;
 }
 
 export function useSnapToGuides() {

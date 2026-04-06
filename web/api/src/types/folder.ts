@@ -41,18 +41,18 @@ export interface ItemMeta {
 export const SectionSchema = z.object({
   name: z.string().default('Section'),
   position: PositionSchema.optional(),
-  width: z.number().default(500),
-  height: z.number().default(400),
+  width: z.number().optional(),
+  height: z.number().optional(),
   color: z.string().optional(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
+  createdAt: z.string().default(() => new Date().toISOString()),
+  updatedAt: z.string().default(() => new Date().toISOString()),
 });
 
 export interface SectionData {
   name: string;
   position?: Position;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
   color?: string;
   createdAt: string;
   updatedAt: string;

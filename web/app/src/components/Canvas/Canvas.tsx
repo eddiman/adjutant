@@ -30,6 +30,7 @@ import { useCanvasTouchGestures } from '../../hooks/useCanvasTouchGestures';
 import { useCanvasNodeDrag } from '../../hooks/useCanvasNodeDrag';
 import { useCanvasKeyboard } from '../../hooks/useCanvasKeyboard';
 import { isTouchDevice } from '../../utils/platform.js';
+import { isNodeInsideSection } from '../../utils/sectionPositioning.js';
 import type { NoteFile, Position, CanvasImage, KbMeta, CanvasTool, Section, Sticky, StickyColor } from '../../types';
 import type { PlacementType } from '../../contexts/PlacementContext.js';
 import type { Settings } from '../../hooks/useSettings';
@@ -71,11 +72,11 @@ interface CanvasProps {
   onImageDuplicate: (id: string, position: Position) => Promise<void>;
   onNoteMoveToCategory?: (slug: string, category: string) => Promise<NoteFile | null>;
   onImageMoveToCategory?: (id: string, category: string) => Promise<boolean>;
-  onNoteSectionChange?: (noteSlug: string, sectionSlug: string | null) => void;
+  onNoteSectionChange?: (noteSlug: string, sectionSlug: string | null, startPosition: Position) => void;
   // Section handlers
   onSectionCreate?: (position: Position, nodes?: Node<CanvasNodeData>[]) => void;
   onSectionPositionChange: (slug: string, position: Position) => void;
-  onSectionResize: (slug: string, width: number, height: number) => void;
+  onSectionResize: (slug: string, width: number, height: number, dx?: number, dy?: number) => void;
   onSectionRename: (slug: string, name: string) => void;
   onSectionColorChange?: (slug: string, color: StickyColor) => void;
   onSectionsDelete?: (slugs: string[]) => Promise<void>;
@@ -88,6 +89,7 @@ interface CanvasProps {
   onSelectionChange?: (selectedNodes: Node<CanvasNodeData>[]) => void;
   onUpdateNodePositionsRef?: (handler: (updates: NodePositionUpdate[]) => void) => void;
   onFocusOnNodeRef?: (handler: (nodeId: string, options?: FocusOnNodeOptions) => void) => void;
+  onSetNodePositionRef?: (handler: (nodeId: string, position: Position) => void) => void;
   onEnterPlacementMode?: (type: PlacementType) => void;
   onHistoryChange?: (history: CanvasHistoryHandle) => void;
   onSectionSelected?: (sectionId: string | null) => void;
@@ -166,6 +168,7 @@ function CanvasInner({
   onSelectionChange,
   onUpdateNodePositionsRef,
   onFocusOnNodeRef,
+  onSetNodePositionRef,
   onEnterPlacementMode,
   onHistoryChange,
   onSectionSelected,
@@ -365,71 +368,83 @@ function CanvasInner({
     });
   }, [nodeStructureKey, setNodes]);
 
-  // Sync node data when content changes
+  // Handle section resize with position delta for non-BR corners
+  // Also shifts contained nodes so they stay aligned with the section
+  const handleSectionResizeWithDelta = useCallback((slug: string, w: number, h: number, dx?: number, dy?: number) => {
+    if (dx || dy) {
+      const nodeId = `section-${slug}`;
+      const deltaX = dx || 0;
+      const deltaY = dy || 0;
+      setNodes(cur => {
+        const sectionNode = cur.find(n => n.id === nodeId);
+        if (!sectionNode) return cur;
+        // Find contained nodes before moving the section
+        const containedIds = new Set(
+          cur.filter(n => n.id !== nodeId && isNodeInsideSection(n as never, sectionNode as never)).map(n => n.id)
+        );
+        return cur.map(n => {
+          if (n.id === nodeId) {
+            const newPos = { x: n.position.x + deltaX, y: n.position.y + deltaY };
+            onSectionPositionChange(slug, newPos);
+            return { ...n, position: newPos };
+          }
+          if (containedIds.has(n.id)) {
+            const newPos = { x: n.position.x + deltaX, y: n.position.y + deltaY };
+            // Persist shifted positions
+            if (n.id.startsWith('note-')) onNotePositionChange(n.id, newPos);
+            else if (n.id.startsWith('image-')) onImagePositionChange(n.id.replace('image-', ''), newPos);
+            else if (n.id.startsWith('sticky-')) onStickyPositionChange(n.id.replace('sticky-', ''), newPos);
+            return { ...n, position: newPos };
+          }
+          return n;
+        });
+      });
+    }
+    onSectionResize(slug, w, h);
+  }, [setNodes, onSectionPositionChange, onSectionResize, onNotePositionChange, onImagePositionChange, onStickyPositionChange]);
+
+  // Consolidated sync: data, callbacks, pan mode, and highlight in one pass
   useEffect(() => {
-    const noteDataMap = new Map(notes.map(n => [`note-${n.path}`, n]));
+    const noteDataMap = new Map(notes.map(n => [`note-${n.path}`, { ...n, content: n.preview || n.content || '' }]));
     const imageDataMap = new Map(images.map(i => [`image-${i.id}`, i]));
     const sectionDataMap = new Map(sections.map(s => [`section-${s.id}`, s]));
     const stickyDataMap = new Map(stickies.map(s => [`sticky-${s.id}`, s]));
+    const isPanMode = isTouch && activeTool === 'pan';
 
     setNodes(currentNodes =>
       currentNodes.map(node => {
+        let updated = { ...node, draggable: !isPanMode, data: { ...node.data, isPanMode } };
+
         if (node.type === 'note') {
           const noteData = noteDataMap.get(node.id);
-          if (noteData && (noteData.title !== (node.data as NoteNodeData).title ||
-            noteData.content !== (node.data as NoteNodeData).content)) {
-            return { ...node, data: { ...node.data, ...noteData } };
+          if (noteData) {
+            updated = { ...updated, data: { ...updated.data, ...noteData } };
           }
+          const isHighlighted = node.id === highlightedNodeId;
+          updated = { ...updated, data: { ...updated.data, isHighlighted } };
         } else if (node.type === 'image') {
           const imageData = imageDataMap.get(node.id);
           if (imageData) {
-            return { ...node, data: { ...node.data, ...imageData } };
+            updated = { ...updated, data: { ...updated.data, ...imageData } };
           }
         } else if (node.type === 'section') {
           const sectionData = sectionDataMap.get(node.id);
           if (sectionData) {
-            const currentData = node.data as SectionNodeData;
-            if (sectionData.name !== currentData.name || sectionData.color !== currentData.color) {
-              return { ...node, data: { ...node.data, ...sectionData } };
-            }
+            updated = { ...updated, data: { ...updated.data, ...sectionData, onResize: handleSectionResizeWithDelta } };
+          } else {
+            updated = { ...updated, data: { ...updated.data, onResize: handleSectionResizeWithDelta } };
           }
         } else if (node.type === 'sticky') {
           const stickyData = stickyDataMap.get(node.id);
           if (stickyData) {
-            const currentData = node.data as StickyNodeData;
-            if (stickyData.text !== currentData.text || stickyData.color !== currentData.color) {
-              return { ...node, data: { ...node.data, ...stickyData } };
-            }
+            updated = { ...updated, data: { ...updated.data, ...stickyData } };
           }
         }
-        return node;
+
+        return updated;
       })
     );
-  }, [notes, images, sections, stickies, setNodes]);
-
-  // Sync isPanMode when tool changes
-  useEffect(() => {
-    const isPanMode = isTouch && activeTool === 'pan';
-    setNodes(currentNodes =>
-      currentNodes.map(node => ({
-        ...node,
-        draggable: !isPanMode,
-        data: { ...node.data, isPanMode },
-      }))
-    );
-  }, [activeTool, isTouch, setNodes]);
-
-  // Sync highlighted node
-  useEffect(() => {
-    setNodes(currentNodes =>
-      currentNodes.map(node => {
-        if (node.type !== 'note') return node;
-        const isHighlighted = node.id === highlightedNodeId;
-        if ((node.data as NoteNodeData).isHighlighted === isHighlighted) return node;
-        return { ...node, data: { ...node.data, isHighlighted } };
-      })
-    );
-  }, [highlightedNodeId, setNodes]);
+  }, [notes, images, sections, stickies, handleSectionResizeWithDelta, activeTool, isTouch, highlightedNodeId, setNodes]);
 
   // Selection helpers
   const getSelectedNoteSlugs = useCallback(() => {
@@ -714,6 +729,21 @@ function CanvasInner({
     }
   }, [onFocusOnNodeRef, focusOnNode]);
 
+  // Expose setNodePosition for external callers (e.g. move revert)
+  const setNodePosition = useCallback((nodeId: string, position: Position) => {
+    setNodes(currentNodes =>
+      currentNodes.map(n =>
+        n.id === nodeId ? { ...n, position } : n
+      )
+    );
+  }, [setNodes]);
+
+  useEffect(() => {
+    if (onSetNodePositionRef) {
+      onSetNodePositionRef(setNodePosition);
+    }
+  }, [onSetNodePositionRef, setNodePosition]);
+
   // Delete handlers
   const handleDeleteConfirm = useCallback(async () => {
     if (notesToDelete.length > 0) {
@@ -747,7 +777,7 @@ function CanvasInner({
     const totalCount = notesToDelete.length + imagesToDelete.length + sectionsToDelete.length + stickiesToDelete.length;
     if (totalCount === 1) {
       if (notesToDelete.length === 1) {
-        const note = notes.find(n => `note-${n.filename}` === notesToDelete[0]);
+        const note = notes.find(n => `note-${n.path}` === notesToDelete[0]);
         return `Are you sure you want to delete "${note?.title || 'Untitled'}"?`;
       } else if (imagesToDelete.length === 1) {
         return `Are you sure you want to delete this image?`;
@@ -863,6 +893,15 @@ function CanvasInner({
     clearSelection();
   }, [isPlacementMode, onPlacementClick, screenToFlowPosition, clearSelection, getNodes]);
 
+  // Handle node click — in placement mode, treat clicks on sections as placement clicks
+  const handleNodeClick = useCallback((event: React.MouseEvent, _node: Node<CanvasNodeData>) => {
+    if (isPlacementMode && onPlacementClick) {
+      const flowPosition = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const allNodes = getNodes();
+      onPlacementClick(flowPosition, allNodes);
+    }
+  }, [isPlacementMode, onPlacementClick, screenToFlowPosition, getNodes]);
+
   // Handle node context menu
   const handleNodeContextMenu = useCallback((event: React.MouseEvent, node: Node<CanvasNodeData>) => {
     event.preventDefault();
@@ -937,6 +976,7 @@ function CanvasInner({
         onNodeDrag={nodeDrag.handleNodeDrag}
         onNodeDragStop={nodeDrag.handleNodeDragStop}
         onPaneClick={handlePaneClick}
+        onNodeClick={handleNodeClick}
         onPaneContextMenu={contextMenuHook.handlePaneContextMenu}
         onNodeContextMenu={handleNodeContextMenu}
         onSelectionContextMenu={handleSelectionContextMenu}

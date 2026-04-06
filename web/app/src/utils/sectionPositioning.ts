@@ -268,6 +268,8 @@ interface DirSectionLayout {
   dirPath: string;
   name: string;
   position: Position;
+  /** True if position is relative to parent section, false if absolute */
+  positionIsRelative: boolean;
   width: number;
   height: number;
   notePositions: Map<string, Position>;
@@ -314,13 +316,17 @@ function estimateSectionSize(
 /**
  * Recursively build layout data for directory sections from a recursive folder tree.
  * Bottom-up: leaf directories are sized first, then parents.
- * If saved positions exist in the sidecar, they are used.
+ *
+ * All positions in the layout tree are ABSOLUTE canvas coordinates.
+ * The rootMeta parameter must always be the top-level sidecar (where all
+ * dirsection-* entries are stored), regardless of nesting depth.
  */
 export function layoutDirectoryTree(
   entries: RecursiveFolderEntry[],
   rootMeta: WebSidecar,
   kb: string,
-  basePath: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _basePath: string,
 ): DirSectionLayout[] {
   const folders = entries.filter(e => e.type === 'folder');
   if (folders.length === 0) return [];
@@ -331,9 +337,9 @@ export function layoutDirectoryTree(
     const dirPath = folder.relativePath;
     const sectionId = `dirsection-${dirPath.replace(/\//g, '-')}`;
 
-    // Recurse into children
+    // Always pass rootMeta (top-level sidecar) — all dirsection-* entries live there
     const childLayouts = folder.children
-      ? layoutDirectoryTree(folder.children, folder.meta || rootMeta, kb, dirPath)
+      ? layoutDirectoryTree(folder.children, rootMeta, kb, dirPath)
       : [];
 
     // Count notes in this folder
@@ -345,12 +351,12 @@ export function layoutDirectoryTree(
     const childSizes = childLayouts.map(cl => ({ width: cl.width, height: cl.height }));
     const { width, height } = estimateSectionSize(noteFiles.length, childSizes);
 
-    // Check if there's a saved position/size in the parent's sidecar
+    // Check saved position/size from root sidecar
     const savedSection = rootMeta.sections[sectionId];
     const finalWidth = savedSection?.width || width;
     const finalHeight = savedSection?.height || height;
 
-    // Position notes inside the section (grid layout)
+    // Note positions are RELATIVE to their containing section
     const notePositions = new Map<string, Position>();
     const cols = 3;
     const notesStartX = SECTION_PADDING;
@@ -361,26 +367,27 @@ export function layoutDirectoryTree(
       const row = Math.floor(i / cols);
       const noteKey = noteFiles[i].name;
 
-      // Check if there's a saved position in the subfolder's sidecar
-      const subMeta = folder.meta;
-      const savedPos = subMeta?.items[noteKey]?.position;
-
-      notePositions.set(noteKey, savedPos || {
+      // Default grid position (relative to section)
+      notePositions.set(noteKey, {
         x: notesStartX + col * (NOTE_WIDTH + NOTE_GAP),
         y: notesStartY + row * (NOTE_HEIGHT + NOTE_GAP),
       });
     }
 
-    // Position child sections below notes
+    // Child section default positions (relative to parent section)
     const noteRows = Math.ceil(noteFiles.length / cols);
-    let childStartY =
+    const childStartY =
       SECTION_LABEL_HEIGHT +
       SECTION_PADDING +
       (noteRows > 0 ? noteRows * (NOTE_HEIGHT + NOTE_GAP) : 0);
     let childX = SECTION_PADDING;
 
     for (const child of childLayouts) {
-      child.position = { x: childX, y: childStartY };
+      // Only assign default position if child doesn't have a saved absolute position
+      if (!rootMeta.sections[child.id]?.position) {
+        child.position = { x: childX, y: childStartY };
+        child.positionIsRelative = true;
+      }
       childX += child.width + SECTION_GAP;
     }
 
@@ -389,6 +396,7 @@ export function layoutDirectoryTree(
       dirPath,
       name: folder.name,
       position: savedSection?.position || { x: 0, y: 0 },
+      positionIsRelative: !savedSection?.position,
       width: finalWidth,
       height: finalHeight,
       notePositions,
@@ -401,10 +409,20 @@ export function layoutDirectoryTree(
   const startY = 100;
 
   for (const layout of layouts) {
-    const savedSection = rootMeta.sections[layout.id];
-    if (!savedSection?.position) {
+    if (layout.positionIsRelative) {
       layout.position = { x: nextX, y: startY };
+      layout.positionIsRelative = false; // Now absolute
       nextX += layout.width + SECTION_GAP;
+    }
+  }
+
+  // Resolve overlaps: sort by x, push any overlapping section to the right
+  layouts.sort((a, b) => a.position.x - b.position.x);
+  for (let i = 1; i < layouts.length; i++) {
+    const prev = layouts[i - 1];
+    const prevRight = prev.position.x + prev.width + SECTION_GAP;
+    if (layouts[i].position.x < prevRight) {
+      layouts[i].position = { x: prevRight, y: layouts[i].position.y };
     }
   }
 
@@ -414,6 +432,10 @@ export function layoutDirectoryTree(
 /**
  * Flatten a layout tree into arrays of sections and note positions
  * suitable for building React Flow nodes.
+ *
+ * Sections with saved absolute positions use them directly.
+ * Sections with relative (layout-computed) positions are offset by the parent.
+ * Note positions are always relative to their section and get converted to absolute.
  */
 export function flattenDirLayouts(
   layouts: DirSectionLayout[],
@@ -440,10 +462,17 @@ export function flattenDirLayouts(
   const notePositions = new Map<string, Position>();
 
   for (const layout of layouts) {
-    // Absolute position = parent offset + own position
-    const absPos = parentPosition
-      ? { x: parentPosition.x + layout.position.x, y: parentPosition.y + layout.position.y }
-      : layout.position;
+    // If position is relative (layout-computed), offset by parent.
+    // If position is absolute (saved), use as-is.
+    let absPos: Position;
+    if (layout.positionIsRelative && parentPosition) {
+      absPos = {
+        x: parentPosition.x + layout.position.x,
+        y: parentPosition.y + layout.position.y,
+      };
+    } else {
+      absPos = layout.position;
+    }
 
     sections.push({
       id: layout.id,
@@ -454,7 +483,7 @@ export function flattenDirLayouts(
       height: layout.height,
     });
 
-    // Convert relative note positions to absolute
+    // Note positions are always relative to section → convert to absolute
     for (const [noteKey, relPos] of layout.notePositions) {
       notePositions.set(
         `${layout.dirPath}/${noteKey}`,
@@ -462,7 +491,7 @@ export function flattenDirLayouts(
       );
     }
 
-    // Recurse into children
+    // Recurse into children, passing this section's absolute position
     const childResult = flattenDirLayouts(layout.childSections, absPos);
     for (const s of childResult.sections) sections.push(s);
     for (const [k, v] of childResult.notePositions) notePositions.set(k, v);

@@ -4,7 +4,7 @@ import type { Section, StickyColor } from '../../types';
 import styles from './SectionNode.module.css';
 
 export interface SectionNodeData extends Section {
-  onResize?: (slug: string, width: number, height: number) => void;
+  onResize?: (slug: string, width: number, height: number, dx?: number, dy?: number) => void;
   onRename?: (slug: string, name: string) => void;
   onColorChange?: (slug: string, color: StickyColor) => void;
   isPanMode?: boolean;
@@ -43,6 +43,8 @@ function SectionNodeComponent({ data, selected }: SectionNodeProps) {
   } | null>(null);
   const currentSizeRef = useRef(currentSize);
   currentSizeRef.current = currentSize;
+  // Track cumulative position delta during resize (for non-BR corners)
+  const resizeDeltaRef = useRef({ dx: 0, dy: 0 });
 
   // Sync size from data when not resizing
   useEffect(() => {
@@ -56,6 +58,51 @@ function SectionNodeComponent({ data, selected }: SectionNodeProps) {
     setEditName(data.name);
   }, [data.name]);
 
+  // Shared resize calculation for mouse and touch
+  const computeResize = useCallback((dx: number, dy: number) => {
+    if (!resizeStartRef.current) return;
+    const { corner: c, width: startWidth, height: startHeight } = resizeStartRef.current;
+
+    let newWidth = startWidth;
+    let newHeight = startHeight;
+    let posDx = 0;
+    let posDy = 0;
+
+    if (c === 'br') {
+      newWidth = Math.max(100, startWidth + dx);
+      newHeight = Math.max(100, startHeight + dy);
+    } else if (c === 'bl') {
+      newWidth = Math.max(100, startWidth - dx);
+      newHeight = Math.max(100, startHeight + dy);
+      // Left edge moves: position shifts by the width delta
+      posDx = startWidth - newWidth;
+    } else if (c === 'tr') {
+      newWidth = Math.max(100, startWidth + dx);
+      newHeight = Math.max(100, startHeight - dy);
+      // Top edge moves: position shifts by the height delta
+      posDy = startHeight - newHeight;
+    } else if (c === 'tl') {
+      newWidth = Math.max(100, startWidth - dx);
+      newHeight = Math.max(100, startHeight - dy);
+      posDx = startWidth - newWidth;
+      posDy = startHeight - newHeight;
+    }
+
+    setCurrentSize({ width: newWidth, height: newHeight });
+    currentSizeRef.current = { width: newWidth, height: newHeight };
+    resizeDeltaRef.current = { dx: posDx, dy: posDy };
+  }, []);
+
+  const finishResize = useCallback(() => {
+    if (resizeStartRef.current && data.onResize) {
+      const { dx, dy } = resizeDeltaRef.current;
+      data.onResize(data.id, currentSizeRef.current.width, currentSizeRef.current.height, dx, dy);
+    }
+    resizeStartRef.current = null;
+    resizeDeltaRef.current = { dx: 0, dy: 0 };
+    setIsResizing(false);
+  }, [data.onResize, data.id]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent, corner: ResizeCorner) => {
     if (data.isPanMode) return;
     e.stopPropagation();
@@ -68,51 +115,25 @@ function SectionNodeComponent({ data, selected }: SectionNodeProps) {
       height: currentSizeRef.current.height,
       corner,
     };
+    resizeDeltaRef.current = { dx: 0, dy: 0 };
     setIsResizing(true);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!resizeStartRef.current) return;
-
       const dx = (moveEvent.clientX - resizeStartRef.current.x) / zoom;
       const dy = (moveEvent.clientY - resizeStartRef.current.y) / zoom;
-      const { corner: c, width: startWidth, height: startHeight } = resizeStartRef.current;
-
-      let newWidth = startWidth;
-      let newHeight = startHeight;
-
-      // Calculate new size based on which corner is being dragged
-      if (c === 'br') {
-        newWidth = Math.max(100, startWidth + dx);
-        newHeight = Math.max(100, startHeight + dy);
-      } else if (c === 'bl') {
-        newWidth = Math.max(100, startWidth - dx);
-        newHeight = Math.max(100, startHeight + dy);
-      } else if (c === 'tr') {
-        newWidth = Math.max(100, startWidth + dx);
-        newHeight = Math.max(100, startHeight - dy);
-      } else if (c === 'tl') {
-        newWidth = Math.max(100, startWidth - dx);
-        newHeight = Math.max(100, startHeight - dy);
-      }
-
-      setCurrentSize({ width: newWidth, height: newHeight });
-      currentSizeRef.current = { width: newWidth, height: newHeight };
+      computeResize(dx, dy);
     };
 
     const handleMouseUp = () => {
-      if (resizeStartRef.current && data.onResize) {
-        data.onResize(data.id, currentSizeRef.current.width, currentSizeRef.current.height);
-      }
-      resizeStartRef.current = null;
-      setIsResizing(false);
-
+      finishResize();
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [data.isPanMode, data.onResize, data.id, zoom]);
+  }, [data.isPanMode, zoom, computeResize, finishResize]);
 
   // Touch event handler for resize
   const handleTouchStart = useCallback((e: React.TouchEvent, corner: ResizeCorner) => {
@@ -128,52 +149,27 @@ function SectionNodeComponent({ data, selected }: SectionNodeProps) {
       height: currentSizeRef.current.height,
       corner,
     };
+    resizeDeltaRef.current = { dx: 0, dy: 0 };
     setIsResizing(true);
 
     const handleTouchMove = (moveEvent: TouchEvent) => {
       if (!resizeStartRef.current) return;
       moveEvent.preventDefault();
-
       const moveTouch = moveEvent.touches[0];
       const dx = (moveTouch.clientX - resizeStartRef.current.x) / zoom;
       const dy = (moveTouch.clientY - resizeStartRef.current.y) / zoom;
-      const { corner: c, width: startWidth, height: startHeight } = resizeStartRef.current;
-
-      let newWidth = startWidth;
-      let newHeight = startHeight;
-
-      if (c === 'br') {
-        newWidth = Math.max(100, startWidth + dx);
-        newHeight = Math.max(100, startHeight + dy);
-      } else if (c === 'bl') {
-        newWidth = Math.max(100, startWidth - dx);
-        newHeight = Math.max(100, startHeight + dy);
-      } else if (c === 'tr') {
-        newWidth = Math.max(100, startWidth + dx);
-        newHeight = Math.max(100, startHeight - dy);
-      } else if (c === 'tl') {
-        newWidth = Math.max(100, startWidth - dx);
-        newHeight = Math.max(100, startHeight - dy);
-      }
-
-      setCurrentSize({ width: newWidth, height: newHeight });
-      currentSizeRef.current = { width: newWidth, height: newHeight };
+      computeResize(dx, dy);
     };
 
     const handleTouchEnd = () => {
-      if (resizeStartRef.current && data.onResize) {
-        data.onResize(data.id, currentSizeRef.current.width, currentSizeRef.current.height);
-      }
-      resizeStartRef.current = null;
-      setIsResizing(false);
-
+      finishResize();
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
     };
 
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
     window.addEventListener('touchend', handleTouchEnd);
-  }, [data.isPanMode, data.onResize, data.id, zoom]);
+  }, [data.isPanMode, zoom, computeResize, finishResize]);
 
   const handleNameClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

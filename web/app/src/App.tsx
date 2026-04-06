@@ -1,28 +1,31 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { Home } from './components/Home';
 import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { GhostSection } from './components/GhostSection';
 import { GhostSticky } from './components/GhostSticky';
+import { GhostNote } from './components/GhostNote';
 import { PlacementHint } from './components/PlacementHint';
-import { Canvas } from './components/Canvas';
+import { Canvas, type FocusOnNodeOptions } from './components/Canvas';
 import { Dialog } from './components/Dialog';
+import { ToolSwitcher } from './components/ToolSwitcher';
 import { AdjutantDashboard } from './components/AdjutantDashboard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const NoteEditor = lazy(() => import('./components/NoteEditor/NoteEditor'));
 const SettingsDialog = lazy(() => import('./components/SettingsDialog/SettingsDialog'));
 
 import { useCanvas } from './hooks/useCanvas';
 import { useKbs } from './hooks/useKbs';
-import { useFolder } from './hooks/useFolder';
 import { useRecursiveFolder } from './hooks/useRecursiveFolder';
 import { useNotes } from './hooks/useNotes';
 import { useImages } from './hooks/useImages';
 import { useSettings } from './hooks/useSettings';
 import { useAdjutant } from './hooks/useAdjutant';
 import { EditorProvider, useEditor, PlacementProvider, usePlacement } from './contexts';
-import type { Position, StickyColor, NoteFile, Section } from './types';
+import { isTouchDevice } from './utils/platform.js';
+import type { Position, StickyColor, Section, CanvasTool } from './types';
 
 function AppContent() {
   const location = useLocation();
@@ -51,6 +54,7 @@ function AppContent() {
   const { isPlacementMode, placementType, exitPlacementMode, enterPlacementMode } = usePlacement();
 
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeTool, setActiveTool] = useState<CanvasTool>('pan');
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('adjutant-web-sidebar-open');
     return saved === 'true';
@@ -76,8 +80,6 @@ function AppContent() {
     dirSections,
     manualSections,
     stickies,
-    meta,
-    rootEntries,
     loading: loadingFolder,
     refetch: refetchFolder,
     updateItemPosition,
@@ -90,13 +92,8 @@ function AppContent() {
     updateSticky,
     deleteSticky,
     moveEntry,
+    rootEntries,
   } = useRecursiveFolder(folderOptions);
-
-  // Keep flat folder listing for sidebar navigation
-  const {
-    entries: sidebarEntries,
-    meta: sidebarMeta,
-  } = useFolder(folderOptions);
 
   // Merge directory sections + manual sections
   const allSections: Section[] = useMemo(() => {
@@ -114,6 +111,11 @@ function AppContent() {
     revertPosition: Position;
   } | null>(null);
 
+  // Ref for Canvas focusOnNode function
+  const focusOnNodeRef = useRef<((nodeId: string, options?: FocusOnNodeOptions) => void) | null>(null);
+  // Ref for Canvas setNodePosition function (used for move revert)
+  const setNodePositionRef = useRef<((nodeId: string, position: Position) => void) | null>(null);
+
   // === Note handlers ===
 
   const handleNoteOpen = useCallback(async (notePath: string, rect: { x: number; y: number; width: number; height: number }) => {
@@ -126,7 +128,8 @@ function AppContent() {
   const handleNoteClose = useCallback(() => {
     setFocusedNote(null);
     clearEditorState();
-  }, [setFocusedNote, clearEditorState]);
+    refetchFolder(); // Refresh canvas data to pick up title/content changes
+  }, [setFocusedNote, clearEditorState, refetchFolder]);
 
   // === Position handlers ===
 
@@ -210,26 +213,33 @@ function AppContent() {
     await Promise.all(ids.map(id => deleteImage(id)));
   }, [deleteImage]);
 
-  // === Folder navigation ===
-
-  const handleFolderOpen = useCallback((folderName: string) => {
-    if (!currentKb) return;
-    const newPath = currentPath ? `${currentPath}/${folderName}` : folderName;
-    navigateToFolder(currentKb, newPath);
-  }, [currentKb, currentPath, navigateToFolder]);
-
   // === Note CRUD handlers ===
 
   const handleNoteCreate = useCallback(async (position: Position) => {
     if (!currentKb) return;
+
+    // Determine target folder: if placing inside a directory section, use that folder
+    let targetFolder = currentPath;
+    for (const section of dirSections) {
+      if (
+        section.position &&
+        position.x >= section.position.x &&
+        position.y >= section.position.y &&
+        position.x <= section.position.x + (section.width ?? 500) &&
+        position.y <= section.position.y + (section.height ?? 400)
+      ) {
+        targetFolder = section.dirPath ? (currentPath ? `${currentPath}/${section.dirPath}` : section.dirPath) : currentPath;
+      }
+    }
+
     const note = await createNote({
       kb: currentKb,
-      folder: currentPath,
+      folder: targetFolder,
       title: 'Untitled Note',
       position,
     });
     if (note) {
-      refetchFolder();
+      await refetchFolder();
       // Open the new note in the editor
       prepareEditorOpen(
         { x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 141, width: 200, height: 283 },
@@ -237,7 +247,7 @@ function AppContent() {
       );
       setFocusedNote(note.path);
     }
-  }, [currentKb, currentPath, createNote, refetchFolder, prepareEditorOpen, setFocusedNote]);
+  }, [currentKb, currentPath, dirSections, createNote, refetchFolder, prepareEditorOpen, setFocusedNote]);
 
   const handleNoteSave = useCallback(async (kb: string, notePath: string, content: string, title: string, tags: string[]) => {
     await updateNote(kb, notePath, { content, title, tags });
@@ -286,9 +296,9 @@ function AppContent() {
   const [selectedDirPath, setSelectedDirPath] = useState<string | null>(null);
   const [focusOnSectionId, setFocusOnSectionId] = useState<string | null>(null);
 
-  const handleFolderFocus = useCallback((folderName: string) => {
-    // When clicking a folder in sidebar, focus the corresponding section on canvas
-    const dirPath = currentPath ? `${currentPath}/${folderName}` : folderName;
+  const handleFolderFocus = useCallback((folderRelativePath: string) => {
+    // When clicking focus button in sidebar, pan to the corresponding section on canvas
+    const dirPath = currentPath ? `${currentPath}/${folderRelativePath}` : folderRelativePath;
     const sectionId = `dirsection-${dirPath.replace(/\//g, '-')}`;
     setFocusOnSectionId(sectionId);
   }, [currentPath]);
@@ -303,6 +313,33 @@ function AppContent() {
     setSelectedDirPath(dirSection?.dirPath || null);
   }, [dirSections]);
 
+  // === Note section change handler (triggers move dialog for dir sections) ===
+  const handleNoteSectionChange = useCallback((noteNodeId: string, newSectionId: string | null, startPosition: Position) => {
+    // noteNodeId is 'note-<relativePath>'
+    const relPath = noteNodeId.replace('note-', '');
+    const parts = relPath.split('/');
+    const filename = parts[parts.length - 1];
+    const sourceDirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+
+    // Determine destination dirPath from the new section
+    let destDirPath = '';
+    if (newSectionId && newSectionId.startsWith('dirsection-')) {
+      const dirSection = dirSections.find(s => s.id === newSectionId);
+      destDirPath = dirSection?.dirPath || '';
+    }
+
+    // Only show dialog if the note actually changed directories
+    if (sourceDirPath !== destDirPath) {
+      setPendingMove({
+        noteId: noteNodeId,
+        noteName: filename,
+        sourceDirPath,
+        destDirPath,
+        revertPosition: startPosition,
+      });
+    }
+  }, [dirSections]);
+
   // === Move confirmation handlers ===
   const handleMoveConfirm = useCallback(async () => {
     if (!pendingMove) return;
@@ -314,10 +351,20 @@ function AppContent() {
   }, [pendingMove, moveEntry]);
 
   const handleMoveCancel = useCallback(() => {
-    // Revert by refetching
-    refetchFolder();
+    if (pendingMove) {
+      // Immediately revert the node position on canvas
+      if (setNodePositionRef.current) {
+        setNodePositionRef.current(pendingMove.noteId, pendingMove.revertPosition);
+      }
+      // Persist the reverted position to the sidecar
+      const relPath = pendingMove.noteId.replace('note-', '');
+      const parts = relPath.split('/');
+      const filename = parts[parts.length - 1];
+      const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : undefined;
+      updateItemPosition(filename, pendingMove.revertPosition, dirPath);
+    }
     setPendingMove(null);
-  }, [refetchFolder]);
+  }, [pendingMove, updateItemPosition]);
 
   const isOnCanvas = currentKb !== null && !isAdjutantPage;
 
@@ -329,17 +376,30 @@ function AppContent() {
         kbs={kbs}
         currentKb={currentKb}
         currentPath={currentPath}
-        entries={sidebarEntries}
-        meta={sidebarMeta}
+        entries={rootEntries}
         onKbSelect={setCurrentKb}
-        onFolderOpen={handleFolderOpen}
         onFolderFocus={handleFolderFocus}
         onNoteOpen={(notePath) => {
           if (!currentKb) return;
-          handleNoteOpen(
-            notePath,
-            { x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 141, width: 200, height: 283 },
-          );
+          // Pan canvas to the note, then open editor after animation
+          const nodeId = `note-${notePath}`;
+          const FOCUS_ANIMATION_MS = 600;
+          if (focusOnNodeRef.current) {
+            focusOnNodeRef.current(nodeId, { zoom: 1, duration: FOCUS_ANIMATION_MS });
+            setTimeout(() => {
+              requestAnimationFrame(() => {
+                handleNoteOpen(
+                  notePath,
+                  { x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 141, width: 200, height: 283 },
+                );
+              });
+            }, FOCUS_ANIMATION_MS);
+          } else {
+            handleNoteOpen(
+              notePath,
+              { x: window.innerWidth / 2 - 100, y: window.innerHeight / 2 - 141, width: 200, height: 283 },
+            );
+          }
         }}
         onSettingsClick={() => setSettingsOpen(true)}
         onNavigateToFolder={navigateToFolder}
@@ -369,7 +429,7 @@ function AppContent() {
             sections={allSections}
             stickies={stickies}
             categories={kbs}
-            activeTool="pan"
+            activeTool={activeTool}
             isPlacementMode={isPlacementMode}
             onPlacementClick={handlePlacementClick}
             onNoteOpen={handleNoteOpen}
@@ -394,14 +454,43 @@ function AppContent() {
               refetchFolder();
             }}
             onImagesDelete={handleImagesDelete}
-            onNoteDuplicate={async () => {}}
-            onImageDuplicate={async () => {}}
+            onNoteDuplicate={async (slug, position) => {
+              if (!currentKb) return;
+              const relPath = slug.replace('note-', '');
+              const fullPath = currentPath ? `${currentPath}/${relPath}` : relPath;
+              const source = await getNote(currentKb, fullPath);
+              if (!source) return;
+              const parts = relPath.split('/');
+              const dirPath = parts.length > 1 ? parts.slice(0, -1).join('/') : '';
+              const folder = dirPath ? (currentPath ? `${currentPath}/${dirPath}` : dirPath) : currentPath;
+              const created = await createNote({
+                kb: currentKb,
+                folder,
+                title: `${source.title} (copy)`,
+                position,
+              });
+              if (created) {
+                await updateNote(currentKb, created.path, { content: source.content, title: `${source.title} (copy)`, tags: source.tags });
+                refetchFolder();
+              }
+            }}
+            onImageDuplicate={async (id, position) => {
+              const source = images.find(img => img.id === id);
+              if (!source) return;
+              try {
+                const res = await fetch(source.webpUrl);
+                const blob = await res.blob();
+                const file = new File([blob], `${id}-copy.webp`, { type: 'image/webp' });
+                uploadImage(file, position);
+              } catch { /* ignore failed duplicate */ }
+            }}
             onSectionCreate={handleSectionCreate}
             onSectionPositionChange={handleSectionPositionChange}
             onSectionResize={handleSectionResize}
             onSectionRename={handleSectionRename}
             onSectionColorChange={handleSectionColorChange}
             onSectionsDelete={handleSectionsDelete}
+            onNoteSectionChange={handleNoteSectionChange}
             onStickyCreate={handleStickyCreate}
             onStickyPositionChange={handleStickyPositionChange}
             onStickyTextChange={handleStickyTextChange}
@@ -411,6 +500,8 @@ function AppContent() {
             onSectionSelected={handleSectionSelected}
             focusOnSectionId={focusOnSectionId}
             onFocusComplete={() => setFocusOnSectionId(null)}
+            onFocusOnNodeRef={(handler) => { focusOnNodeRef.current = handler; }}
+            onSetNodePositionRef={(handler) => { setNodePositionRef.current = handler; }}
             loading={loadingFolder}
             settings={settings}
           />
@@ -426,9 +517,17 @@ function AppContent() {
             onEnterPlacementMode={enterPlacementMode}
             onExitPlacementMode={exitPlacementMode}
           />
+          <GhostNote visible={isPlacementMode && placementType === 'note'} />
           <GhostSection visible={isPlacementMode && placementType === 'section'} />
           <GhostSticky visible={isPlacementMode && placementType === 'sticky'} />
           <PlacementHint visible={isPlacementMode} />
+          {isTouchDevice() && (
+            <ToolSwitcher
+              activeTool={activeTool}
+              onToolChange={setActiveTool}
+              sidebarOpen={sidebarOpen}
+            />
+          )}
         </>
       )}
 
@@ -442,21 +541,24 @@ function AppContent() {
         onCancel={handleMoveCancel}
       />
 
-      <Suspense fallback={null}>
-        {settingsOpen && (
-          <SettingsDialog
-            open={settingsOpen}
-            settings={settings}
-            onSettingChange={updateSetting}
-            onClose={() => setSettingsOpen(false)}
-            onKbRootSaved={refetchKbs}
-          />
-        )}
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={null}>
+          {settingsOpen && (
+            <SettingsDialog
+              open={settingsOpen}
+              settings={settings}
+              onSettingChange={updateSetting}
+              onClose={() => setSettingsOpen(false)}
+              onKbRootSaved={refetchKbs}
+            />
+          )}
+        </Suspense>
+      </ErrorBoundary>
 
-      <Suspense fallback={null}>
-        {focusedNote && currentKb && (
-          <NoteEditor
+      <ErrorBoundary>
+        <Suspense fallback={null}>
+          {focusedNote && currentKb && (
+            <NoteEditor
             kb={currentKb}
             notePath={focusedNote}
             originRect={originRect}
@@ -467,8 +569,9 @@ function AppContent() {
             onDelete={handleNoteDelete}
             getNote={getNote}
           />
-        )}
-      </Suspense>
+          )}
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

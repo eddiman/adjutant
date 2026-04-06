@@ -8,7 +8,6 @@ import type {
   StickyColor,
   Position,
   NoteFile,
-  ItemMeta,
 } from '../types';
 import { layoutDirectoryTree, flattenDirLayouts } from '../utils/sectionPositioning.js';
 
@@ -63,7 +62,9 @@ interface UseRecursiveFolderReturn {
 function sectionsFromMeta(meta: WebSidecar): Section[] {
   return Object.entries(meta.sections)
     .filter(([id]) => !id.startsWith('dirsection-'))
-    .map(([id, s]) => ({ id, ...s }));
+    .map(([id, s]) => ({
+      id, ...s, width: s.width ?? 500, height: s.height ?? 400,
+    }));
 }
 
 function stickiesFromMeta(meta: WebSidecar): Sticky[] {
@@ -215,10 +216,11 @@ export function useRecursiveFolder(options: UseRecursiveFolderOptions): UseRecur
   const pendingMetaRef = useRef<Partial<WebSidecar>>({});
   const debouncedSaveRef = useRef<ReturnType<typeof debounce> | null>(null);
 
+  const saveRetryRef = useRef(0);
+
   const saveMeta = useCallback(async () => {
     if (!kb) return;
     const pending = pendingMetaRef.current;
-    pendingMetaRef.current = {};
 
     try {
       const params = new URLSearchParams({ kb });
@@ -229,8 +231,26 @@ export function useRecursiveFolder(options: UseRecursiveFolderOptions): UseRecur
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(pending),
       });
+      // Only clear on success
+      pendingMetaRef.current = {};
+      saveRetryRef.current = 0;
     } catch (err) {
       console.error('Failed to save folder meta:', err);
+      // Merge pending back — current ref may have new updates added while fetch was in-flight
+      const current = pendingMetaRef.current;
+      pendingMetaRef.current = {
+        ...pending,
+        ...current,
+        items: { ...(pending.items || {}), ...(current.items || {}) },
+        sections: { ...(pending.sections || {}), ...(current.sections || {}) },
+        stickies: { ...(pending.stickies || {}), ...(current.stickies || {}) },
+      };
+      if (saveRetryRef.current < 3) {
+        saveRetryRef.current++;
+        setTimeout(() => {
+          if (debouncedSaveRef.current) debouncedSaveRef.current();
+        }, 1000);
+      }
     }
   }, [kb, folderPath]);
 
@@ -245,22 +265,57 @@ export function useRecursiveFolder(options: UseRecursiveFolderOptions): UseRecur
     debouncedSaveRef.current = null;
   }, [kb, folderPath]);
 
+  // === Subfolder debounced saves ===
+
+  const subfolderPendingRef = useRef<Map<string, Record<string, { position: Position }>>>(new Map());
+  const subfolderDebouncersRef = useRef<Map<string, (...args: unknown[]) => void>>(new Map());
+
+  const flushSubfolderMeta = useCallback(async (subPath: string) => {
+    if (!kb) return;
+    const pending = subfolderPendingRef.current.get(subPath);
+    if (!pending) return;
+    subfolderPendingRef.current.delete(subPath);
+
+    const params = new URLSearchParams({ kb });
+    params.set('path', subPath);
+
+    try {
+      await fetch(`/api/folders/meta?${params}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: pending }),
+      });
+    } catch (err) {
+      console.error('Failed to update subfolder meta:', err);
+    }
+  }, [kb]);
+
+  const getSubfolderDebounce = useCallback((subPath: string) => {
+    let fn = subfolderDebouncersRef.current.get(subPath);
+    if (!fn) {
+      fn = debounce(() => flushSubfolderMeta(subPath), 300);
+      subfolderDebouncersRef.current.set(subPath, fn);
+    }
+    return fn;
+  }, [flushSubfolderMeta]);
+
+  useEffect(() => {
+    subfolderPendingRef.current.clear();
+    subfolderDebouncersRef.current.clear();
+  }, [kb, folderPath]);
+
   // === Position updates ===
 
   const updateItemPosition = useCallback((itemName: string, position: Position, dirPath?: string) => {
     if (!kb) return;
 
     if (dirPath) {
-      // Update in subfolder's sidecar
-      const params = new URLSearchParams({ kb });
+      // Update in subfolder's sidecar (debounced)
       const subPath = folderPath ? `${folderPath}/${dirPath}` : dirPath;
-      params.set('path', subPath);
-
-      fetch(`/api/folders/meta?${params}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: { [itemName]: { position } } }),
-      }).catch(err => console.error('Failed to update item position:', err));
+      const existing = subfolderPendingRef.current.get(subPath) || {};
+      existing[itemName] = { position };
+      subfolderPendingRef.current.set(subPath, existing);
+      getSubfolderDebounce(subPath)();
     } else {
       // Update in root sidecar
       setData(prev => {
@@ -290,7 +345,7 @@ export function useRecursiveFolder(options: UseRecursiveFolderOptions): UseRecur
     setData(prev => {
       if (!prev) return prev;
       const existing = prev.meta.sections[sectionId] || {
-        name: '', width: 500, height: 400,
+        name: '',
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       };
       const updated = { ...existing, position, updatedAt: new Date().toISOString() };
@@ -317,8 +372,10 @@ export function useRecursiveFolder(options: UseRecursiveFolderOptions): UseRecur
   const updateDirSectionSize = useCallback((sectionId: string, width: number, height: number) => {
     setData(prev => {
       if (!prev) return prev;
-      const existing = prev.meta.sections[sectionId];
-      if (!existing) return prev;
+      const existing = prev.meta.sections[sectionId] || {
+        name: '',
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      };
       const updated = { ...existing, width, height, updatedAt: new Date().toISOString() };
       return {
         ...prev,

@@ -872,3 +872,64 @@
   background: var(--color-primary-bg);
   border-left: 2px solid var(--color-primary);
 }
+
+.sidebar-entry-enter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+
+.sidebar-entry:hover .sidebar-entry-enter {
+  opacity: 1;
+}
+
+.sidebar-entry-enter:hover {
+  background: var(--color-hover-bg);
+  color: var(--color-primary);
+}
+
+.sidebar-entry-focus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+
+.sidebar-entry:hover .sidebar-entry-focus {
+  opacity: 1;
+}
+
+.sidebar-entry-focus:hover {
+  background: var(--color-hover-bg);
+  color: var(--color-primary);
+}
+
+/* On touch devices (no hover), always show action buttons */
+@media (hover: none) {
+  .sidebar-entry-enter {
+    opacity: 0.6;
+  }
+  .sidebar-entry-focus {
+    opacity: 0.6;
+  }
+}

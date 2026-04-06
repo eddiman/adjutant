@@ -43,7 +43,9 @@ interface UseFolderReturn {
 }
 
 function sectionsFromMeta(meta: WebSidecar): Section[] {
-  return Object.entries(meta.sections).map(([id, s]) => ({ id, ...s }));
+  return Object.entries(meta.sections).map(([id, s]) => ({
+    id, ...s, width: s.width ?? 500, height: s.height ?? 400,
+  }));
 }
 
 function stickiesFromMeta(meta: WebSidecar): Sticky[] {

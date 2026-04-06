@@ -80,11 +80,25 @@ class FolderService {
     if (!absPath) return null;
 
     const existing = await this.readSidecar(absPath);
+
+    // Deep merge helper: merge each entry by key instead of replacing whole entries
+    const deepMergeEntries = <T extends Record<string, unknown>>(
+      base: Record<string, T>,
+      patch: Record<string, T> | undefined,
+    ): Record<string, T> => {
+      if (!patch) return base;
+      const result = { ...base };
+      for (const [key, val] of Object.entries(patch)) {
+        result[key] = base[key] ? { ...base[key], ...val } : val;
+      }
+      return result;
+    };
+
     const merged: WebSidecar = {
-      items: { ...existing.items, ...update.items },
-      sections: update.sections !== undefined ? { ...existing.sections, ...update.sections } : existing.sections,
-      stickies: update.stickies !== undefined ? { ...existing.stickies, ...update.stickies } : existing.stickies,
-      images: update.images !== undefined ? { ...existing.images, ...update.images } : existing.images,
+      items: deepMergeEntries(existing.items, update.items),
+      sections: deepMergeEntries(existing.sections, update.sections),
+      stickies: deepMergeEntries(existing.stickies, update.stickies),
+      images: deepMergeEntries(existing.images, update.images),
     };
 
     await this.writeSidecar(absPath, merged);

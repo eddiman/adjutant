@@ -1,34 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { Node } from '@xyflow/react';
 import { setModuleClipboard } from './useCanvasClipboard';
+import { isNodeInsideSection } from '../utils/sectionPositioning.js';
 import type { PlacementType } from '../contexts/PlacementContext.js';
-
-// Helper to check if a node is inside a section's bounds
-function isNodeInsideSection<T extends Record<string, unknown>>(
-  node: Node<T>,
-  section: Node<T>
-): boolean {
-  // Don't include sections or the section itself
-  if (node.type === 'section' || node.id === section.id) return false;
-
-  const sectionData = section.data as { width?: number; height?: number };
-  const sectionWidth = sectionData.width || 300;
-  const sectionHeight = sectionData.height || 200;
-
-  const nodeWidth = node.measured?.width ?? (node.type === 'note' ? 200 : node.type === 'sticky' ? 150 : 300);
-  const nodeHeight = node.measured?.height ?? (node.type === 'note' ? 283 : node.type === 'sticky' ? 150 : 200);
-
-  // Check if node center is inside section bounds
-  const nodeCenterX = node.position.x + nodeWidth / 2;
-  const nodeCenterY = node.position.y + nodeHeight / 2;
-
-  return (
-    nodeCenterX >= section.position.x &&
-    nodeCenterX <= section.position.x + sectionWidth &&
-    nodeCenterY >= section.position.y &&
-    nodeCenterY <= section.position.y + sectionHeight
-  );
-}
 
 interface UseCanvasKeyboardProps<T extends Record<string, unknown>> {
   deleteDialogOpen: boolean;
@@ -61,13 +35,25 @@ export function useCanvasKeyboard<T extends Record<string, unknown>>({
 }: UseCanvasKeyboardProps<T>) {
   // Track mouse position (kept for potential future use)
   const mousePositionRef = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+  // Track when an editable element was last blurred (prevents S/T from firing immediately after editing)
+  const lastEditableBlurRef = useRef(0);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       mousePositionRef.current = { x: e.clientX, y: e.clientY };
     };
+    const handleFocusOut = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        lastEditableBlurRef.current = Date.now();
+      }
+    };
     window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    document.addEventListener('focusout', handleFocusOut);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('focusout', handleFocusOut);
+    };
   }, []);
 
   useEffect(() => {
@@ -125,6 +111,9 @@ export function useCanvasKeyboard<T extends Record<string, unknown>>({
         }
         return;
       }
+
+      // Guard: ignore single-key shortcuts immediately after leaving an editable field
+      if (Date.now() - lastEditableBlurRef.current < 200) return;
 
       // S key to enter section placement mode
       if (e.key === 's' && !e.metaKey && !e.ctrlKey && !e.altKey) {

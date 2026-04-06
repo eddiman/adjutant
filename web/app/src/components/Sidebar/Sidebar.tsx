@@ -1,7 +1,7 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { isMobileViewport } from '../../utils/platform.js';
-import type { KbMeta, FolderEntry, WebSidecar } from '../../types';
+import type { KbMeta, RecursiveFolderEntry } from '../../types';
 import styles from './Sidebar.module.css';
 
 interface SidebarProps {
@@ -10,10 +10,8 @@ interface SidebarProps {
   kbs: KbMeta[];
   currentKb: string | null;
   currentPath: string;
-  entries: FolderEntry[];
-  meta: WebSidecar | null;
+  entries: RecursiveFolderEntry[];
   onKbSelect: (kb: string | null) => void;
-  onFolderOpen: (folderName: string) => void;
   onFolderFocus?: (folderName: string) => void;
   onNoteOpen: (notePath: string) => void;
   onSettingsClick: () => void;
@@ -30,7 +28,6 @@ export function Sidebar({
   currentPath,
   entries,
   onKbSelect,
-  onFolderOpen,
   onFolderFocus,
   onNoteOpen,
   onSettingsClick,
@@ -40,10 +37,11 @@ export function Sidebar({
 }: SidebarProps) {
   const location = useLocation();
   const isAdjutantPage = location.pathname === '/adjutant';
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
-  // Sync expanded state with currentKb
+  // Reset expanded folders when KB changes
   useEffect(() => {
-    // Future: could expand/collapse KB sections here
+    setExpandedFolders(new Set());
   }, [currentKb]);
 
   const handleKbClick = useCallback((kbName: string) => {
@@ -51,21 +49,27 @@ export function Sidebar({
     if (isMobileViewport() && open) onToggle();
   }, [onKbSelect, open, onToggle]);
 
-  const handleFolderClick = useCallback((folderName: string) => {
-    // If onFolderFocus is available (canvas is active), focus the section on canvas
-    if (onFolderFocus) {
-      onFolderFocus(folderName);
-    } else {
-      onFolderOpen(folderName);
-    }
-    if (isMobileViewport() && open) onToggle();
-  }, [onFolderOpen, onFolderFocus, open, onToggle]);
+  const toggleFolder = useCallback((folderPath: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderPath)) {
+        next.delete(folderPath);
+      } else {
+        next.add(folderPath);
+      }
+      return next;
+    });
+  }, []);
 
-  const handleNoteClick = useCallback((filename: string) => {
-    const notePath = currentPath ? `${currentPath}/${filename}` : filename;
+  const handleFolderFocusClick = useCallback((e: React.MouseEvent, folderName: string) => {
+    e.stopPropagation();
+    if (onFolderFocus) onFolderFocus(folderName);
+  }, [onFolderFocus]);
+
+  const handleNoteClick = useCallback((notePath: string) => {
     onNoteOpen(notePath);
     if (isMobileViewport() && open) onToggle();
-  }, [currentPath, onNoteOpen, open, onToggle]);
+  }, [onNoteOpen, open, onToggle]);
 
   const handleSettingsClick = useCallback(() => {
     onSettingsClick();
@@ -86,6 +90,76 @@ export function Sidebar({
 
   // Build breadcrumb trail
   const breadcrumbs = currentPath ? currentPath.split('/').filter(Boolean) : [];
+
+  const renderEntryTree = (entryList: RecursiveFolderEntry[], depth: number) => {
+    return entryList.map(entry => {
+      const entryPath = entry.relativePath || entry.name;
+
+      if (entry.type === 'folder') {
+        const isExpanded = expandedFolders.has(entryPath);
+        const isHighlighted = highlightedDirPath === (currentPath ? `${currentPath}/${entryPath}` : entryPath);
+        return (
+          <div key={entryPath}>
+            <div
+              className={`${styles['sidebar-entry']} ${isHighlighted ? styles['sidebar-entry-highlighted'] : ''}`}
+              style={depth > 0 ? { paddingLeft: `${14 + depth * 12}px` } : undefined}
+              onClick={() => toggleFolder(entryPath)}
+              role="button"
+              tabIndex={0}
+            >
+              <svg
+                width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}
+              >
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+              </svg>
+              <span className={styles['sidebar-entry-text']}>{entry.name}</span>
+              {onFolderFocus && (
+                <button
+                  className={styles['sidebar-entry-focus']}
+                  onClick={(e) => handleFolderFocusClick(e, entryPath)}
+                  title="Focus on canvas"
+                  aria-label={`Focus ${entry.name} on canvas`}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              )}
+            </div>
+            {isExpanded && entry.children && (
+              <div>{renderEntryTree(entry.children, depth + 1)}</div>
+            )}
+          </div>
+        );
+      }
+
+      // File entry
+      if (!entry.name.endsWith('.md')) return null;
+      return (
+        <div
+          key={entryPath}
+          className={styles['sidebar-entry']}
+          style={depth > 0 ? { paddingLeft: `${14 + depth * 12}px` } : undefined}
+          onClick={() => handleNoteClick(entryPath)}
+          role="button"
+          tabIndex={0}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          <span className={styles['sidebar-entry-text']}>{entry.name}</span>
+        </div>
+      );
+    });
+  };
 
   return (
     <aside className={`${styles.sidebar} ${open ? styles.open : ''}`}>
@@ -188,40 +262,12 @@ export function Sidebar({
                 </div>
               )}
 
-              {/* Folder entries */}
+              {/* Folder entries (recursive tree) */}
               {loading ? (
                 <div className={styles['sidebar-loading']}>Loading...</div>
               ) : (
                 <div className={styles['sidebar-entries']}>
-                  {entries.map(entry => {
-                    const isHighlighted = entry.type === 'folder' && highlightedDirPath === (currentPath ? `${currentPath}/${entry.name}` : entry.name);
-                    return (
-                    <button
-                      key={entry.name}
-                      className={`${styles['sidebar-entry']} ${isHighlighted ? styles['sidebar-entry-highlighted'] : ''}`}
-                      onClick={() => entry.type === 'folder' ? handleFolderClick(entry.name) : entry.name.endsWith('.md') ? handleNoteClick(entry.name) : undefined}
-                    >
-                      {entry.type === 'folder' ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                        </svg>
-                      ) : entry.name.endsWith('.md') ? (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                          <polyline points="14 2 14 8 20 8"/>
-                          <line x1="16" y1="13" x2="8" y2="13"/>
-                          <line x1="16" y1="17" x2="8" y2="17"/>
-                        </svg>
-                      ) : (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/>
-                          <polyline points="13 2 13 9 20 9"/>
-                        </svg>
-                      )}
-                      <span className={styles['sidebar-entry-text']}>{entry.name}</span>
-                    </button>
-                    );
-                  })}
+                  {renderEntryTree(entries, 0)}
                 </div>
               )}
             </div>
