@@ -13,9 +13,11 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | Command | What it does |
 |---------|-------------|
 | `/status` | Shows whether Adjutant is up and running, paused, or killed — plus scheduled jobs, last autonomous cycle, and notification count today |
-| `/pulse` | Queries each registered KB for a quick status update — current state, blockers, and upcoming deadlines. No direct file access; all project knowledge flows through KB sub-agents. |
-| `/reflect` | Requests a deep reflection using the medium model (Sonnet). Queries each KB in depth and encourages read-write KBs to update stale data. Adjutant will ask for `/confirm` before proceeding |
+| `/pulse` | Queries all registered KBs in parallel for a quick status update — current state, blockers, and upcoming deadlines. Uses `kb query-all` internally for ~6x speedup over sequential queries. |
+| `/brief` | Morning brief — compiles deadlines, priorities, and overnight changes from all KBs into a scannable daily summary. Queries all KBs in parallel via `kb query-all`. |
+| `/reflect` | Requests a deep reflection using the medium model (Sonnet). Queries all KBs in parallel in depth and encourages read-write KBs to update stale data. Adjutant will ask for `/confirm` before proceeding |
 | `/confirm` | Confirms a pending `/reflect`. If you don't send this, the reflection is cancelled |
+| `/self-assess` | Weekly self-assessment — reviews journal entries, notification effectiveness, and priority alignment. Proposes improvements to `insights/pending/` for your review. Also available as `/selfassess` or `/assess`. |
 
 ### Control
 
@@ -34,6 +36,8 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | `/search <query>` | Searches the web via the Brave Search API and returns the top 5 results (title, URL, description). No browser automation — fast, token-efficient, and not subject to bot detection. Requires `BRAVE_API_KEY` in `.env`. |
 | `/kb` | Lists all registered knowledge bases |
 | `/kb query <name> <question>` | Queries a specific knowledge base with your question. Example: `/kb query my-project what's the current status?` |
+| `/kb query-all [question]` | Queries ALL registered KBs in parallel and returns combined results. Uses each KB's `query_hint` for targeted questions. Optionally provide a custom question. |
+| `/kb cross-query <kb1,kb2> <question>` | Queries multiple KBs in parallel and synthesizes a cross-domain answer. Example: `/kb cross-query ixda,fagkomite any scheduling conflicts?` |
 | `/kb write <name> <instruction>` | Writes to a read-write knowledge base. The sub-agent performs the requested update within the KB's sandbox. Only works for KBs with `access: read-write`. |
 | `/schedule` | Lists all registered scheduled jobs with enabled/disabled status and schedule |
 | `/schedule run <name>` | Runs a scheduled job immediately. Output is sent to chat. |

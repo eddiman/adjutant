@@ -267,8 +267,11 @@ The morning brief is a proactive daily summary designed for the user, not for sy
 - Overnight changes since the last pulse
 
 ```bash
-# Run manually
+# Run from terminal
 adjutant brief
+
+# Run from Telegram
+/brief
 
 # Schedule via crontab (e.g., every weekday at 07:30)
 # In adjutant.yaml schedules:
@@ -295,8 +298,13 @@ The self-assessment is a weekly introspection cycle where Adjutant evaluates its
 5. Proposes specific changes to priorities, notification frequency, and KB query patterns
 
 ```bash
-# Run manually
+# Run from terminal
 adjutant self-assess
+
+# Run from Telegram (any of these work)
+/self-assess
+/selfassess
+/assess
 
 # Schedule via crontab (e.g., every Sunday at 20:00)
 # In adjutant.yaml schedules:
