@@ -17,9 +17,11 @@ import pytest
 from adjutant.lifecycle.cron import (
     _format_heartbeat,
     _notify_completion,
+    brief_cron,
     pulse_cron,
     review_cron,
     run_cron_prompt,
+    self_assess_cron,
 )
 
 
@@ -528,3 +530,60 @@ class TestNotifyCompletion:
             run_cron_prompt(prompt, adj_dir=tmp_path, action="unknown", source="cron")
 
         mock_notify.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# brief_cron / self_assess_cron
+# ---------------------------------------------------------------------------
+
+
+class TestBriefCron:
+    def test_reads_morning_brief_prompt(self, tmp_path: Path) -> None:
+        """brief_cron should read prompts/morning_brief.md and run backend."""
+        prompts_dir = tmp_path / "prompts"
+        prompts_dir.mkdir()
+        (prompts_dir / "morning_brief.md").write_text("Morning brief prompt")
+
+        backend = _mock_backend()
+        with (
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
+            patch("adjutant.lifecycle.cron.init_adj_dir", return_value=tmp_path),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            brief_cron(adj_dir=tmp_path)
+
+        assert exc_info.value.code == 0
+        backend.run_sync.assert_called_once_with("Morning brief prompt", workdir=tmp_path)
+
+    def test_exits_1_when_prompt_missing(self, tmp_path: Path) -> None:
+        """brief_cron should exit 1 when prompts/morning_brief.md is missing."""
+        with pytest.raises(SystemExit) as exc_info:
+            brief_cron(adj_dir=tmp_path)
+
+        assert exc_info.value.code == 1
+
+
+class TestSelfAssessCron:
+    def test_reads_self_assess_prompt(self, tmp_path: Path) -> None:
+        """self_assess_cron should read prompts/self_assess.md and run backend."""
+        prompts_dir = tmp_path / "prompts"
+        prompts_dir.mkdir()
+        (prompts_dir / "self_assess.md").write_text("Self assessment prompt")
+
+        backend = _mock_backend()
+        with (
+            patch("adjutant.lifecycle.cron.get_backend", return_value=backend),
+            patch("adjutant.lifecycle.cron.init_adj_dir", return_value=tmp_path),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            self_assess_cron(adj_dir=tmp_path)
+
+        assert exc_info.value.code == 0
+        backend.run_sync.assert_called_once_with("Self assessment prompt", workdir=tmp_path)
+
+    def test_exits_1_when_prompt_missing(self, tmp_path: Path) -> None:
+        """self_assess_cron should exit 1 when prompts/self_assess.md is missing."""
+        with pytest.raises(SystemExit) as exc_info:
+            self_assess_cron(adj_dir=tmp_path)
+
+        assert exc_info.value.code == 1

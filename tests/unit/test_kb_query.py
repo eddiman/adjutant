@@ -12,7 +12,9 @@ from adjutant.capabilities.kb.query import (
     KB_QUERY_TIMEOUT,
     KBQueryError,
     _read_kb_model_from_yaml,
+    kb_cross_query,
     kb_query,
+    kb_query_all,
     kb_query_by_path,
     kb_write,
     kb_write_by_path,
@@ -379,3 +381,156 @@ class TestKbWrite:
 
         with pytest.raises(KBQueryError, match="no path"):
             kb_write("broken", "update something", adj_dir)
+
+
+# ---------------------------------------------------------------------------
+# kb_query_all
+# ---------------------------------------------------------------------------
+
+
+def _make_registry_multi(adj_dir: Path, kbs: list[tuple[str, str, str]]) -> None:
+    """Write a registry with multiple KBs. Each tuple: (name, path, query_hint)."""
+    kb_dir = adj_dir / "knowledge_bases"
+    kb_dir.mkdir(parents=True, exist_ok=True)
+    lines = ["knowledge_bases:"]
+    for name, path, hint in kbs:
+        lines.append(f'  - name: "{name}"')
+        lines.append(f'    path: "{path}"')
+        lines.append(f'    description: "test kb"')
+        lines.append(f'    model: "inherit"')
+        lines.append(f'    access: "read-only"')
+        if hint:
+            lines.append(f'    query_hint: "{hint}"')
+    (kb_dir / "registry.yaml").write_text("\n".join(lines) + "\n")
+
+
+class TestKbQueryAll:
+    def test_queries_all_kbs_in_parallel(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb1 = _make_kb(tmp_path, "alpha")
+        kb2 = _make_kb(tmp_path, "beta")
+        _make_registry_multi(adj_dir, [
+            ("alpha", str(kb1), ""),
+            ("beta", str(kb2), "Ask about deadlines"),
+        ])
+
+        backend = _mock_backend(text="Status OK.")
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
+            import asyncio
+
+            result = asyncio.run(kb_query_all(adj_dir))
+
+        assert "### alpha" in result
+        assert "### beta" in result
+        assert "Status OK." in result
+        # Should have been called twice (once per KB)
+        assert backend.run.call_count == 2
+
+    def test_returns_message_when_no_kbs(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb_dir = adj_dir / "knowledge_bases"
+        kb_dir.mkdir(parents=True, exist_ok=True)
+        (kb_dir / "registry.yaml").write_text("knowledge_bases: []\n")
+
+        import asyncio
+
+        result = asyncio.run(kb_query_all(adj_dir))
+        assert "No knowledge bases" in result
+
+    def test_handles_partial_failure(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb1 = _make_kb(tmp_path, "good")
+        kb2 = tmp_path / "bad"  # Don't create — will cause error
+        _make_registry_multi(adj_dir, [
+            ("good", str(kb1), ""),
+            ("bad", str(kb2), ""),
+        ])
+
+        backend = _mock_backend(text="Working fine.")
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
+            import asyncio
+
+            result = asyncio.run(kb_query_all(adj_dir))
+
+        assert "### good" in result
+        assert "### bad" in result
+        assert "[error:" in result
+
+    def test_uses_custom_query(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb1 = _make_kb(tmp_path, "alpha")
+        _make_registry_multi(adj_dir, [("alpha", str(kb1), "ignored hint")])
+
+        backend = _mock_backend(text="Custom answer.")
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
+            import asyncio
+
+            result = asyncio.run(kb_query_all(adj_dir, query="My custom question"))
+
+        # Should have used custom query, not the hint
+        call_args = backend.run.call_args
+        assert "My custom question" in call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# kb_cross_query
+# ---------------------------------------------------------------------------
+
+
+class TestKbCrossQuery:
+    def _make_registry(self, adj_dir: Path, name: str, path: str) -> None:
+        kb_dir = adj_dir / "knowledge_bases"
+        kb_dir.mkdir(parents=True, exist_ok=True)
+        (kb_dir / "registry.yaml").write_text(
+            f'knowledge_bases:\n  - name: "{name}"\n    path: "{path}"\n'
+        )
+
+    def test_raises_on_empty_names(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        with pytest.raises(KBQueryError, match="No KB names"):
+            import asyncio
+
+            asyncio.run(kb_cross_query([], "question?", adj_dir))
+
+    def test_raises_on_empty_question(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        with pytest.raises(KBQueryError, match="empty"):
+            import asyncio
+
+            asyncio.run(kb_cross_query(["kb1"], "  ", adj_dir))
+
+    def test_queries_and_synthesizes(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        kb1 = _make_kb(tmp_path, "alpha")
+        kb2 = _make_kb(tmp_path, "beta")
+        _make_registry_multi(adj_dir, [
+            ("alpha", str(kb1), ""),
+            ("beta", str(kb2), ""),
+        ])
+
+        # First 2 calls return KB results, 3rd call returns synthesis
+        call_count = 0
+        results = [
+            LLMResult(text="Alpha says: yes"),
+            LLMResult(text="Beta says: no"),
+            LLMResult(text="Synthesized: alpha says yes, beta says no"),
+        ]
+
+        async def mock_run(prompt, **kwargs):
+            nonlocal call_count
+            r = results[min(call_count, len(results) - 1)]
+            call_count += 1
+            return r
+
+        backend = MagicMock()
+        backend.run = AsyncMock(side_effect=mock_run)
+        backend.find_binary = MagicMock(return_value="/usr/bin/opencode")
+
+        with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
+            import asyncio
+
+            result = asyncio.run(kb_cross_query(["alpha", "beta"], "conflict?", adj_dir))
+
+        assert "Synthesized" in result
+        # 2 KB queries + 1 synthesis = 3 calls
+        assert backend.run.call_count == 3

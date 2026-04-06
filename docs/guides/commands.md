@@ -94,6 +94,15 @@ adjutant startup      # Full startup, or recovery from KILLED state
 adjutant update       # Self-update to the latest release
 ```
 
+### Autonomous cycles
+
+```bash
+adjutant pulse        # Run the quick autonomous pulse (queries all KBs)
+adjutant review       # Run the deep autonomous review
+adjutant brief        # Run the proactive morning brief (daily summary + deadlines)
+adjutant self-assess  # Run the weekly self-assessment (evaluate + propose improvements)
+```
+
 See [Lifecycle](lifecycle.md) for when to use each of these.
 
 ### Sending messages
@@ -117,6 +126,10 @@ adjutant kb create --quick \
   --desc "What this KB is about"      # Quick non-interactive create (--desc, not --description)
 adjutant kb info <name>               # Show details about a KB
 adjutant kb query <name> "question"   # Query a KB
+adjutant kb query-all                 # Query ALL KBs in parallel (uses each KB's query_hint)
+adjutant kb query-all -q "question"   # Query ALL KBs with a custom question
+adjutant kb cross-query "question" \
+  --kbs ixda,fagkomite                # Query multiple KBs and synthesize a cross-domain answer
 adjutant kb run <name> <operation>    # Run a KB-local operation by convention
 adjutant kb remove <name>             # Unregister a KB (files are NOT deleted)
 ```
@@ -176,7 +189,7 @@ Run `adjutant doctor` to see the health of your installation:
 Adjutant Health Check
 =====================
 
-Installation: /Users/you/.adjutant
+Installation: /Users/you/adjutant
 OS:           Darwin
 
 Dependencies:
@@ -184,7 +197,8 @@ Dependencies:
   curl         OK (curl 8.4.0)
   jq           OK (jq-1.7)
   python3      OK (Python 3.12.0)
-  opencode     OK (opencode 0.3.1)
+  claude       OK (/opt/homebrew/bin/claude)    # or opencode, depending on llm.backend
+  cloudcli     OK (/opt/homebrew/bin/cloudcli)  # claude-cli backend only
 
 Optional:
   playwright   not installed (needed for screenshot)
@@ -202,5 +216,7 @@ State:
   Status: operational
   Listener: Running (PID 12345)
 ```
+
+The backend-specific binaries shown depend on `llm.backend` in `adjutant.yaml`. With `opencode`, doctor checks for the `opencode` binary. With `claude-cli`, it checks for `claude` and `cloudcli`.
 
 If `adjutant doctor` reports missing dependencies or configuration, run `adjutant setup --repair` to fix them interactively.

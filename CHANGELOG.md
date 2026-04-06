@@ -7,12 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## [Unreleased] — Post-0.1.0 Hardening
+## [0.2.0] — Unreleased — Post-0.1.0 Hardening
 
 Comprehensive code quality, type safety, and security hardening pass driven by full deployment readiness audit.
 
 ### Added
 
+- **Parallel KB queries** — `adjutant kb query-all` queries all registered KBs concurrently via `asyncio.gather()`, reducing pulse time from ~7 min to ~80s with 6 KBs. Uses each KB's `query_hint` for targeted questions. (`capabilities/kb/query.py`, `cli.py`)
+- **Cross-KB synthesis** — `adjutant kb cross-query "question" --kbs a,b` queries multiple KBs in parallel, then synthesizes a unified cross-domain answer via a synthesis prompt. (`capabilities/kb/query.py`, `cli.py`)
+- **Morning brief** — `adjutant brief` proactive daily summary combining KB status, deadlines, pending insights, and priority alignment. Designed for phone readability (<800 chars). (`prompts/morning_brief.md`, `lifecycle/cron.py`, `cli.py`)
+- **Self-assessment** — `adjutant self-assess` weekly introspection evaluating notification effectiveness, priority alignment, and KB health. Proposes changes to `insights/pending/` for user review — never modifies identity files directly. (`prompts/self_assess.md`, `lifecycle/cron.py`, `cli.py`)
+- **Graduated autonomy config** — `autonomy` section in `adjutant.yaml` with levels 1-4 (notify-only → fully autonomous), `auto_approve` and `require_approval` lists. (`core/config.py`)
 - **Active operation tracking** — pulse and review write `state/active_operation.json` while running, allowing external clients to observe operation state without holding open connections. Staleness detection auto-cleans markers older than 30 minutes with dead PIDs. (`core/lockfiles.py`, `lifecycle/cron.py`)
 - **Post-completion notifications** — after a successful pulse or review, a Telegram notification is sent with a summary of KBs checked, issues found, and escalation status. Budget-guarded, best-effort. (`lifecycle/cron.py`)
 - Active operation markers for Telegram `/pulse` and `/reflect` → `/confirm` paths (`messaging/telegram/commands.py`)
@@ -143,7 +148,7 @@ Complete rewrite from bash to Python. New architecture, new capabilities, compre
 
 - `.github/workflows/release.yml` — tag-triggered release workflow with tarball + checksum
 - `VERSION` file as source of truth
-- Docusaurus documentation site (`adjutant-docs`)
+- Docusaurus documentation site (`site/`)
 
 ---
 

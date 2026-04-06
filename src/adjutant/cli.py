@@ -11,6 +11,8 @@ Subcommands:
   startup             — Full startup / recovery
   pulse               — Run the autonomous pulse cron job
   review              — Run the autonomous review cron job
+  brief               — Run the proactive morning brief
+  self-assess         — Run the weekly self-assessment
   rotate              — Rotate journal entries and operational log
   reply <message>     — Send a Telegram reply (Markdown)
   notify <message>    — Send a proactive Telegram notification (budget-guarded)
@@ -24,6 +26,8 @@ Subcommands:
   uninstall           — Remove Adjutant from this machine
   kb run <kb> <op>    — Run a KB-local operation
   kb query <kb> <q>   — Query a KB sub-agent by name or path
+  kb query-all        — Query ALL registered KBs in parallel
+  kb cross-query      — Query multiple KBs and synthesize a cross-domain answer
   kb create           — Interactive KB creation wizard
   kb list             — List registered knowledge bases
   kb remove <name>    — Unregister a KB
@@ -123,6 +127,34 @@ def review(ctx: click.Context) -> None:
     from adjutant.lifecycle.cron import review_cron
 
     review_cron(adj_dir=adj_dir)
+
+
+@main.command()
+@click.pass_context
+def brief(ctx: click.Context) -> None:
+    """Run the proactive morning brief (prompts/morning_brief.md)."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.lifecycle.cron import brief_cron
+
+    brief_cron(adj_dir=adj_dir)
+
+
+@main.command(name="self-assess")
+@click.pass_context
+def self_assess(ctx: click.Context) -> None:
+    """Run the weekly self-assessment (prompts/self_assess.md)."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.lifecycle.cron import self_assess_cron
+
+    self_assess_cron(adj_dir=adj_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -445,6 +477,60 @@ def kb_write_cmd(
             msg = kb_write(kb_name, instruction, adj_dir)
 
         click.echo(msg)
+    except (KBQueryError, BackendNotFoundError) as exc:
+        click.echo(f"ERROR: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+
+@kb.command(name="query-all")
+@click.option("--query", "-q", default=None, help="Override query for all KBs.")
+@click.pass_context
+def kb_query_all_cmd(ctx: click.Context, query: str | None) -> None:
+    """Query ALL registered KBs in parallel and return combined results.
+
+    Uses each KB's query_hint for targeted questions. Override with --query.
+    """
+    import asyncio
+
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.kb.query import kb_query_all
+
+    try:
+        result = asyncio.run(kb_query_all(adj_dir, query=query))
+        click.echo(result, nl=False)
+    except Exception as exc:  # noqa: BLE001
+        click.echo(f"ERROR: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+
+@kb.command(name="cross-query")
+@click.argument("question")
+@click.option("--kbs", required=True, help="Comma-separated KB names to query.")
+@click.pass_context
+def kb_cross_query_cmd(ctx: click.Context, question: str, kbs: str) -> None:
+    """Query multiple KBs and synthesize a cross-domain answer.
+
+    Example: adjutant kb cross-query "scheduling conflicts?" --kbs ixda,fagkomite
+    """
+    import asyncio
+
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+
+    from adjutant.capabilities.kb.query import KBQueryError, kb_cross_query
+    from adjutant.core.backend import BackendNotFoundError
+
+    kb_names = [n.strip() for n in kbs.split(",") if n.strip()]
+
+    try:
+        result = asyncio.run(kb_cross_query(kb_names, question, adj_dir))
+        click.echo(result, nl=False)
     except (KBQueryError, BackendNotFoundError) as exc:
         click.echo(f"ERROR: {exc}", err=True)
         raise SystemExit(1) from exc

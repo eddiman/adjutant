@@ -140,13 +140,13 @@ To start Adjutant automatically when you log in to your Mac:
 adjutant startup
 ```
 
-This installs a LaunchAgent plist at `~/Library/LaunchAgents/adjutant.telegram.plist`. The listener will start on every login without manual intervention.
+This installs a LaunchAgent plist at `~/Library/LaunchAgents/com.adjutant.telegram.plist`. The listener will start on every login without manual intervention.
 
 To remove the LaunchAgent:
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/adjutant.telegram.plist
-rm ~/Library/LaunchAgents/adjutant.telegram.plist
+launchctl unload ~/Library/LaunchAgents/com.adjutant.telegram.plist
+rm ~/Library/LaunchAgents/com.adjutant.telegram.plist
 ```
 
 ---
@@ -180,7 +180,7 @@ adjutant restart
 adjutant doctor
 ```
 
-Checks that all required tools are installed (`bash`, `curl`, `jq`, `python3`, `opencode`), credentials are present in `.env`, identity files exist, and the listener state. Does not modify anything — read-only diagnostic.
+Checks that required tools are installed (`bash`, `curl`, `python3`, and your configured LLM backend binary), credentials are present in `.env`, identity files exist, and the listener state. Does not modify anything — read-only diagnostic.
 
 ---
 
@@ -254,3 +254,120 @@ The notification includes:
 Notifications use the daily budget system (`notifications.max_per_day` in `adjutant.yaml`, default 3). If the budget is exhausted, the notification is silently skipped. The pulse/review itself still completes normally.
 
 Note: when triggered from Telegram via `/pulse`, the notification is redundant since the results are already sent as a chat reply. Both are sent, but the daily budget prevents excess.
+
+---
+
+## Morning Brief
+
+The morning brief is a proactive daily summary designed for the user, not for system health. It combines:
+
+- Current priorities from `heart.md` with KB status updates
+- Deadlines in the next 7 days from all KBs
+- Unprocessed insights from `insights/pending/`
+- Overnight changes since the last pulse
+
+```bash
+# Run manually
+adjutant brief
+
+# Schedule via crontab (e.g., every weekday at 07:30)
+# In adjutant.yaml schedules:
+# - name: morning-brief
+#   schedule: "30 7 * * 1-5"
+#   script: "adjutant brief"
+#   enabled: true
+```
+
+The brief uses `kb query-all` internally to query all KBs in parallel, making it significantly faster than a sequential pulse. Output is sent as a single Telegram notification, kept under 800 characters for phone readability.
+
+The brief differs from pulse in purpose: pulse is a system-level health check that writes to journal and escalates issues. The brief is a user-facing daily planner that tells you what to focus on today.
+
+---
+
+## Self-Assessment
+
+The self-assessment is a weekly introspection cycle where Adjutant evaluates its own effectiveness and proposes improvements. It runs through `prompts/self_assess.md` and:
+
+1. Reviews the past week's journal entries
+2. Analyzes notification outcomes (which were useful, which were noise)
+3. Compares `heart.md` priorities against actual activity
+4. Evaluates signal-to-noise ratio, coverage, and timing
+5. Proposes specific changes to priorities, notification frequency, and KB query patterns
+
+```bash
+# Run manually
+adjutant self-assess
+
+# Schedule via crontab (e.g., every Sunday at 20:00)
+# In adjutant.yaml schedules:
+# - name: weekly-self-assess
+#   schedule: "0 20 * * 0"
+#   script: "adjutant self-assess"
+#   enabled: true
+```
+
+**Safety:** The self-assessment never modifies `identity/soul.md` or `identity/heart.md` directly. All proposed changes are written to `insights/pending/self-assessment-YYYY-WNN.md` for the user to review and approve. This keeps the human in the loop for any behavioural changes.
+
+---
+
+## Autonomy Configuration
+
+Adjutant supports graduated autonomy levels via the `autonomy` section in `adjutant.yaml`:
+
+```yaml
+autonomy:
+  level: 2                    # 1=notify-only, 2=suggest+approve, 3=act+notify, 4=autonomous
+  auto_approve:
+    - kb_data_refresh         # Actions that don't need approval at level 3+
+    - memory_digest
+  require_approval:
+    - heart_update            # Actions that always need approval, regardless of level
+    - notification_rule
+```
+
+| Level | Behaviour |
+|-------|-----------|
+| 1 | Notify-only — never act without explicit instruction |
+| 2 | Suggest and act on approval (default) — proposes changes, waits for confirmation |
+| 3 | Act and notify — performs actions autonomously, then tells you what it did |
+| 4 | Fully autonomous — acts silently, logs only |
+
+The `auto_approve` list specifies actions that can proceed without user approval at level 3 and above. The `require_approval` list specifies actions that always need explicit approval, regardless of autonomy level.
+
+---
+
+## Parallel KB Queries
+
+Pulse now uses `kb query-all` to query all registered KBs concurrently instead of sequentially. With 6 KBs at ~70 seconds each, this reduces pulse wall time from ~7 minutes to ~80 seconds.
+
+The `kb query-all` command:
+- Reads all KB entries from `knowledge_bases/registry.yaml`
+- Uses each KB's `query_hint` field for targeted questions
+- Falls back to a generic status query if no hint is set
+- Runs all queries via `asyncio.gather()` for maximum concurrency
+- Returns a combined result with one section per KB
+
+```bash
+# Query all KBs with default hints
+adjutant kb query-all
+
+# Override with a custom question for all KBs
+adjutant kb query-all -q "What deadlines are in the next 7 days?"
+```
+
+---
+
+## Cross-KB Intelligence
+
+The `kb cross-query` command enables multi-domain synthesis — asking questions that span multiple KBs:
+
+```bash
+adjutant kb cross-query "Do I have any scheduling conflicts?" --kbs ixda,fagkomite
+```
+
+This:
+1. Queries the specified KBs in parallel
+2. Feeds all responses into a synthesis prompt
+3. Returns a unified answer that identifies cross-domain connections and conflicts
+
+Use this when you need insights that no single KB can provide alone.

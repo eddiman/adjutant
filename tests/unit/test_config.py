@@ -211,3 +211,46 @@ class TestLoadTypedConfig:
         monkeypatch.delenv("ADJ_DIR", raising=False)
         config = load_typed_config()
         assert config.instance.name == "adjutant"
+
+
+# ---------------------------------------------------------------------------
+# Autonomy config
+# ---------------------------------------------------------------------------
+
+
+class TestAutonomyConfig:
+    """Tests for AutonomyConfig — graduated autonomy control."""
+
+    def test_default_values(self) -> None:
+        config = AdjutantConfig()
+        assert config.autonomy.level == 2
+        assert config.autonomy.auto_approve == []
+        assert "heart_update" in config.autonomy.require_approval
+
+    def test_load_from_file(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "adjutant.yaml"
+        config_file.write_text(
+            "autonomy:\n"
+            "  level: 3\n"
+            "  auto_approve:\n"
+            "    - kb_data_refresh\n"
+            "    - memory_digest\n"
+            "  require_approval:\n"
+            "    - heart_update\n"
+        )
+        config = AdjutantConfig.load(config_file)
+        assert config.autonomy.level == 3
+        assert "kb_data_refresh" in config.autonomy.auto_approve
+        assert "memory_digest" in config.autonomy.auto_approve
+
+    def test_invalid_level_raises(self) -> None:
+        with pytest.raises(Exception):
+            AdjutantConfig.model_validate({"autonomy": {"level": 5}})
+
+    def test_level_1_valid(self) -> None:
+        config = AdjutantConfig.model_validate({"autonomy": {"level": 1}})
+        assert config.autonomy.level == 1
+
+    def test_level_4_valid(self) -> None:
+        config = AdjutantConfig.model_validate({"autonomy": {"level": 4}})
+        assert config.autonomy.level == 4

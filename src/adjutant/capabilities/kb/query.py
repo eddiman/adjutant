@@ -237,6 +237,130 @@ def kb_write(
     return kb_write_by_path(Path(kb_path_str), instruction, adj_dir)
 
 
+async def kb_query_all(
+    adj_dir: Path,
+    *,
+    query: str | None = None,
+    timeout: float = KB_QUERY_TIMEOUT,
+) -> str:
+    """Query ALL registered KBs in parallel and return combined results.
+
+    For each KB, uses ``query_hint`` from the registry to build a targeted
+    question (falls back to a generic status query).  All queries run
+    concurrently via ``asyncio.gather``, giving a ~Nx speedup over
+    sequential execution.
+
+    Args:
+        adj_dir: Adjutant root directory.
+        query: Override query text for all KBs (ignores query_hint).
+        timeout: Per-KB timeout in seconds.
+
+    Returns:
+        Formatted multi-KB result string with one section per KB.
+    """
+    import asyncio
+
+    from adjutant.capabilities.kb.manage import kb_list
+
+    entries = kb_list(adj_dir)
+    if not entries:
+        return "No knowledge bases registered."
+
+    default_query = (
+        "Quick pulse: current status? Active blockers or deadlines "
+        "in the next 2 weeks? Brief bullets only."
+    )
+
+    async def _query_one(name: str, path: str, hint: str) -> tuple[str, str]:
+        q = query or (hint if hint else default_query)
+        try:
+            result = await kb_query_by_path(
+                Path(path), q, adj_dir, timeout=timeout,
+            )
+        except (KBQueryError, BackendNotFoundError) as exc:
+            result = f"[error: {exc}]"
+        return name, result
+
+    tasks = [
+        _query_one(e.name, e.path, e.query_hint)
+        for e in entries
+        if e.path
+    ]
+    results = await asyncio.gather(*tasks)
+
+    parts: list[str] = []
+    for name, response in results:
+        parts.append(f"### {name}\n{response}")
+
+    return "\n\n".join(parts)
+
+
+async def kb_cross_query(
+    kb_names: list[str],
+    question: str,
+    adj_dir: Path,
+    *,
+    timeout: float = KB_QUERY_TIMEOUT,
+) -> str:
+    """Query multiple KBs in parallel and synthesize a unified answer.
+
+    Queries selected KBs concurrently, then runs a synthesis prompt
+    through the backend to produce a single cross-domain answer.
+
+    Args:
+        kb_names: List of registered KB names to query.
+        question: The cross-domain question to answer.
+        adj_dir: Adjutant root directory.
+        timeout: Per-KB timeout in seconds.
+
+    Returns:
+        Synthesized answer combining insights from all queried KBs.
+
+    Raises:
+        KBQueryError: If any KB name is not found.
+    """
+    import asyncio
+
+    if not kb_names:
+        raise KBQueryError("No KB names provided.")
+    if not question.strip():
+        raise KBQueryError("Question is empty.")
+
+    async def _query_one(name: str) -> tuple[str, str]:
+        try:
+            result = await kb_query(name, question, adj_dir, timeout=timeout)
+        except (KBQueryError, BackendNotFoundError) as exc:
+            result = f"[error: {exc}]"
+        return name, result
+
+    tasks = [_query_one(name) for name in kb_names]
+    results = await asyncio.gather(*tasks)
+
+    # Build synthesis prompt
+    context_parts: list[str] = []
+    for name, response in results:
+        context_parts.append(f"### {name}\n{response}")
+    combined = "\n\n".join(context_parts)
+
+    synthesis_prompt = (
+        "You have received responses from multiple knowledge bases about "
+        "the same question. Synthesize these into a single, unified answer "
+        "that identifies connections, conflicts, and combined insights.\n\n"
+        f"## Question\n{question}\n\n"
+        f"## KB Responses\n{combined}\n\n"
+        "## Your Task\n"
+        "Provide a concise, unified answer. Highlight cross-domain "
+        "connections and any conflicts between the sources."
+    )
+
+    backend = get_backend()
+    result = await backend.run(synthesis_prompt, workdir=adj_dir, timeout=timeout)
+
+    if result.text:
+        return result.text
+    return f"Synthesis returned empty. Raw KB responses:\n\n{combined}"
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point: kb_query.py <kb-name|--path /path> <query>
 

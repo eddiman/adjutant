@@ -18,13 +18,14 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from adjutant.core.backend import BackendNotFoundError, get_backend
 from adjutant.core.lockfiles import clear_active_operation, set_active_operation
 from adjutant.core.paths import AdjutantDirNotFoundError, get_adj_dir, init_adj_dir
 
 
-def _format_heartbeat(data: dict, action: str, source: str) -> str:  # noqa: C901
+def _format_heartbeat(data: dict[str, Any], action: str, source: str) -> str:  # noqa: C901
     """Format last_heartbeat.json into a natural-language notification."""
     kbs = data.get("kbs_checked", [])
     issues = data.get("issues_found", [])
@@ -177,3 +178,37 @@ def review_cron(adj_dir: Path | None = None, *, source: str = "cron") -> None:
 
     prompt_file = adj_dir / "prompts" / "review.md"
     run_cron_prompt(prompt_file, adj_dir=adj_dir, action="review", source=source)
+
+
+def brief_cron(adj_dir: Path | None = None, *, source: str = "cron") -> None:
+    """Cron entry point for the proactive morning brief.
+
+    Reads prompts/morning_brief.md, runs the backend, and sends
+    a Telegram notification with the daily brief.
+    """
+    if adj_dir is None:
+        try:
+            adj_dir = init_adj_dir()
+        except AdjutantDirNotFoundError as exc:
+            sys.stderr.write(f"ERROR: {exc}\n")
+            raise SystemExit(1) from exc
+
+    prompt_file = adj_dir / "prompts" / "morning_brief.md"
+    run_cron_prompt(prompt_file, adj_dir=adj_dir, action="brief", source=source)
+
+
+def self_assess_cron(adj_dir: Path | None = None, *, source: str = "cron") -> None:
+    """Cron entry point for the weekly self-assessment.
+
+    Reads prompts/self_assess.md, runs the backend, and writes
+    proposed changes to insights/pending/ for user review.
+    """
+    if adj_dir is None:
+        try:
+            adj_dir = init_adj_dir()
+        except AdjutantDirNotFoundError as exc:
+            sys.stderr.write(f"ERROR: {exc}\n")
+            raise SystemExit(1) from exc
+
+    prompt_file = adj_dir / "prompts" / "self_assess.md"
+    run_cron_prompt(prompt_file, adj_dir=adj_dir, action="self-assess", source=source)

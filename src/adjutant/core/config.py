@@ -146,6 +146,30 @@ class JournalConfig(BaseModel):
     log_rotations: int = 3
 
 
+class AutonomyConfig(BaseModel):
+    """Graduated autonomy control.
+
+    Levels:
+        1 — notify-only (never act without explicit instruction)
+        2 — suggest + act on approval (default)
+        3 — act + notify (do it, then tell user)
+        4 — fully autonomous (act silently, log only)
+    """
+
+    level: int = 2
+    auto_approve: list[str] = Field(default_factory=list)
+    require_approval: list[str] = Field(
+        default_factory=lambda: ["heart_update", "notification_rule"]
+    )
+
+    @field_validator("level")
+    @classmethod
+    def validate_level(cls, v: int) -> int:
+        if v not in (1, 2, 3, 4):
+            raise ValueError(f"autonomy.level must be 1-4, got {v}")
+        return v
+
+
 class DebugConfig(BaseModel):
     dry_run: bool = False
     verbose_logging: bool = False
@@ -172,6 +196,7 @@ class AdjutantConfig(BaseModel):
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     journal: JournalConfig = Field(default_factory=JournalConfig)
+    autonomy: AutonomyConfig = Field(default_factory=AutonomyConfig)
     debug: DebugConfig = Field(default_factory=DebugConfig)
 
     @classmethod

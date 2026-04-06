@@ -33,14 +33,22 @@ Read `adjutant.yaml`. If `debug.dry_run` is `true`:
 
 Read `knowledge_bases/registry.yaml` to get the list of all registered knowledge bases.
 
-### 3. Query each KB for a quick update
+### 3. Query all KBs (parallel)
 
-For each KB in the registry, build a targeted query using its `query_hint` field (if present). The hint tells you what questions are most meaningful for that specific KB.
+Run a single command to query all registered KBs in parallel:
 
-- **If `query_hint` is set:** Use it as the basis for your query. Example: if the hint says "Ask about open issues, measurements, and upcoming deadlines", query: `.venv/bin/python -m adjutant kb query "<name>" "Quick pulse: <query_hint-based question>"`
-- **If `query_hint` is empty or missing:** Fall back to the generic query: `.venv/bin/python -m adjutant kb query "<name>" "Quick pulse: current status? Active blockers or deadlines in the next 2 weeks? Brief bullets only."`
+```bash
+.venv/bin/python -m adjutant kb query-all
+```
 
-Collect each response. If a KB is unreachable or returns an error, note it as unavailable.
+This queries every KB concurrently using each KB's `query_hint` (or a generic status query if no hint is set). The result is a combined response with one section per KB. This is much faster than querying KBs one at a time.
+
+If you need a custom query for all KBs, use:
+```bash
+.venv/bin/python -m adjutant kb query-all -q "Your custom question here"
+```
+
+Collect the combined response. Note any KBs that returned errors.
 
 ### 4. Evaluate against heart.md
 
