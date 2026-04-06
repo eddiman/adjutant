@@ -143,6 +143,7 @@ async def dispatch_message(
     """
     from adjutant.messaging.telegram.commands import (
         _load_pending_model,
+        cmd_brief,
         cmd_digest,
         cmd_forget,
         cmd_help,
@@ -160,6 +161,7 @@ async def dispatch_message(
         cmd_schedule,
         cmd_screenshot,
         cmd_search,
+        cmd_self_assess,
         cmd_status,
     )
     from adjutant.messaging.telegram.send import (
@@ -243,6 +245,10 @@ async def dispatch_message(
         await cmd_kill(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
     elif text == "/pulse":
         await cmd_pulse(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+    elif text == "/brief":
+        await cmd_brief(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+    elif text in ("/self-assess", "/selfassess", "/assess"):
+        await cmd_self_assess(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
     elif text == "/restart":
         await cmd_restart(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
     elif text == "/reflect":

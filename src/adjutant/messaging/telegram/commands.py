@@ -435,6 +435,79 @@ async def cmd_pulse(
 
 
 # ---------------------------------------------------------------------------
+# /brief
+# ---------------------------------------------------------------------------
+
+
+async def cmd_brief(
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Run the proactive morning brief."""
+    from adjutant.core.lockfiles import clear_active_operation, set_active_operation
+
+    _send(
+        "Compiling your morning brief — querying all KBs in parallel.",
+        message_id,
+        bot_token=bot_token,
+        chat_id=chat_id,
+    )
+    adj_log("telegram", "Brief triggered via Telegram.")
+
+    brief_prompt = adj_dir / "prompts" / "morning_brief.md"
+    model = _get_model(adj_dir)
+    set_active_operation("brief", "telegram", adj_dir=adj_dir)
+    try:
+        result = await _run_opencode_prompt(brief_prompt, 240.0, adj_dir, model)
+    finally:
+        clear_active_operation(adj_dir=adj_dir)
+    if not result:
+        result = "The brief completed but returned no output."
+    adj_log("telegram", f"Brief completed via Telegram ({len(result.split())} words).")
+    _send(result, message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+# ---------------------------------------------------------------------------
+# /self-assess
+# ---------------------------------------------------------------------------
+
+
+async def cmd_self_assess(
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Run the weekly self-assessment."""
+    from adjutant.core.lockfiles import clear_active_operation, set_active_operation
+    from adjutant.core.model import TIER_DEFAULTS
+
+    _send(
+        "Starting self-assessment — reviewing journal, notifications, and priorities.",
+        message_id,
+        bot_token=bot_token,
+        chat_id=chat_id,
+    )
+    adj_log("telegram", "Self-assess triggered via Telegram.")
+
+    assess_prompt = adj_dir / "prompts" / "self_assess.md"
+    model = TIER_DEFAULTS["medium"]
+    set_active_operation("self-assess", "telegram", adj_dir=adj_dir)
+    try:
+        result = await _run_opencode_prompt(assess_prompt, 300.0, adj_dir, model)
+    finally:
+        clear_active_operation(adj_dir=adj_dir)
+    if not result:
+        result = "The self-assessment completed but returned no output."
+    adj_log("telegram", f"Self-assess completed via Telegram ({len(result.split())} words).")
+    _send(result, message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+# ---------------------------------------------------------------------------
 # /restart
 # ---------------------------------------------------------------------------
 
@@ -595,15 +668,22 @@ Or use a command:
 registered scheduled jobs, and when I last checked in.
 /pulse — I'll run a quick check across your projects \
 and summarise what I find.
+/brief — Morning brief: deadlines, priorities, and \
+what needs your attention today.
 /restart — Restart all services (listener, opencode web).
 /reflect — I'll run a deep review using Sonnet \
 (I'll ask you to confirm first).
+/self-assess — Weekly self-assessment: how am I doing? \
+Proposes priority and behaviour changes.
 /screenshot <url> — Take a full-page screenshot of any \
 website and send it here.
 /search <query> — Search the web via Brave Search \
 and return top results.
 /kb — List knowledge bases or query one \
 (/kb query <name> <question>).
+/kb query-all — Query all KBs in parallel.
+/kb cross-query <kbs> <question> — Cross-domain \
+synthesis across multiple KBs.
 /schedule — List scheduled jobs or manage them \
 (/schedule run|enable|disable <name>).
 /pause — I'll stop monitoring until you're ready \
@@ -1062,6 +1142,63 @@ async def cmd_kb(
             adj_log("telegram", f"KB query answered from {kb_name}")
         return
 
+    if action == "query-all":
+        # /kb query-all [custom question]
+        custom_q = " ".join(parts[1:]) if len(parts) > 1 else None
+
+        msg_react(message_id, "👀", bot_token=bot_token, chat_id=chat_id)
+
+        suffix = f"kball_{message_id}"
+        msg_typing_start(suffix, bot_token, chat_id)
+
+        try:
+            from adjutant.capabilities.kb.query import kb_query_all
+
+            result = await kb_query_all(adj_dir, query=custom_q)
+        except Exception as exc:
+            adj_log("telegram", f"KB query-all error: {exc}")
+            result = f"Query-all failed: {exc}"
+        finally:
+            msg_typing_stop(suffix)
+
+        msg_send_text(result[:3800], message_id, bot_token=bot_token, chat_id=chat_id)
+        adj_log("telegram", "KB query-all completed")
+        return
+
+    if action == "cross-query":
+        # /kb cross-query <kb1,kb2> <question>
+        if len(parts) < 3:
+            _send(
+                "Usage: /kb cross-query <kb1,kb2,...> <your question>",
+                message_id,
+                bot_token=bot_token,
+                chat_id=chat_id,
+            )
+            return
+
+        kb_names_str = parts[1]
+        question = " ".join(parts[2:])
+        kb_names = [n.strip() for n in kb_names_str.split(",") if n.strip()]
+
+        msg_react(message_id, "👀", bot_token=bot_token, chat_id=chat_id)
+
+        suffix = f"kbcross_{message_id}"
+        msg_typing_start(suffix, bot_token, chat_id)
+
+        try:
+            from adjutant.capabilities.kb.query import kb_cross_query
+
+            result = await kb_cross_query(kb_names, question, adj_dir)
+        except Exception as exc:
+            adj_log("telegram", f"KB cross-query error: {exc}")
+            result = f"Cross-query failed: {exc}"
+        finally:
+            msg_typing_stop(suffix)
+
+        msg_send_text(result[:3800], message_id, bot_token=bot_token, chat_id=chat_id)
+        adj_log("telegram", f"KB cross-query completed across {kb_names}")
+        return
+
     if action == "write":
         # /kb write <name> <instruction...>
         if len(parts) < 3:
@@ -1114,6 +1251,8 @@ async def cmd_kb(
     _send(
         "Usage: /kb list — show knowledge bases\n"
         "/kb query <name> <question> — ask a KB\n"
+        "/kb query-all [question] — query all KBs in parallel\n"
+        "/kb cross-query <kb1,kb2> <question> — cross-domain synthesis\n"
         "/kb write <name> <instruction> — write to a KB (background)",
         message_id,
         bot_token=bot_token,
