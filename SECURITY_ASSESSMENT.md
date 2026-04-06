@@ -1,8 +1,10 @@
 # Security Assessment
 
-**Document version**: 1.0.0  
-**Date**: 2026-03-01  
-**Scope**: Adjutant v1.0 — single-user personal agent, bash/macOS/Linux, OpenCode backend, Telegram interface
+> **OUTDATED** — This document was written against the original bash implementation (pre-0.1.0). The entire codebase was rewritten in Python as of v0.1.0 (2026-03-16). File paths, function names, and control descriptions below reference `scripts/` which no longer exist. Rate limiting (SEC-001) has been implemented. A new security assessment against the Python architecture is needed.
+
+**Document version**: 1.0.0
+**Date**: 2026-03-01
+**Scope**: Adjutant pre-0.1.0 — single-user personal agent, bash/macOS/Linux, OpenCode backend, Telegram interface
 
 ---
 

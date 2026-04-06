@@ -23,8 +23,8 @@ Adjutant supports two LLM backends, switchable via configuration:
 
 | | OpenCode | Claude Code CLI |
 |---|---|---|
-| Vision/images | Yes | No |
-| Model listing | Yes | No |
+| Vision/images | Yes | Yes (via Read tool) |
+| Model listing | Yes | Yes |
 | Cost tracking | No | Yes |
 | Process reaping | Yes | No |
 | Permission modes | N/A | skip / allowlist |

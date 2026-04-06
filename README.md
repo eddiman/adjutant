@@ -35,9 +35,9 @@ The setup wizard checks prerequisites, configures your LLM backend, prompts for 
 | | OpenCode | Claude Code CLI |
 |---|---|---|
 | Auth | Anthropic API key | Claude Pro/Team/Enterprise subscription |
-| Vision | Yes | No |
+| Vision | Yes | Yes (via Read tool) |
 | Cost tracking | No | Yes |
-| Model listing | Yes | No |
+| Model listing | Yes | Yes |
 | Permission modes | N/A | skip / allowlist |
 
 Switch backends by editing `adjutant.yaml`:

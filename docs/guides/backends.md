@@ -27,14 +27,13 @@ adjutant setup
 ### When to use OpenCode
 
 - You have an Anthropic API key
-- You need vision/image analysis (Claude CLI does not support native image input)
-- You want dynamic model listing (`/models` command)
 - You want streaming output
+- You want process reaping for orphan cleanup
 
 ### When to use Claude Code CLI
 
 - You have a Claude Pro, Team, or Enterprise subscription
-- You are rate-limited or blocked from the Anthropic API (e.g. Pro/Team accounts)
+- You prefer subscription-based billing over pay-per-token
 - You want per-request cost tracking (Claude CLI reports `cost_usd` in JSON output)
 
 ---
@@ -62,17 +61,15 @@ No data is lost. You can switch back at any time.
 
 | Capability | OpenCode | Claude CLI |
 |-----------|----------|------------|
-| Vision (image analysis) | Yes | No |
-| Dynamic model listing | Yes | No (static list) |
+| Vision (image analysis) | Yes (native) | Yes (via Read tool image injection) |
+| Dynamic model listing | Yes | Yes |
 | Process reaping | Yes | No (not needed) |
 | Web server (remote access) | Yes (`opencode web`) | Yes (CloudCLI) |
-| Streaming output | Yes | No |
+| Streaming output | Yes | No (single-shot JSON) |
 | Cost tracking per request | No | Yes |
 | Session resume | Yes (`--session`) | Yes (`--resume`) |
 
-If you use a feature that the current backend doesn't support, Adjutant tells you clearly rather than failing silently. For example, sending an image with Claude CLI returns:
-
-> Vision (image analysis) is not supported on the Claude CLI backend. Switch to the opencode backend for image analysis.
+If you use a feature that the current backend doesn't support, Adjutant tells you clearly rather than failing silently.
 
 ---
 
@@ -195,8 +192,8 @@ See `docs/development/backend-guide.md` for the implementation pattern for KB-in
 
 ## Known behavioral differences
 
-- **Response style**: Claude CLI responses may feel different from OpenCode responses because OpenCode uses streaming (model sees partial output) while Claude CLI uses single-shot mode.
-- **Vision**: Only available on OpenCode. Claude CLI returns `vision_unsupported` error.
+- **Response style**: Claude CLI responses may feel different from OpenCode responses because OpenCode uses streaming output while Claude CLI uses single-shot JSON mode. This affects Telegram delivery — OpenCode responses can arrive incrementally, Claude CLI delivers the full response at once.
+- **Vision**: OpenCode passes images natively. Claude CLI uses Read tool image injection (the image is read into the prompt context). Both work, but the mechanisms differ.
 - **Model names**: OpenCode uses full IDs (`anthropic/claude-sonnet-4-6`), Claude CLI uses short names (`sonnet`). Adjutant translates automatically.
 - **Cost tracking**: Only Claude CLI reports `cost_usd`. OpenCode responses have no cost field.
 - **Process cleanup**: OpenCode spawns `bash-language-server` child processes that need reaping. Claude CLI does not have this issue.

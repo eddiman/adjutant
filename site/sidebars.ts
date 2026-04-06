@@ -27,6 +27,7 @@ const sidebars: SidebarsConfig = {
         'guides/lifecycle',
         'guides/memory',
         'guides/news',
+        'guides/web',
         'guides/troubleshooting',
       ],
     },

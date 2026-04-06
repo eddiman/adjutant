@@ -36,6 +36,7 @@ const config: Config = {
             'web/**',
             'plans/**',
             'README.md',
+            'guides/getting-started.md',
           ],
         },
         blog: false,
