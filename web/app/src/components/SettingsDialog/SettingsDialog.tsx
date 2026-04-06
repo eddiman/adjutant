@@ -210,6 +210,7 @@ export function SettingsDialog({
               >
                 <option value="default">Default</option>
                 <option value="bauhaus">Bauhaus</option>
+                <option value="dark">Dark</option>
               </select>
             </div>
           </div>

@@ -1,0 +1,90 @@
+.wrapper {
+  border-top: 1px solid var(--cs-border);
+  padding: 0.75rem 1rem;
+  background: var(--cs-card);
+}
+
+.inputRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.textarea {
+  flex: 1;
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  border: 1px solid var(--cs-border);
+  border-radius: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  font-family: 'Montserrat', system-ui, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  resize: none;
+  min-height: 2.5rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.textarea:focus {
+  border-color: var(--cs-accent);
+}
+
+.textarea::placeholder {
+  color: var(--cs-text-muted);
+}
+
+.sendBtn,
+.cancelBtn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+  height: 2.5rem;
+}
+
+.sendBtn {
+  background: var(--cs-accent);
+  color: #fff;
+}
+
+.sendBtn:hover:not(:disabled) {
+  background: #6b4cae;
+}
+
+.sendBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cancelBtn {
+  background: rgba(245, 108, 108, 0.15);
+  color: #f56c6c;
+}
+
+.cancelBtn:hover {
+  background: rgba(245, 108, 108, 0.25);
+}
+
+@media (max-width: 768px) {
+  .wrapper {
+    padding: 0.5rem 0.75rem;
+    /* Safe area for bottom notch */
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .textarea {
+    font-size: 1rem; /* prevent iOS zoom on focus */
+  }
+
+  .sendBtn,
+  .cancelBtn {
+    padding: 0.5rem 0.75rem;
+  }
+}

@@ -15,6 +15,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 const NoteEditor = lazy(() => import('./components/NoteEditor/NoteEditor'));
 const SettingsDialog = lazy(() => import('./components/SettingsDialog/SettingsDialog'));
+const CodeSession = lazy(() => import('./components/CodeSession/CodeSession'));
 
 import { useCanvas } from './hooks/useCanvas';
 import { useKbs } from './hooks/useKbs';
@@ -30,6 +31,7 @@ import type { Position, StickyColor, Section, CanvasTool } from './types';
 function AppContent() {
   const location = useLocation();
   const isAdjutantPage = location.pathname === '/adjutant';
+  const isSessionPage = location.pathname === '/session';
 
   const {
     currentKb,
@@ -407,7 +409,13 @@ function AppContent() {
         highlightedDirPath={selectedDirPath}
       />
 
-      {isAdjutantPage ? (
+      {isSessionPage ? (
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <CodeSession sidebarOpen={sidebarOpen} />
+          </Suspense>
+        </ErrorBoundary>
+      ) : isAdjutantPage ? (
         <AdjutantDashboard sidebarOpen={sidebarOpen} data={adjutantData} />
       ) : (
       <main className={`app-main full ${isPlacementMode ? 'placement-mode' : ''}`}>
@@ -591,6 +599,7 @@ function App() {
     <Routes>
       <Route path="/" element={<AppWithProviders />} />
       <Route path="/adjutant" element={<AppWithProviders />} />
+      <Route path="/session" element={<AppWithProviders />} />
       <Route path="/:kb" element={<AppWithProviders />} />
       <Route path="/:kb/*" element={<AppWithProviders />} />
     </Routes>

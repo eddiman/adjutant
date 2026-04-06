@@ -333,6 +333,77 @@
   --shadow-overlay: 0 0 0 0.1875rem #1a1a1a;
 }
 
+[data-theme="dark"] {
+  /* ===== COLORS ===== */
+
+  /* Primary - Soft indigo */
+  --color-primary: #7c8cf5;
+  --color-primary-hover: #6b7ae4;
+  --color-primary-bg: rgba(124, 140, 245, 0.1);
+  --color-primary-60: rgba(124, 140, 245, 0.6);
+
+  /* Neutral - Dark palette */
+  --color-bg: #111118;
+  --color-card: #1a1b26;
+  --color-text: #c8c8d0;
+  --color-text-secondary: #8888a0;
+  --color-text-muted: #5c5c72;
+  --color-text-disabled: #44445a;
+  --color-border: #2a2b3d;
+  --color-border-light: #222233;
+  --color-hover-bg: #222233;
+  --color-active-bg: #2a2b40;
+  --color-disabled: #333348;
+  --color-placeholder: #5c5c72;
+
+  /* Semantic */
+  --color-success: #2ecc71;
+  --color-warning: #e6a23c;
+  --color-danger: #e74c3c;
+  --color-danger-hover: #d43b2e;
+  --color-danger-bg: rgba(231, 76, 60, 0.1);
+  --color-danger-text: #f56c6c;
+  --color-danger-bright: #f56c6c;
+
+  /* Special */
+  --color-overlay: rgba(0, 0, 0, 0.7);
+  --color-overlay-light: rgba(0, 0, 0, 0.5);
+  --color-highlight: rgba(124, 140, 245, 0.2);
+  --color-grid: #222233;
+  --color-white: #c8c8d0;
+  --color-white-20: rgba(200, 200, 208, 0.2);
+  --color-white-15: rgba(200, 200, 208, 0.15);
+
+  /* ===== HOME PAGE COLORS ===== */
+  --color-home-gradient-start: #111118;
+  --color-home-gradient-mid-1: #141422;
+  --color-home-gradient-mid-2: #17172a;
+  --color-home-gradient-end: #1a1a30;
+
+  --color-home-blob-1: rgba(124, 140, 245, 0.08);
+  --color-home-blob-2: rgba(124, 92, 191, 0.06);
+  --color-home-blob-3: rgba(100, 130, 255, 0.07);
+  --color-home-blob-4: rgba(124, 140, 245, 0.05);
+  --color-home-blob-5: rgba(124, 92, 191, 0.04);
+
+  --color-home-dots: rgba(124, 140, 245, 0.06);
+  --color-home-title: #c8c8d0;
+  --color-home-title-shadow: rgba(124, 140, 245, 0.1);
+  --color-home-card-shadow-1: rgba(0, 0, 0, 0.3);
+  --color-home-card-shadow-2: rgba(0, 0, 0, 0.2);
+  --color-home-highlight: rgba(124, 140, 245, 0.15);
+
+  /* ===== TYPOGRAPHY ===== */
+  --font-heading: 'Jost', 'Inter', system-ui, sans-serif;
+  --font-body: 'Montserrat', system-ui, sans-serif;
+
+  /* ===== SHADOWS ===== */
+  --shadow-sm: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 0.0625rem 0.25rem rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.4);
+  --shadow-overlay: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.5);
+}
+
 body {
   font-family: var(--font-body);
   margin: 0;

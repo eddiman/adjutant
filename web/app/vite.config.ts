@@ -9,6 +9,11 @@ export default defineConfig({
     port: 3021,
     host: true,
     proxy: {
+      '/ws': {
+        target: 'http://localhost:3020',
+        ws: true,
+        changeOrigin: true,
+      },
       '/api/config/browse': {
         target: 'http://localhost:3020',
         changeOrigin: true,
@@ -27,6 +32,7 @@ export default defineConfig({
         manualChunks: {
           // Split React Flow into its own chunk (large library)
           'react-flow': ['@xyflow/react'],
+          'shiki': ['shiki'],
           // Split TipTap editor into its own chunk
           'tiptap': [
             '@tiptap/react',

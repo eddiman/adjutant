@@ -176,7 +176,7 @@ export interface ImagesResponse {
 
 // === Settings ===
 
-export type Theme = 'default' | 'bauhaus';
+export type Theme = 'default' | 'bauhaus' | 'dark';
 
 export interface Settings {
   theme: Theme;

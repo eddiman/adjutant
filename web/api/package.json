@@ -1,6 +1,6 @@
 {
   "name": "adjutant-web-api",
-  "version": "1.0.0",
+  "version": "0.0.0",
   "description": "Knowledge base explorer API — discovers and serves Adjutant-format KBs",
   "type": "module",
   "main": "dist/index.js",
@@ -28,6 +28,7 @@
     "multer": "^2.0.2",
     "sharp": "^0.34.5",
     "uuid": "^13.0.0",
+    "ws": "^8.20.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -37,6 +38,7 @@
     "@types/node": "^20.10.0",
     "@types/supertest": "^7.2.0",
     "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.18.1",
     "supertest": "^7.2.2",
     "tsup": "^8.0.1",
     "tsx": "^4.7.0",

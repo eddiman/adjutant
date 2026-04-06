@@ -1,9 +1,11 @@
+import { createServer } from 'http';
 import express from 'express';
 import { config } from './config.js';
 import { configService } from './services/configService.js';
 import { kbService } from './services/kbService.js';
 import { authenticate } from './middleware/auth.js';
 import { enforceAccess } from './middleware/accessControl.js';
+import { attachWebSocket } from './ws/index.js';
 import configRouter from './routes/config.js';
 import kbsRouter from './routes/kbs.js';
 import foldersRouter from './routes/folders.js';
@@ -11,6 +13,7 @@ import notesRouter from './routes/notes.js';
 import assetsRouter from './routes/assets.js';
 import adjutantRouter from './routes/adjutant.js';
 import explorerRouter from './routes/explorer.js';
+import sessionsRouter from './routes/sessions.js';
 
 export function createApp() {
   const app = express();
@@ -70,6 +73,7 @@ export function createApp() {
   app.use('/api/assets', assetsRouter);
   app.use('/api/adjutant', adjutantRouter);
   app.use('/api/explorer', explorerRouter);
+  app.use('/api/sessions', sessionsRouter);
 
   // Health check
   app.get('/health', (_req, res) => {
@@ -96,8 +100,10 @@ async function start() {
     await configService.init();
 
     const app = createApp();
+    const server = createServer(app);
+    attachWebSocket(server);
 
-    app.listen(config.port, config.host, async () => {
+    server.listen(config.port, config.host, async () => {
       const mode = await kbService.getMode();
       const kbRoot = await configService.getKbRoot();
       const kbs = await kbService.list();

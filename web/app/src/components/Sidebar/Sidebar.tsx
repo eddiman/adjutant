@@ -37,6 +37,7 @@ export function Sidebar({
 }: SidebarProps) {
   const location = useLocation();
   const isAdjutantPage = location.pathname === '/adjutant';
+  const isSessionPage = location.pathname === '/session';
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Reset expanded folders when KB changes
@@ -218,6 +219,19 @@ export function Sidebar({
               <path d="M12 1v6m0 6v6m8.66-15L17 7.5M7 16.5l-3.66 4.5M1 12h6m6 0h6m-2.66-8L13 7.5M7 16.5l3.66-4.5"/>
             </svg>
             <span className={styles['sidebar-item-text']}>Adjutant</span>
+          </Link>
+
+          {/* Code Session link */}
+          <Link
+            to="/session"
+            className={`${styles['sidebar-item']} ${isSessionPage ? styles.active : ''}`}
+            onClick={() => { if (isMobileViewport() && open) onToggle(); }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+            <span className={styles['sidebar-item-text']}>Code</span>
           </Link>
 
           {/* KB list */}

@@ -1,0 +1,45 @@
+.palette {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background: var(--cs-card);
+  border: 1px solid var(--cs-border);
+  border-radius: 0.375rem;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.1s;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+}
+
+.item:hover,
+.itemSelected {
+  background: rgba(124, 92, 191, 0.1);
+}
+
+.name {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--cs-text);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.description {
+  font-size: 0.75rem;
+  color: var(--cs-text-muted);
+}
