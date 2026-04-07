@@ -334,14 +334,6 @@ export function SessionList({ open, onResume, onResumeCliSession, onNewSession, 
       .finally(() => setLoading(false));
   }, [open]);
 
-  // Auto-expand folders that have sessions
-  useEffect(() => {
-    if (!loading && (sessions.length > 0 || cliSessions.length > 0)) {
-      const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
-      setExpanded(new Set(groups.filter(g => g.sessions.length > 0 || g.cliSessions.length > 0).map(g => g.path)));
-    }
-  }, [loading, sessions, cliSessions, kbs, customFolders, adjutantDir]);
-
   const handleDelete = useCallback(async (id: string) => {
     await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
     setSessions(prev => prev.filter(s => s.id !== id));
@@ -500,14 +492,6 @@ export function StartScreenSessions({ onResume, onResumeCliSession, onNewSession
       .finally(() => setLoading(false));
   }, []);
 
-  // Auto-expand all on load
-  useEffect(() => {
-    if (!loading) {
-      const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
-      setExpanded(new Set(groups.map(g => g.path)));
-    }
-  }, [loading, kbs, customFolders, sessions, cliSessions, adjutantDir]);
-
   const toggleExpand = useCallback((path: string) => {
     setExpanded(prev => {
       const next = new Set(prev);
@@ -564,7 +548,7 @@ export function StartScreenSessions({ onResume, onResumeCliSession, onNewSession
       </div>
       <div style={{
         border: '1px solid var(--cs-border)', borderRadius: '0.375rem',
-        overflow: 'hidden',
+        overflow: 'auto', maxHeight: '50vh',
       }}>
         {groups.map(g => (
           <FolderGroup
