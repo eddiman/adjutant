@@ -11,6 +11,7 @@ import { randomUUID } from 'crypto';
 import { backendDetector } from '../services/backendDetector.js';
 import { sessionService } from '../services/sessionService.js';
 import { runCli } from '../services/cliAdapter.js';
+import { readCliSessionMessages } from '../routes/sessions.js';
 import { WsClientMessageSchema } from '../types/session.js';
 import type { WsServerMessage, ChatMessage, CompleteEvent, ErrorEvent } from '../types/session.js';
 
@@ -65,9 +66,21 @@ export function handleConnection(ws: WebSocket): void {
 
         const model = msg.model || backend.models.expensive;
         const session = sessionService.create(backend.name, msg.cwd, model);
-        // If resuming a CLI session, pre-set the CLI session ID for --resume
+        // If resuming a CLI session, pre-set the CLI session ID and load history
         if (msg.cliSessionId) {
           session.cliSessionId = msg.cliSessionId;
+          const history = await readCliSessionMessages(msg.cliSessionId);
+          for (const m of history) {
+            session.messages.push(m);
+          }
+          if (history.length > 0) {
+            // Auto-name from first user message
+            const firstUser = history.find(m => m.role === 'user');
+            if (firstUser) {
+              session.name = firstUser.content.slice(0, 60).replace(/\n/g, ' ').trim();
+              if (firstUser.content.length > 60) session.name += '...';
+            }
+          }
         }
         connectionSessionIds.add(session.id);
         send(ws, { type: 'session.created', session });
