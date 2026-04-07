@@ -720,6 +720,18 @@ The updated name flows back to the frontend via the `message.complete` WS event'
 
 Model picker labels now show `cheap`, `medium`, `expensive` matching the tier names in `adjutant.yaml` instead of the previous "Fast/Balanced/Powerful" labels.
 
+### KB-grouped session list with custom folders — DONE
+
+**Problem:** Session list was a flat list sorted by time. No relationship between sessions and KBs. Users had to use the directory picker every time to start a session.
+
+**Design:** Tree view where all KBs from adjutant are listed as top-level folders (📚 icon), custom user folders appear below (📁 icon), and sessions are nested under the folder whose path matches their `cwd`. Each folder has a `[+ New]` button for quick session start. Custom folders have an `[x]` remove button. An `[+ Add Folder]` action opens the directory picker to add custom paths. Orphan sessions (no matching folder) appear under an "Other" group.
+
+**No backend changes.** Session-to-KB mapping is frontend-only (`session.cwd` compared against `kb.path`). Custom folders stored in `localStorage` key `adjutant-code-session-folders`.
+
+**Files changed:**
+- `web/app/src/components/CodeSession/SessionList.tsx` — Complete rewrite. New components: `FolderGroup` (collapsible folder row), `SessionRow` (compact session), `groupSessions()` (maps sessions to folders by path matching). Exports `SessionList` (modal), `StartScreenSessions` (inline), `addCustomFolder()` helper.
+- `web/app/src/components/CodeSession/CodeSession.tsx` — Added `handleQuickNewSession(cwd)` for direct session creation from folder, `handleAddFolder()` for add-folder flow, `dirPickerMode` state to route directory picker between session-start and folder-add modes, `folderVersion` to force re-render. Replaced `RecentSessions` with `StartScreenSessions`. Updated `SessionList` props.
+
 ### Pitfall Resolution Summary
 
 All 21 pitfalls identified during planning have been addressed in the implementation:
