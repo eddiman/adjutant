@@ -65,6 +65,10 @@ export function handleConnection(ws: WebSocket): void {
 
         const model = msg.model || backend.models.expensive;
         const session = sessionService.create(backend.name, msg.cwd, model);
+        // If resuming a CLI session, pre-set the CLI session ID for --resume
+        if (msg.cliSessionId) {
+          session.cliSessionId = msg.cliSessionId;
+        }
         connectionSessionIds.add(session.id);
         send(ws, { type: 'session.created', session });
         break;

@@ -244,11 +244,11 @@ export function useCodeSession() {
     }
   }, []);
 
-  const createSession = useCallback((cwd: string, model?: string) => {
+  const createSession = useCallback((cwd: string, model?: string, cliSessionId?: string) => {
     setMessages([]);
     setStreamingContent('');
     setError(null);
-    sendWs({ type: 'session.create', cwd, model });
+    sendWs({ type: 'session.create', cwd, model, cliSessionId });
   }, [sendWs]);
 
   const resumeSession = useCallback((sessionId: string) => {

@@ -75,6 +75,12 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
     resumeSession(sessionId);
   }, [resumeSession]);
 
+  const handleResumeCliSession = useCallback((cliSessionId: string, cwd: string) => {
+    setIsResumed(true);
+    const model = selectedModel || backendInfo?.models.expensive;
+    createSession(cwd, model || undefined, cliSessionId);
+  }, [createSession, selectedModel, backendInfo]);
+
   const addSystemMessage = useCallback((text: string) => {
     setMessages(prev => [...prev, {
       id: crypto.randomUUID(),
@@ -188,6 +194,7 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
             <StartScreenSessions
               key={folderVersion}
               onResume={handleResume}
+              onResumeCliSession={handleResumeCliSession}
               onNewSession={handleQuickNewSession}
               onShowAll={() => setShowSessionList(true)}
               onAddFolder={handleAddFolder}
@@ -235,6 +242,7 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
       <SessionList
         open={showSessionList}
         onResume={handleResume}
+        onResumeCliSession={handleResumeCliSession}
         onNewSession={handleQuickNewSession}
         onAddFolder={handleAddFolder}
         onClose={() => setShowSessionList(false)}

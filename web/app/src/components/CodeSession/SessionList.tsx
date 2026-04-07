@@ -10,6 +10,17 @@ import { useEffect, useState, useCallback } from 'react';
 import type { SessionInfo } from '../../hooks/useCodeSession';
 import type { KbMeta } from '../../types';
 
+// CLI session from ~/.claude/projects/ — read-only, resumable via --resume
+export interface CliSessionSummary {
+  id: string;
+  name: string;
+  cwd: string;
+  model: string;
+  timestamp: string;
+  messageCount: number;
+  source: 'cli';
+}
+
 const FOLDERS_KEY = 'adjutant-code-session-folders';
 
 function loadCustomFolders(): string[] {
@@ -92,17 +103,55 @@ function SessionRow({ session, onResume, onDelete }: {
   );
 }
 
+// === CLI session row (from ~/.claude/projects/) ===
+
+function CliSessionRow({ session, onResume }: {
+  session: CliSessionSummary;
+  onResume: (id: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onResume(session.id)}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        width: '100%', padding: '0.375rem 0 0.375rem 1.25rem',
+        background: 'none', border: 'none', borderBottom: '1px solid rgba(42,43,61,0.3)',
+        cursor: 'pointer', color: 'inherit', textAlign: 'left', fontFamily: 'inherit',
+        transition: 'background 0.1s', gap: '0.5rem',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(124,92,191,0.06)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: '0.75rem', color: 'var(--cs-text-secondary)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {session.name}
+        </div>
+        <div style={{ fontSize: '0.625rem', color: 'var(--cs-text-muted)', display: 'flex', gap: '0.5rem' }}>
+          <span>{relativeTime(session.timestamp)}</span>
+          <span>{session.messageCount} msg{session.messageCount !== 1 ? 's' : ''}</span>
+          {session.model && <span style={{ opacity: 0.7 }}>{session.model}</span>}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 // === Folder group (KB or custom folder) ===
 
-function FolderGroup({ icon, label, path, sessions, expanded, onToggle, onNewSession, onResume, onDelete, onRemoveFolder }: {
+function FolderGroup({ icon, label, path, sessions, cliSessions, expanded, onToggle, onNewSession, onResume, onResumeCliSession, onDelete, onRemoveFolder }: {
   icon: string;
   label: string;
   path: string;
   sessions: SessionInfo[];
+  cliSessions: CliSessionSummary[];
   expanded: boolean;
   onToggle: () => void;
   onNewSession: (cwd: string) => void;
   onResume: (id: string) => void;
+  onResumeCliSession?: (id: string, cwd: string) => void;
   onDelete?: (id: string) => void;
   onRemoveFolder?: () => void;
 }) {
@@ -131,9 +180,9 @@ function FolderGroup({ icon, label, path, sessions, expanded, onToggle, onNewSes
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
-          {sessions.length > 0 && (
+          {(sessions.length + cliSessions.length) > 0 && (
             <span style={{ fontSize: '0.625rem', color: 'var(--cs-text-muted)', padding: '0 0.25rem' }}>
-              {sessions.length}
+              {sessions.length + cliSessions.length}
             </span>
           )}
           <button
@@ -167,14 +216,19 @@ function FolderGroup({ icon, label, path, sessions, expanded, onToggle, onNewSes
       {/* Sessions under this folder */}
       {expanded && (
         <div>
-          {sessions.length === 0 ? (
+          {sessions.length === 0 && cliSessions.length === 0 ? (
             <div style={{ padding: '0.25rem 0 0.375rem 2.25rem', fontSize: '0.6875rem', color: 'var(--cs-text-muted)', fontStyle: 'italic' }}>
               No sessions
             </div>
           ) : (
-            sessions.map(s => (
-              <SessionRow key={s.id} session={s} onResume={onResume} onDelete={onDelete} />
-            ))
+            <>
+              {sessions.map(s => (
+                <SessionRow key={s.id} session={s} onResume={onResume} onDelete={onDelete} />
+              ))}
+              {cliSessions.map(s => (
+                <CliSessionRow key={`cli-${s.id}`} session={s} onResume={() => onResumeCliSession?.(s.id, s.cwd)} />
+              ))}
+            </>
           )}
         </div>
       )}
@@ -190,33 +244,51 @@ interface FolderEntry {
   path: string;
   isKb: boolean;
   sessions: SessionInfo[];
+  cliSessions: CliSessionSummary[];
 }
 
-function groupSessions(kbs: KbMeta[], customFolders: string[], sessions: SessionInfo[], adjutantDir: string | null): { groups: FolderEntry[]; orphans: SessionInfo[] } {
+function matchPath(cwd: string, folderPath: string): boolean {
+  return cwd === folderPath || cwd.startsWith(folderPath + '/');
+}
+
+function groupSessions(
+  kbs: KbMeta[],
+  customFolders: string[],
+  sessions: SessionInfo[],
+  adjutantDir: string | null,
+  cliSessions: CliSessionSummary[] = [],
+): { groups: FolderEntry[]; orphans: SessionInfo[] } {
   const groups: FolderEntry[] = [];
   const claimed = new Set<string>();
+  const claimedCli = new Set<string>();
 
   // Adjutant root first (if available and not already a KB path)
   if (adjutantDir && !kbs.some(kb => kb.path === adjutantDir)) {
-    const matching = sessions.filter(s => s.cwd === adjutantDir || s.cwd.startsWith(adjutantDir + '/'));
+    const matching = sessions.filter(s => matchPath(s.cwd, adjutantDir));
     matching.forEach(s => claimed.add(s.id));
-    groups.push({ icon: '🏠', label: 'Adjutant', path: adjutantDir, isKb: true, sessions: matching });
+    const matchingCli = cliSessions.filter(s => matchPath(s.cwd, adjutantDir));
+    matchingCli.forEach(s => claimedCli.add(s.id));
+    groups.push({ icon: '🏠', label: 'Adjutant', path: adjutantDir, isKb: true, sessions: matching, cliSessions: matchingCli });
   }
 
   // KBs
   for (const kb of kbs) {
-    const matching = sessions.filter(s => !claimed.has(s.id) && (s.cwd === kb.path || s.cwd.startsWith(kb.path + '/')));
+    const matching = sessions.filter(s => !claimed.has(s.id) && matchPath(s.cwd, kb.path));
     matching.forEach(s => claimed.add(s.id));
-    groups.push({ icon: '📚', label: kb.name, path: kb.path, isKb: true, sessions: matching });
+    const matchingCli = cliSessions.filter(s => !claimedCli.has(s.id) && matchPath(s.cwd, kb.path));
+    matchingCli.forEach(s => claimedCli.add(s.id));
+    groups.push({ icon: '📚', label: kb.name, path: kb.path, isKb: true, sessions: matching, cliSessions: matchingCli });
   }
 
   // Custom folders
   for (const folder of customFolders) {
-    // Skip if this folder is already a KB path
     if (kbs.some(kb => kb.path === folder)) continue;
-    const matching = sessions.filter(s => !claimed.has(s.id) && (s.cwd === folder || s.cwd.startsWith(folder + '/')));
+    if (adjutantDir && folder === adjutantDir) continue;
+    const matching = sessions.filter(s => !claimed.has(s.id) && matchPath(s.cwd, folder));
     matching.forEach(s => claimed.add(s.id));
-    groups.push({ icon: '📁', label: pathLabel(folder), path: folder, isKb: false, sessions: matching });
+    const matchingCli = cliSessions.filter(s => !claimedCli.has(s.id) && matchPath(s.cwd, folder));
+    matchingCli.forEach(s => claimedCli.add(s.id));
+    groups.push({ icon: '📁', label: pathLabel(folder), path: folder, isKb: false, sessions: matching, cliSessions: matchingCli });
   }
 
   const orphans = sessions.filter(s => !claimed.has(s.id));
@@ -228,13 +300,15 @@ function groupSessions(kbs: KbMeta[], customFolders: string[], sessions: Session
 interface SessionListProps {
   open: boolean;
   onResume: (sessionId: string) => void;
+  onResumeCliSession: (cliSessionId: string, cwd: string) => void;
   onNewSession: (cwd: string) => void;
   onAddFolder: () => void;
   onClose: () => void;
 }
 
-export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose }: SessionListProps) {
+export function SessionList({ open, onResume, onResumeCliSession, onNewSession, onAddFolder, onClose }: SessionListProps) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [cliSessions, setCliSessions] = useState<CliSessionSummary[]>([]);
   const [kbs, setKbs] = useState<KbMeta[]>([]);
   const [adjutantDir, setAdjutantDir] = useState<string | null>(null);
   const [customFolders, setCustomFolders] = useState<string[]>([]);
@@ -246,22 +320,27 @@ export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose
     setLoading(true);
     setCustomFolders(loadCustomFolders());
     Promise.all([
-      fetch('/api/sessions').then(r => r.json()).then(d => d.sessions || []),
+      fetch('/api/sessions').then(r => r.json()).then(d => ({ sessions: d.sessions || [], cliSessions: d.cliSessions || [] })),
       fetch('/api/kbs').then(r => r.json()).then(d => d.kbs || []),
       fetch('/api/adjutant/status').then(r => r.json()).then(d => d.adjutantDir || null).catch(() => null),
     ])
-      .then(([sess, kbList, adjDir]) => { setSessions(sess); setKbs(kbList); setAdjutantDir(adjDir); })
-      .catch(() => { setSessions([]); setKbs([]); })
+      .then(([sessData, kbList, adjDir]) => {
+        setSessions(sessData.sessions);
+        setCliSessions(sessData.cliSessions);
+        setKbs(kbList);
+        setAdjutantDir(adjDir);
+      })
+      .catch(() => { setSessions([]); setCliSessions([]); setKbs([]); })
       .finally(() => setLoading(false));
   }, [open]);
 
   // Auto-expand folders that have sessions
   useEffect(() => {
-    if (!loading && sessions.length > 0) {
-      const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir);
-      setExpanded(new Set(groups.filter(g => g.sessions.length > 0).map(g => g.path)));
+    if (!loading && (sessions.length > 0 || cliSessions.length > 0)) {
+      const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
+      setExpanded(new Set(groups.filter(g => g.sessions.length > 0 || g.cliSessions.length > 0).map(g => g.path)));
     }
-  }, [loading, sessions, kbs, customFolders, adjutantDir]);
+  }, [loading, sessions, cliSessions, kbs, customFolders, adjutantDir]);
 
   const handleDelete = useCallback(async (id: string) => {
     await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
@@ -291,7 +370,12 @@ export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose
 
   if (!open) return null;
 
-  const { groups, orphans } = groupSessions(kbs, customFolders, sessions, adjutantDir);
+  const { groups, orphans } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
+
+  const handleResumeCliSession = (sessionId: string, cwd: string) => {
+    onResumeCliSession(sessionId, cwd);
+    onClose();
+  };
 
   return (
     <div
@@ -352,10 +436,12 @@ export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose
                   label={g.label}
                   path={g.path}
                   sessions={g.sessions}
+                  cliSessions={g.cliSessions}
                   expanded={expanded.has(g.path)}
                   onToggle={() => toggleExpand(g.path)}
                   onNewSession={(cwd) => { onNewSession(cwd); onClose(); }}
                   onResume={(id) => { onResume(id); onClose(); }}
+                  onResumeCliSession={handleResumeCliSession}
                   onDelete={handleDelete}
                   onRemoveFolder={g.isKb ? undefined : () => handleRemoveFolder(g.path)}
                 />
@@ -367,9 +453,10 @@ export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose
                   label="Other"
                   path=""
                   sessions={orphans}
+                  cliSessions={[]}
                   expanded={expanded.has('__orphans__')}
                   onToggle={() => toggleExpand('__orphans__')}
-                  onNewSession={() => { /* no-op — use Add Folder instead */ }}
+                  onNewSession={() => {}}
                   onResume={(id) => { onResume(id); onClose(); }}
                   onDelete={handleDelete}
                 />
@@ -386,13 +473,15 @@ export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose
 
 interface StartScreenSessionsProps {
   onResume: (sessionId: string) => void;
+  onResumeCliSession: (cliSessionId: string, cwd: string) => void;
   onNewSession: (cwd: string) => void;
   onShowAll: () => void;
   onAddFolder: () => void;
 }
 
-export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFolder }: StartScreenSessionsProps) {
+export function StartScreenSessions({ onResume, onResumeCliSession, onNewSession, onShowAll, onAddFolder }: StartScreenSessionsProps) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
+  const [cliSessions, setCliSessions] = useState<CliSessionSummary[]>([]);
   const [kbs, setKbs] = useState<KbMeta[]>([]);
   const [adjutantDir, setAdjutantDir] = useState<string | null>(null);
   const [customFolders, setCustomFolders] = useState<string[]>([]);
@@ -402,11 +491,11 @@ export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFo
   useEffect(() => {
     setCustomFolders(loadCustomFolders());
     Promise.all([
-      fetch('/api/sessions').then(r => r.json()).then(d => d.sessions || []),
+      fetch('/api/sessions').then(r => r.json()).then(d => ({ sessions: d.sessions || [], cliSessions: d.cliSessions || [] })),
       fetch('/api/kbs').then(r => r.json()).then(d => d.kbs || []),
       fetch('/api/adjutant/status').then(r => r.json()).then(d => d.adjutantDir || null).catch(() => null),
     ])
-      .then(([sess, kbList, adjDir]) => { setSessions(sess); setKbs(kbList); setAdjutantDir(adjDir); })
+      .then(([sessData, kbList, adjDir]) => { setSessions(sessData.sessions); setCliSessions(sessData.cliSessions); setKbs(kbList); setAdjutantDir(adjDir); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -414,10 +503,10 @@ export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFo
   // Auto-expand all on load
   useEffect(() => {
     if (!loading) {
-      const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir);
+      const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
       setExpanded(new Set(groups.map(g => g.path)));
     }
-  }, [loading, kbs, customFolders, sessions, adjutantDir]);
+  }, [loading, kbs, customFolders, sessions, cliSessions, adjutantDir]);
 
   const toggleExpand = useCallback((path: string) => {
     setExpanded(prev => {
@@ -435,7 +524,7 @@ export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFo
 
   if (loading) return null;
 
-  const { groups, orphans } = groupSessions(kbs, customFolders, sessions, adjutantDir);
+  const { groups, orphans } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
   const hasContent = groups.length > 0 || orphans.length > 0;
 
   if (!hasContent) return null;
@@ -484,10 +573,12 @@ export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFo
             label={g.label}
             path={g.path}
             sessions={g.sessions}
+            cliSessions={g.cliSessions}
             expanded={expanded.has(g.path)}
             onToggle={() => toggleExpand(g.path)}
             onNewSession={onNewSession}
             onResume={onResume}
+            onResumeCliSession={onResumeCliSession}
             onRemoveFolder={g.isKb ? undefined : () => handleRemoveFolder(g.path)}
           />
         ))}
@@ -497,6 +588,7 @@ export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFo
             label="Other"
             path=""
             sessions={orphans}
+            cliSessions={[]}
             expanded={expanded.has('__orphans__')}
             onToggle={() => toggleExpand('__orphans__')}
             onNewSession={() => {}}

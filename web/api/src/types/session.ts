@@ -47,7 +47,7 @@ export interface ChatMessage {
 
 // Client -> Server
 export const WsClientMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('session.create'), cwd: z.string(), model: z.string().optional() }),
+  z.object({ type: z.literal('session.create'), cwd: z.string(), model: z.string().optional(), cliSessionId: z.string().optional() }),
   z.object({ type: z.literal('session.resume'), sessionId: z.string() }),
   z.object({ type: z.literal('session.list') }),
   z.object({ type: z.literal('message.send'), sessionId: z.string(), content: z.string() }),

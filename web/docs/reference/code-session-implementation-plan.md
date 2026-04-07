@@ -732,6 +732,33 @@ Model picker labels now show `cheap`, `medium`, `expensive` matching the tier na
 - `web/app/src/components/CodeSession/SessionList.tsx` — Complete rewrite. New components: `FolderGroup` (collapsible folder row), `SessionRow` (compact session), `groupSessions()` (maps sessions to folders by path matching). Exports `SessionList` (modal), `StartScreenSessions` (inline), `addCustomFolder()` helper.
 - `web/app/src/components/CodeSession/CodeSession.tsx` — Added `handleQuickNewSession(cwd)` for direct session creation from folder, `handleAddFolder()` for add-folder flow, `dirPickerMode` state to route directory picker between session-start and folder-add modes, `folderVersion` to force re-render. Replaced `RecentSessions` with `StartScreenSessions`. Updated `SessionList` props.
 
+### Claude CLI session discovery — DONE
+
+**Problem:** Only web-created sessions (in-memory) were listed. Claude CLI maintains its own session history at `~/.claude/projects/<encoded-cwd>/<session-id>.jsonl`, but these were never discovered or displayed.
+
+**Backend — `web/api/src/routes/sessions.ts`:**
+- Added `scanClaudeCliSessions()` function that scans `~/.claude/projects/` directories
+- Each project dir name encodes the CWD (`/Users/foo` → `-Users-foo`), decoded via `decodeCwdFromDirName()`
+- Reads first 20 lines of each `.jsonl` file to extract: session ID, first user message text (for name), timestamp, model, message count
+- Sorts by timestamp descending, limits to 50 most recent
+- Returns `CliSessionSummary[]` alongside web sessions from `GET /api/sessions`
+- Response shape: `{ sessions: [...webSessions], cliSessions: [...cliSessions] }`
+
+**Frontend — `SessionList.tsx`:**
+- Added `CliSessionSummary` type and `CliSessionRow` component
+- `FolderGroup` now accepts `cliSessions` prop and renders them alongside web sessions
+- `groupSessions()` groups CLI sessions by matching `cwd` against KB/folder paths (same logic as web sessions)
+- Both `SessionList` modal and `StartScreenSessions` inline component fetch and display CLI sessions
+
+**CLI session resume flow:**
+- `SessionList` / `StartScreenSessions` pass `onResumeCliSession(cliSessionId, cwd)` to `FolderGroup`
+- `CodeSession.tsx` `handleResumeCliSession` creates a new web session with `createSession(cwd, model, cliSessionId)`
+- `useCodeSession` hook sends `{ type: 'session.create', cwd, model, cliSessionId }` via WS
+- Backend `sessionHandler` pre-sets `session.cliSessionId` on the new session
+- Subsequent `message.send` uses the CLI session ID with `--resume <id>` in the CLI adapter
+
+**WS protocol change:** `session.create` now accepts optional `cliSessionId` field (Zod schema + handler updated).
+
 ### Pitfall Resolution Summary
 
 All 21 pitfalls identified during planning have been addressed in the implementation:
