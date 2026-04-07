@@ -192,13 +192,20 @@ interface FolderEntry {
   sessions: SessionInfo[];
 }
 
-function groupSessions(kbs: KbMeta[], customFolders: string[], sessions: SessionInfo[]): { groups: FolderEntry[]; orphans: SessionInfo[] } {
+function groupSessions(kbs: KbMeta[], customFolders: string[], sessions: SessionInfo[], adjutantDir: string | null): { groups: FolderEntry[]; orphans: SessionInfo[] } {
   const groups: FolderEntry[] = [];
   const claimed = new Set<string>();
 
-  // KBs first
+  // Adjutant root first (if available and not already a KB path)
+  if (adjutantDir && !kbs.some(kb => kb.path === adjutantDir)) {
+    const matching = sessions.filter(s => s.cwd === adjutantDir || s.cwd.startsWith(adjutantDir + '/'));
+    matching.forEach(s => claimed.add(s.id));
+    groups.push({ icon: '🏠', label: 'Adjutant', path: adjutantDir, isKb: true, sessions: matching });
+  }
+
+  // KBs
   for (const kb of kbs) {
-    const matching = sessions.filter(s => s.cwd === kb.path || s.cwd.startsWith(kb.path + '/'));
+    const matching = sessions.filter(s => !claimed.has(s.id) && (s.cwd === kb.path || s.cwd.startsWith(kb.path + '/')));
     matching.forEach(s => claimed.add(s.id));
     groups.push({ icon: '📚', label: kb.name, path: kb.path, isKb: true, sessions: matching });
   }
@@ -229,6 +236,7 @@ interface SessionListProps {
 export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose }: SessionListProps) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [kbs, setKbs] = useState<KbMeta[]>([]);
+  const [adjutantDir, setAdjutantDir] = useState<string | null>(null);
   const [customFolders, setCustomFolders] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -240,8 +248,9 @@ export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose
     Promise.all([
       fetch('/api/sessions').then(r => r.json()).then(d => d.sessions || []),
       fetch('/api/kbs').then(r => r.json()).then(d => d.kbs || []),
+      fetch('/api/adjutant/status').then(r => r.json()).then(d => d.adjutantDir || null).catch(() => null),
     ])
-      .then(([sess, kbList]) => { setSessions(sess); setKbs(kbList); })
+      .then(([sess, kbList, adjDir]) => { setSessions(sess); setKbs(kbList); setAdjutantDir(adjDir); })
       .catch(() => { setSessions([]); setKbs([]); })
       .finally(() => setLoading(false));
   }, [open]);
@@ -249,10 +258,10 @@ export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose
   // Auto-expand folders that have sessions
   useEffect(() => {
     if (!loading && sessions.length > 0) {
-      const { groups } = groupSessions(kbs, customFolders, sessions);
+      const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir);
       setExpanded(new Set(groups.filter(g => g.sessions.length > 0).map(g => g.path)));
     }
-  }, [loading, sessions, kbs, customFolders]);
+  }, [loading, sessions, kbs, customFolders, adjutantDir]);
 
   const handleDelete = useCallback(async (id: string) => {
     await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
@@ -282,7 +291,7 @@ export function SessionList({ open, onResume, onNewSession, onAddFolder, onClose
 
   if (!open) return null;
 
-  const { groups, orphans } = groupSessions(kbs, customFolders, sessions);
+  const { groups, orphans } = groupSessions(kbs, customFolders, sessions, adjutantDir);
 
   return (
     <div
@@ -385,6 +394,7 @@ interface StartScreenSessionsProps {
 export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFolder }: StartScreenSessionsProps) {
   const [sessions, setSessions] = useState<SessionInfo[]>([]);
   const [kbs, setKbs] = useState<KbMeta[]>([]);
+  const [adjutantDir, setAdjutantDir] = useState<string | null>(null);
   const [customFolders, setCustomFolders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -394,8 +404,9 @@ export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFo
     Promise.all([
       fetch('/api/sessions').then(r => r.json()).then(d => d.sessions || []),
       fetch('/api/kbs').then(r => r.json()).then(d => d.kbs || []),
+      fetch('/api/adjutant/status').then(r => r.json()).then(d => d.adjutantDir || null).catch(() => null),
     ])
-      .then(([sess, kbList]) => { setSessions(sess); setKbs(kbList); })
+      .then(([sess, kbList, adjDir]) => { setSessions(sess); setKbs(kbList); setAdjutantDir(adjDir); })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -403,10 +414,10 @@ export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFo
   // Auto-expand all on load
   useEffect(() => {
     if (!loading) {
-      const { groups } = groupSessions(kbs, customFolders, sessions);
+      const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir);
       setExpanded(new Set(groups.map(g => g.path)));
     }
-  }, [loading, kbs, customFolders, sessions]);
+  }, [loading, kbs, customFolders, sessions, adjutantDir]);
 
   const toggleExpand = useCallback((path: string) => {
     setExpanded(prev => {
@@ -424,7 +435,7 @@ export function StartScreenSessions({ onResume, onNewSession, onShowAll, onAddFo
 
   if (loading) return null;
 
-  const { groups, orphans } = groupSessions(kbs, customFolders, sessions);
+  const { groups, orphans } = groupSessions(kbs, customFolders, sessions, adjutantDir);
   const hasContent = groups.length > 0 || orphans.length > 0;
 
   if (!hasContent) return null;
