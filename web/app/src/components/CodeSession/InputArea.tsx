@@ -43,7 +43,6 @@ export function InputArea({
     const trimmed = value.trim();
     if (!trimmed) return;
 
-    // Check if it's a slash command
     if (trimmed.startsWith('/')) {
       const cmd = filtered.find(c => c.name === trimmed);
       if (cmd) {
@@ -98,7 +97,6 @@ export function InputArea({
       return;
     }
 
-    // Up arrow on empty input: fill last user message
     if (e.key === 'ArrowUp' && !value && lastUserMessage) {
       e.preventDefault();
       setValue(lastUserMessage);
@@ -114,7 +112,7 @@ export function InputArea({
   }, [onSlashCommand, resetSelection]);
 
   return (
-    <div className={styles.wrapper} style={{ position: 'relative' }}>
+    <div className={styles.wrapper}>
       {showPalette && (
         <SlashCommandPalette
           commands={filtered}
@@ -122,30 +120,36 @@ export function InputArea({
           onSelect={handlePaletteSelect}
         />
       )}
-      <div className={styles.inputRow}>
-        <textarea
-          ref={textareaRef}
-          className={styles.textarea}
-          value={value}
-          onChange={e => { setValue(e.target.value); autoResize(); }}
-          onKeyDown={handleKeyDown}
-          placeholder={isStreaming ? 'Waiting for response...' : 'Ask anything... (/ for commands)'}
-          disabled={isStreaming || disabled}
-          rows={1}
-        />
-        {isStreaming ? (
-          <button className={styles.cancelBtn} onClick={onCancel}>
-            Cancel
-          </button>
-        ) : (
-          <button
-            className={styles.sendBtn}
-            onClick={handleSend}
-            disabled={!value.trim() || disabled}
-          >
-            Send
-          </button>
-        )}
+      <div className={styles.inputCard}>
+        <div className={styles.inputRow}>
+          <textarea
+            ref={textareaRef}
+            className={styles.textarea}
+            value={value}
+            onChange={e => { setValue(e.target.value); autoResize(); }}
+            onKeyDown={handleKeyDown}
+            placeholder={isStreaming ? 'Waiting for response...' : 'Ask anything...'}
+            disabled={isStreaming || disabled}
+            rows={1}
+          />
+          {isStreaming ? (
+            <button className={styles.cancelBtn} onClick={onCancel}>
+              Cancel
+            </button>
+          ) : (
+            <button
+              className={styles.sendBtn}
+              onClick={handleSend}
+              disabled={!value.trim() || disabled}
+              aria-label="Send message"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5" />
+                <polyline points="5 12 12 5 19 12" />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

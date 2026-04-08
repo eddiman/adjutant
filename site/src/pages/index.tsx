@@ -14,8 +14,16 @@ import styles from './index.module.css';
 function HeroContent() {
   const {siteConfig} = useDocusaurusContext();
   return (
-    <section
-      className={styles.hero}>
+    <section className={styles.hero}>
+      {/* Animated blob background (blue/white) */}
+      <BrowserOnly fallback={null}>
+        {() => {
+          const AnimatedBackground =
+            require('../components/AnimatedBackground').default;
+          return <AnimatedBackground />;
+        }}
+      </BrowserOnly>
+
       {/* Left: text overlay */}
       <div className={styles.heroText}>
         <p className={styles.heroLabel}>Personal AI Agent Framework</p>
@@ -242,9 +250,9 @@ export default function Home(): ReactNode {
       description="A persistent personal AI agent framework that runs on your machine and communicates through Telegram.">
       <HeroContent />
       <main>
-        <FeaturesSection />
+        {/* <FeaturesSection /> */}
         <HowItWorks />
-        <BottomCta />
+        {/* <BottomCta /> */}
       </main>
     </Layout>
   );

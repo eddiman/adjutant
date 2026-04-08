@@ -132,11 +132,40 @@
   --breakpoint-desktop: 64rem;    /* 1024px */
   
   /* ===== SAFE AREA INSETS ===== */
-  
+
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
+
+  /* ===== GLASS SURFACES ===== */
+
+  --glass-blur: 30px;
+  --glass-bg: rgba(255, 255, 255, 0.15);
+  --glass-bg-2: rgba(255, 255, 255, 0.4);
+  --glass-bg-3: rgba(255, 255, 255, 0.7);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.3);
+  --glass-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.1);
+  --glass-radius: 20px;
+  --glass-highlight-top: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  --glass-highlight-left: linear-gradient(180deg, rgba(255, 255, 255, 0.8), transparent, rgba(255, 255, 255, 0.3));
+
+  /* Elevated glass (modals, popovers) — more opaque for readability */
+  --glass-elevated-bg: rgba(255, 255, 255, 0.82);
+  --glass-elevated-blur: 40px;
+  --glass-elevated-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.12),
+    0 4px 16px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.2);
+
+  /* Subtle glass (toolbars, status bars) */
+  --glass-subtle-bg: rgba(255, 255, 255, 0.1);
+  --glass-subtle-blur: 20px;
 }
 
 /* ===== DEFAULT THEME ===== */
@@ -210,7 +239,7 @@
   
   /* Font families */
   --font-heading: 'Jost', 'Nunito Sans', sans-serif;
-  --font-body: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Jost', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   
   /* ===== BORDER RADIUS ===== */
   
@@ -395,13 +424,33 @@
 
   /* ===== TYPOGRAPHY ===== */
   --font-heading: 'Jost', 'Inter', system-ui, sans-serif;
-  --font-body: 'Montserrat', system-ui, sans-serif;
+  --font-body: 'Jost', system-ui, sans-serif;
 
   /* ===== SHADOWS ===== */
   --shadow-sm: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.3);
   --shadow-card: 0 0.0625rem 0.25rem rgba(0, 0, 0, 0.3);
   --shadow-card-hover: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.4);
   --shadow-overlay: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.5);
+
+  /* ===== GLASS OVERRIDES (DARK) ===== */
+  --glass-bg: rgba(20, 20, 30, 0.15);
+  --glass-bg-2: rgba(20, 20, 30, 0.4);
+  --glass-bg-3: rgba(20, 20, 30, 0.7);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+  --glass-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02),
+    inset 0 0 18px 9px rgba(255, 255, 255, 0.02);
+  --glass-highlight-top: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  --glass-highlight-left: linear-gradient(180deg, rgba(255, 255, 255, 0.15), transparent, rgba(255, 255, 255, 0.05));
+  --glass-elevated-bg: rgba(26, 27, 38, 0.88);
+  --glass-elevated-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.4),
+    0 4px 16px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.03);
+  --glass-subtle-bg: rgba(20, 20, 30, 0.3);
 }
 
 body {

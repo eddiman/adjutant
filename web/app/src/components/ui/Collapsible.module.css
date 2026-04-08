@@ -1,0 +1,18 @@
+/* =============================================
+   Collapsible — animated expand/collapse
+   Usage: composes: wrapper from '../ui/Collapsible.module.css';
+   ============================================= */
+
+.wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+
+.expanded {
+  grid-template-rows: 1fr;
+}
+
+.inner {
+  overflow: hidden;
+}

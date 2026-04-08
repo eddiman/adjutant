@@ -6,6 +6,7 @@ import { HealthChecks } from './HealthChecks';
 import { ActivityFeed } from './ActivityFeed';
 import { LastPulse } from './LastPulse';
 import { AnimatedBackground } from '../Home/AnimatedBackground';
+import { PageShell } from '../ui';
 import type { AdjutantData } from '../../hooks/useAdjutant';
 import styles from './AdjutantDashboard.module.css';
 
@@ -32,86 +33,74 @@ export function AdjutantDashboard({ sidebarOpen = false, data }: AdjutantDashboa
     runLifecycleAction,
   } = data;
 
-  const dashboardClass = `${styles.dashboard} ${sidebarOpen ? styles.sidebarOpen : ''}`;
-
   if (loading) {
     return (
-      <div className={dashboardClass}>
-        <AnimatedBackground />
-        <div className={styles.content}>
-          <p className={styles.loading}>Loading...</p>
-        </div>
-      </div>
+      <PageShell sidebarOpen={sidebarOpen} background={<AnimatedBackground />}>
+        <p className={styles.loading}>Loading...</p>
+      </PageShell>
     );
   }
 
   if (error || !status || !status.available) {
     return (
-      <div className={dashboardClass}>
-        <AnimatedBackground />
-        <div className={styles.content}>
-          <nav className={styles.topNav}>
-            <h1 className={styles.logo}>Adjutant</h1>
-          </nav>
-          <div className={styles.error}>
-            <p>{error || 'Adjutant integration not available'}</p>
-            <p className={styles.errorHint}>
-              Make sure Adjutant is installed and the environment variable is set.
-            </p>
-          </div>
+      <PageShell sidebarOpen={sidebarOpen} background={<AnimatedBackground />}>
+        <nav className={styles.topNav}>
+          <h1 className={styles.logo}>Adjutant</h1>
+        </nav>
+        <div className={styles.error}>
+          <p>{error || 'Adjutant integration not available'}</p>
+          <p className={styles.errorHint}>
+            Make sure Adjutant is installed and the environment variable is set.
+          </p>
         </div>
-      </div>
+      </PageShell>
     );
   }
 
   return (
-    <div className={dashboardClass}>
-      <AnimatedBackground />
-      <div className={styles.content}>
-        <nav className={styles.topNav}>
-          <h1 className={styles.logo}>Adjutant</h1>
-          <div className={styles.navTabs}>
-            <button className={`${styles.navTab} ${styles.navTabActive}`}>Pulse</button>
-            <button className={styles.navTab}>Schedules</button>
-            <button className={styles.navTab}>System Logs</button>
-          </div>
-          <div className={styles.navSpacer} />
-          <div className={styles.navIcons}>
-            <button className={styles.navIcon} title="Settings">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-              </svg>
-            </button>
-          </div>
-        </nav>
+    <PageShell sidebarOpen={sidebarOpen} background={<AnimatedBackground />}>
+      <nav className={styles.topNav}>
+        <h1 className={styles.logo}>Adjutant</h1>
+        <div className={styles.navTabs}>
+          <button className={`${styles.navTab} ${styles.navTabActive}`}>Pulse</button>
+          <button className={styles.navTab}>Schedules</button>
+          <button className={styles.navTab}>System Logs</button>
+        </div>
+        <div className={styles.navSpacer} />
+        <div className={styles.navIcons}>
+          <button className={styles.navIcon} title="Settings">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg>
+          </button>
+        </div>
+      </nav>
 
-        <div className={styles.columns}>
-          {/* Left: Hero status + Findings feed + Identity */}
-          <div className={styles.mainColumn}>
-            <SystemStatus status={status} />
-            <ActivityFeed entries={journalEntries} />
-            <IdentityDisplay identity={identity} />
-          </div>
-
-          {/* Right: Telemetry, actions, pulse, schedules */}
-          <div className={styles.sideColumn}>
-            <HealthChecks health={health} onRefresh={fetchHealth} />
-            <QuickActions
-              lifecycleState={status.lifecycleState}
-              actionStates={actionStates}
-              onAction={runLifecycleAction}
-            />
-            <LastPulse heartbeat={status.lastHeartbeat} />
-            <SchedulesManager
-              schedules={schedules}
-              onToggle={handleScheduleToggle}
-              onRun={handleScheduleRun}
-            />
-          </div>
+      <div className={styles.columns}>
+        {/* Left: Hero status + Findings feed + Identity */}
+        <div className={styles.mainColumn}>
+          <SystemStatus status={status} />
+          <ActivityFeed entries={journalEntries} />
+          <IdentityDisplay identity={identity} />
         </div>
 
+        {/* Right: Telemetry, actions, pulse, schedules */}
+        <div className={styles.sideColumn}>
+          <HealthChecks health={health} onRefresh={fetchHealth} />
+          <QuickActions
+            lifecycleState={status.lifecycleState}
+            actionStates={actionStates}
+            onAction={runLifecycleAction}
+          />
+          <LastPulse heartbeat={status.lastHeartbeat} />
+          <SchedulesManager
+            schedules={schedules}
+            onToggle={handleScheduleToggle}
+            onRun={handleScheduleRun}
+          />
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

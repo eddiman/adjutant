@@ -1,20 +1,17 @@
-/* === Note Node (Paper Card) === */
+/* === Note Node (Glass Card) === */
 .note-node {
+  composes: glass from '../ui/GlassSurface.module.css';
+  position: relative;
   /* A4 proportions: 1:1.414 */
   width: var(--note-width);
   height: var(--note-height);
-  background: var(--color-card);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
   cursor: pointer;
   transition: all var(--transition-normal);
-  overflow: hidden;
-  position: relative;
 }
 
 .note-node:hover {
-  box-shadow: var(--shadow-card-hover);
-  transform: translateY(-0.25rem);
+  box-shadow: var(--glass-elevated-shadow);
+  transform: translateY(-2px);
 }
 
 /* Highlighted note animation (when navigating from sidebar) */

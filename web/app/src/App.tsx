@@ -15,7 +15,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 
 const NoteEditor = lazy(() => import('./components/NoteEditor/NoteEditor'));
 const SettingsDialog = lazy(() => import('./components/SettingsDialog/SettingsDialog'));
-const CodeSession = lazy(() => import('./components/CodeSession/CodeSession'));
+const Chat = lazy(() => import('./components/CodeSession/CodeSession'));
 
 import { useCanvas } from './hooks/useCanvas';
 import { useKbs } from './hooks/useKbs';
@@ -31,7 +31,7 @@ import type { Position, StickyColor, Section, CanvasTool } from './types';
 function AppContent() {
   const location = useLocation();
   const isAdjutantPage = location.pathname === '/adjutant';
-  const isSessionPage = location.pathname === '/session';
+  const isChatPage = location.pathname === '/chat' || location.pathname.startsWith('/chat/');
 
   const {
     currentKb,
@@ -409,10 +409,10 @@ function AppContent() {
         highlightedDirPath={selectedDirPath}
       />
 
-      {isSessionPage ? (
+      {isChatPage ? (
         <ErrorBoundary>
           <Suspense fallback={null}>
-            <CodeSession sidebarOpen={sidebarOpen} />
+            <Chat sidebarOpen={sidebarOpen} />
           </Suspense>
         </ErrorBoundary>
       ) : isAdjutantPage ? (
@@ -599,7 +599,8 @@ function App() {
     <Routes>
       <Route path="/" element={<AppWithProviders />} />
       <Route path="/adjutant" element={<AppWithProviders />} />
-      <Route path="/session" element={<AppWithProviders />} />
+      <Route path="/chat" element={<AppWithProviders />} />
+      <Route path="/chat/:sessionId" element={<AppWithProviders />} />
       <Route path="/:kb" element={<AppWithProviders />} />
       <Route path="/:kb/*" element={<AppWithProviders />} />
     </Routes>

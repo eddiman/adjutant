@@ -1,33 +1,5 @@
 .card {
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
   padding: var(--spacing-6);
-  box-shadow: var(--shadow-sm);
-}
-
-[data-theme="bauhaus"] .card {
-  border: 2px solid var(--color-border);
-  border-radius: 0;
-  box-shadow: none;
-}
-
-/* ===== Header ===== */
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-5);
-}
-
-.cardTitle {
-  font-family: var(--font-heading);
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-semibold);
-  font-style: italic;
-  margin: 0;
-  color: var(--color-text);
 }
 
 .liveTag {
@@ -123,37 +95,24 @@
 /* ===== Badges ===== */
 
 .badge {
-  display: inline-block;
-  padding: var(--spacing-0-5) var(--spacing-2);
-  font-size: var(--font-size-xxs);
+  composes: badge from '../ui/Badge.module.css';
   font-weight: var(--font-weight-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  border-radius: var(--radius-xs);
-}
-
-[data-theme="bauhaus"] .badge {
-  border-radius: 0;
 }
 
 .badgeChecked {
-  background: rgba(46, 204, 113, 0.12);
-  color: var(--color-success);
+  composes: success from '../ui/Badge.module.css';
 }
 
 .badgeEscalated {
-  background: rgba(231, 76, 60, 0.12);
-  color: var(--color-danger);
+  composes: danger from '../ui/Badge.module.css';
 }
 
 .badgeError {
-  background: rgba(192, 57, 43, 0.12);
-  color: var(--color-danger);
+  composes: danger from '../ui/Badge.module.css';
 }
 
 .badgeDebug {
-  background: rgba(0, 102, 204, 0.08);
-  color: var(--color-primary);
+  composes: info from '../ui/Badge.module.css';
 }
 
 /* ===== Timestamp ===== */

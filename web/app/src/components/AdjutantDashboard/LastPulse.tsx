@@ -1,3 +1,4 @@
+import { Card } from '../ui';
 import styles from './LastPulse.module.css';
 
 interface LastHeartbeat {
@@ -39,10 +40,9 @@ function formatTimestamp(iso: string): string {
 export function LastPulse({ heartbeat }: LastPulseProps) {
   if (!heartbeat) {
     return (
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Observation Summary</h3>
+      <Card title="Observation Summary" className={styles.card}>
         <p className={styles.empty}>No pulse data yet</p>
-      </div>
+      </Card>
     );
   }
 
@@ -69,9 +69,7 @@ export function LastPulse({ heartbeat }: LastPulseProps) {
   }
 
   return (
-    <div className={styles.card}>
-      <h3 className={styles.cardTitle}>Observation Summary</h3>
-
+    <Card title="Observation Summary" className={styles.card}>
       <p className={styles.summary}>{summaryText}</p>
 
       {kbs_checked && kbs_checked.length > 0 && (
@@ -96,6 +94,6 @@ export function LastPulse({ heartbeat }: LastPulseProps) {
       {escalated && (
         <div className={styles.escalated}>Escalated</div>
       )}
-    </div>
+    </Card>
   );
 }

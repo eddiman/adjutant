@@ -66,23 +66,13 @@
 }
 
 .badge {
-  display: inline-block;
+  composes: badge dark from '../ui/Badge.module.css';
   padding: var(--spacing-1) var(--spacing-3);
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-semibold);
-  text-transform: uppercase;
   letter-spacing: 0.8px;
-  background: #1a2332;
-  color: #ffffff;
-  border-radius: var(--radius-xs);
-}
-
-[data-theme="bauhaus"] .badge {
-  border-radius: 0;
-  background: var(--color-text);
 }
 
 .badgeActive {
+  composes: success from '../ui/Badge.module.css';
   background: #1a3a2a;
   color: #4ade80;
 }
@@ -93,6 +83,7 @@
 }
 
 .badgeInactive {
+  composes: danger from '../ui/Badge.module.css';
   background: #3a1a1a;
   color: #f87171;
 }

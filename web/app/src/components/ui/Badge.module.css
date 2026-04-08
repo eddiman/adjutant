@@ -1,0 +1,49 @@
+/* =============================================
+   Badge — shared composable utility
+   Usage: composes: badge info from '../ui/Badge.module.css';
+   ============================================= */
+
+.badge {
+  display: inline-block;
+  padding: var(--spacing-0-5) var(--spacing-2);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-radius: var(--radius-xs);
+}
+
+:global([data-theme="bauhaus"]) .badge {
+  border-radius: 0;
+}
+
+/* Variants */
+
+.success {
+  background: rgba(46, 204, 113, 0.12);
+  color: var(--color-success);
+}
+
+.danger {
+  background: rgba(231, 76, 60, 0.12);
+  color: var(--color-danger);
+}
+
+.info {
+  background: rgba(0, 102, 204, 0.08);
+  color: var(--color-primary);
+}
+
+.muted {
+  background: var(--color-primary-bg);
+  color: var(--color-text-muted);
+}
+
+.dark {
+  background: #1a2332;
+  color: #ffffff;
+}
+
+:global([data-theme="bauhaus"]) .dark {
+  background: var(--color-text);
+}

@@ -1,3 +1,4 @@
+import { Card } from '../ui';
 import styles from './HealthChecks.module.css';
 
 interface HealthChecksProps {
@@ -16,10 +17,9 @@ interface HealthChecksProps {
 export function HealthChecks({ health, onRefresh }: HealthChecksProps) {
   if (!health) {
     return (
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Observer Telemetry</h3>
+      <Card title="Observer Telemetry" className={styles.card}>
         <p className={styles.loading}>Loading...</p>
-      </div>
+      </Card>
     );
   }
 
@@ -65,17 +65,18 @@ export function HealthChecks({ health, onRefresh }: HealthChecksProps) {
   ];
 
   return (
-    <div className={styles.card}>
-      <div className={styles.header}>
-        <h3 className={styles.cardTitle}>Observer Telemetry</h3>
+    <Card
+      title="Observer Telemetry"
+      headerAction={
         <button className={styles.refreshButton} onClick={onRefresh} title="Refresh">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="23 4 23 10 17 10" />
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
           </svg>
         </button>
-      </div>
-
+      }
+      className={styles.card}
+    >
       <div className={styles.checksList}>
         {checks.map(check => (
           <div key={check.label} className={styles.checkRow}>
@@ -87,6 +88,6 @@ export function HealthChecks({ health, onRefresh }: HealthChecksProps) {
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

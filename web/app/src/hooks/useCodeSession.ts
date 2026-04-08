@@ -189,16 +189,8 @@ export function useCodeSession() {
       setReconnecting(false);
       reconnectAttemptRef.current = 0;
 
-      // Auto-resume session from localStorage on first connect
-      if (!autoResumeAttemptedRef.current) {
-        autoResumeAttemptedRef.current = true;
-        try {
-          const savedId = localStorage.getItem('adjutant-code-session-id');
-          if (savedId) {
-            ws.send(JSON.stringify({ type: 'session.resume', sessionId: savedId }));
-          }
-        } catch { /* ignore */ }
-      }
+      // Mark first connect done (auto-resume removed — routes drive session loading now)
+      autoResumeAttemptedRef.current = true;
     };
 
     ws.onclose = () => {
@@ -300,6 +292,7 @@ export function useCodeSession() {
     backendError,
     activeSession,
     messages,
+    setMessages,
     streamingContent,
     isStreaming,
     error,

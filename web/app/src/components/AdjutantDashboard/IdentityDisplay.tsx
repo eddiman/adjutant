@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Card } from '../ui';
 import styles from './IdentityDisplay.module.css';
 
 interface IdentityDisplayProps {
@@ -16,10 +17,9 @@ export function IdentityDisplay({ identity }: IdentityDisplayProps) {
 
   if (!identity) {
     return (
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Identity</h3>
+      <Card title="Identity" className={styles.card}>
         <p className={styles.loading}>Loading...</p>
-      </div>
+      </Card>
     );
   }
 
@@ -27,10 +27,9 @@ export function IdentityDisplay({ identity }: IdentityDisplayProps) {
 
   if (!hasAnyContent) {
     return (
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Identity</h3>
+      <Card title="Identity" className={styles.card}>
         <p className={styles.empty}>No identity files found</p>
-      </div>
+      </Card>
     );
   }
 
@@ -46,9 +45,9 @@ export function IdentityDisplay({ identity }: IdentityDisplayProps) {
   };
 
   return (
-    <div className={styles.card}>
-      <div className={styles.header}>
-        <h3 className={styles.cardTitle}>Identity</h3>
+    <Card
+      title="Identity"
+      headerAction={
         <div className={styles.tabs}>
           {(['soul', 'heart', 'registry'] as const).map(tab => (
             <button
@@ -60,11 +59,12 @@ export function IdentityDisplay({ identity }: IdentityDisplayProps) {
             </button>
           ))}
         </div>
-      </div>
-
+      }
+      className={styles.card}
+    >
       <div className={styles.content}>
         <pre className={styles.excerpt}>{getContent()}</pre>
       </div>
-    </div>
+    </Card>
   );
 }

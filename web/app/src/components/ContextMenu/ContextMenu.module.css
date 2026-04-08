@@ -11,15 +11,12 @@
 }
 
 .context-menu {
+  composes: glassElevated from '../ui/GlassSurface.module.css';
   position: fixed;
   z-index: var(--z-context-menu);
   min-width: 11.25rem;
-  background: var(--color-card);
-  border: 0.0625rem solid var(--color-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-card-hover);
   padding: var(--spacing-1) 0;
-  animation: contextMenuFadeIn 0.1s ease;
+  animation: contextMenuFadeIn 0.15s ease;
 }
 
 @keyframes contextMenuFadeIn {

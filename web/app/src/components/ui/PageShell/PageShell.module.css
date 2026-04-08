@@ -1,0 +1,43 @@
+/* =============================================
+   PageShell — full-page layout with sidebar offset
+   ============================================= */
+
+.root {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  z-index: 1;
+}
+
+/* Pin animated background to viewport */
+.root > :global([class*="background"]) {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--spacing-8) var(--spacing-6) var(--spacing-12);
+  transition: margin-left var(--transition-medium);
+}
+
+.sidebarOpen .content {
+  margin-left: calc(var(--sidebar-width) + var(--spacing-4));
+}
+
+@media (max-width: 768px) {
+  .sidebarOpen .content {
+    margin-left: 0;
+  }
+
+  .content {
+    padding: var(--spacing-6) var(--spacing-4);
+  }
+}

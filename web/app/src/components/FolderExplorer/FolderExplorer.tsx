@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import { useExplorer } from '../../hooks/useExplorer';
 import type { DirectoryEntry, KbRootValidation } from '../../types';
+import { Modal } from '../ui';
 import styles from './FolderExplorer.module.css';
 
 interface FolderExplorerProps {
@@ -58,21 +59,6 @@ export function FolderExplorer({ open, onSelect, onClose, initialPath }: FolderE
     setSelected(currentPath);
   }, [currentPath]);
 
-  // Keyboard handling
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onClose();
-    }
-  }, [onClose]);
-
-  useEffect(() => {
-    if (open) {
-      window.addEventListener('keydown', handleKeyDown, { capture: true });
-      return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-    }
-  }, [open, handleKeyDown]);
-
   const handleEntryClick = useCallback((entry: DirectoryEntry) => {
     setSelected(entry.path);
   }, []);
@@ -102,19 +88,33 @@ export function FolderExplorer({ open, onSelect, onClose, initialPath }: FolderE
       }, [])
     : [];
 
-  return (
-    <div className={styles.overlay} onClick={onClose}>
-      <div className={styles.explorer} onClick={e => e.stopPropagation()}>
-        {/* Header */}
-        <div className={styles.header}>
-          <h3 className={styles.title}>Browse Server Directories</h3>
-          <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
-        </div>
+  const footerContent = (
+    <>
+      <span className={styles.selectedPath}>
+        {selected || 'No directory selected'}
+      </span>
+      {selected && (
+        <span className={`${styles.validation} ${validation?.valid ? styles.validationValid : styles.validationInvalid}`}>
+          {validating
+            ? 'Checking...'
+            : validation?.valid
+              ? `${validation.kbCount} KB${validation.kbCount !== 1 ? 's' : ''} found`
+              : 'No KBs found'}
+        </span>
+      )}
+      <button
+        className={styles.selectBtn}
+        onClick={handleSelect}
+        disabled={!selected}
+      >
+        Select
+      </button>
+    </>
+  );
 
+  return (
+    <Modal open={open} onClose={onClose} title="Browse Server Directories" width="36rem" layer="dialog-above" footer={footerContent}>
+      <div className={styles.contentWrap}>
         {/* Quick roots */}
         {roots && (
           <div className={styles.roots}>
@@ -195,31 +195,8 @@ export function FolderExplorer({ open, onSelect, onClose, initialPath }: FolderE
             ))
           )}
         </div>
-
-        {/* Footer with selection & validate */}
-        <div className={styles.footer}>
-          <span className={styles.selectedPath}>
-            {selected || 'No directory selected'}
-          </span>
-          {selected && (
-            <span className={`${styles.validation} ${validation?.valid ? styles.validationValid : styles.validationInvalid}`}>
-              {validating
-                ? 'Checking...'
-                : validation?.valid
-                  ? `${validation.kbCount} KB${validation.kbCount !== 1 ? 's' : ''} found`
-                  : 'No KBs found'}
-            </span>
-          )}
-          <button
-            className={styles.selectBtn}
-            onClick={handleSelect}
-            disabled={!selected}
-          >
-            Select
-          </button>
-        </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 

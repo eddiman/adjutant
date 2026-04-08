@@ -486,7 +486,7 @@ Wrap `<CodeSession>` in existing `<ErrorBoundary>` component.
 
 **Files modified:**
 - `web/app/src/types/index.ts` — Added `'dark'` to Theme union type
-- `web/app/src/index.css` — Added complete `[data-theme="dark"]` block (60+ CSS variables) after bauhaus theme: dark backgrounds (#111118), soft indigo primary (#7c8cf5), dark card (#1a1b26), adapted home gradients, shadows with higher opacity, Jost/Montserrat fonts matching default theme
+- `web/app/src/index.css` — Added complete `[data-theme="dark"]` block (60+ CSS variables) after bauhaus theme: dark backgrounds (#111118), soft indigo primary (#7c8cf5), dark card (#1a1b26), adapted home gradients, shadows with higher opacity, Jost/Jost   fonts matching default theme
 - `web/app/src/components/SettingsDialog/SettingsDialog.tsx` — Added `<option value="dark">Dark</option>` to theme select
 
 ### Phase 2: Backend Infrastructure — DONE

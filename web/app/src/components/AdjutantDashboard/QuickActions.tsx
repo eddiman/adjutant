@@ -1,4 +1,5 @@
 import type { LifecycleAction, ActionState } from '../../hooks/useAdjutant';
+import { Card } from '../ui';
 import styles from './QuickActions.module.css';
 
 interface QuickActionsProps {
@@ -45,9 +46,7 @@ export function QuickActions({ lifecycleState, actionStates, onAction }: QuickAc
   };
 
   return (
-    <div className={styles.card}>
-      <h3 className={styles.cardTitle}>Quick Actions</h3>
-
+    <Card title="Quick Actions" className={styles.card}>
       <div className={styles.actions}>
         {renderButton('review', 'Review Findings', 'primary')}
 
@@ -61,6 +60,6 @@ export function QuickActions({ lifecycleState, actionStates, onAction }: QuickAc
           {renderButton('pulse', 'Pulse', 'secondary')}
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

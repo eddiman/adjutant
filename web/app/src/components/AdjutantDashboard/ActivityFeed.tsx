@@ -1,3 +1,4 @@
+import { Card } from '../ui';
 import styles from './ActivityFeed.module.css';
 
 interface ActivityFeedProps {
@@ -62,22 +63,14 @@ function formatTime(timestamp: string): string {
 export function ActivityFeed({ entries }: ActivityFeedProps) {
   if (entries.length === 0) {
     return (
-      <div className={styles.card}>
-        <div className={styles.header}>
-          <h2 className={styles.cardTitle}>Findings Feed</h2>
-        </div>
+      <Card title="Findings Feed" className={styles.card}>
         <p className={styles.empty}>No recent activity</p>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className={styles.card}>
-      <div className={styles.header}>
-        <h2 className={styles.cardTitle}>Findings Feed</h2>
-        <span className={styles.liveTag}>Live Telemetry Stream</span>
-      </div>
-
+    <Card title="Findings Feed" headerAction={<span className={styles.liveTag}>Live Telemetry Stream</span>} className={styles.card}>
       <div className={styles.feed}>
         {entries.map((entry, index) => {
           const parsed = parseEntry(entry);
@@ -110,6 +103,6 @@ export function ActivityFeed({ entries }: ActivityFeedProps) {
           );
         })}
       </div>
-    </div>
+    </Card>
   );
 }

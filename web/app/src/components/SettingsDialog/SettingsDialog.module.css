@@ -1,84 +1,4 @@
 /* === Settings Dialog === */
-.dialog-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--color-overlay);
-  backdrop-filter: blur(0.25rem);
-  z-index: var(--z-dialog);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: dialogFadeIn var(--transition-fast);
-}
-
-@keyframes dialogFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.settings-dialog {
-  background: var(--color-card);
-  border-radius: var(--radius);
-  width: var(--dialog-width);
-  max-width: 90vw;
-  max-height: 80vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: var(--shadow-overlay);
-  animation: dialogSlideIn var(--transition-fast);
-}
-
-@keyframes dialogSlideIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(-0.625rem);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-.settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-4) var(--spacing-5);
-  border-bottom: 0.0625rem solid var(--color-border);
-}
-
-.settings-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  margin: 0;
-  color: var(--color-text);
-}
-
-.settings-close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--icon-button-sm);
-  height: var(--icon-button-sm);
-  border: none;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.settings-close:hover {
-  background: var(--color-hover-bg);
-  color: var(--color-text);
-}
-
-.settings-content {
-  padding: var(--spacing-5);
-  overflow-y: auto;
-}
-
 .settings-section {
   margin-bottom: var(--spacing-6);
 }
@@ -102,7 +22,7 @@
   justify-content: space-between;
   gap: var(--spacing-4);
   padding: var(--spacing-3) 0;
-  border-bottom: 0.0625rem solid var(--color-border);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   cursor: pointer;
 }
 
@@ -168,7 +88,7 @@
 /* === Text Input (KB Root) === */
 .settings-field {
   padding: var(--spacing-3) 0;
-  border-bottom: 0.0625rem solid var(--color-border);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .settings-field:last-child {
@@ -182,24 +102,8 @@
 }
 
 .settings-text-input {
+  composes: input from '../ui/TextInput.module.css';
   flex: 1;
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 0.0625rem solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-card);
-  color: var(--color-text);
-  font-size: var(--font-size-sm);
-  font-family: var(--font-body);
-  transition: border-color var(--transition-fast);
-}
-
-.settings-text-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-
-.settings-text-input::placeholder {
-  color: var(--color-placeholder);
 }
 
 .settings-browse-btn {
@@ -208,9 +112,9 @@
   justify-content: center;
   width: 2.25rem;
   height: 2.25rem;
-  border: 0.0625rem solid var(--color-border);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: var(--radius-sm);
-  background: var(--color-card);
+  background: rgba(255, 255, 255, 0.6);
   color: var(--color-text-secondary);
   cursor: pointer;
   flex-shrink: 0;
@@ -292,7 +196,7 @@
   justify-content: space-between;
   gap: var(--spacing-4);
   padding: var(--spacing-3) 0;
-  border-bottom: 0.0625rem solid var(--color-border);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .settings-select:last-child {
@@ -317,39 +221,9 @@
 }
 
 .settings-select-input {
-  padding: var(--spacing-2) var(--spacing-3);
-  border: 0.0625rem solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-card);
-  color: var(--color-text);
+  composes: select from '../ui/TextInput.module.css';
   font-size: var(--font-size-base);
-  font-family: var(--font-body);
-  cursor: pointer;
   min-width: 8rem;
-  transition: border-color var(--transition-fast);
-}
-
-.settings-select-input:hover {
-  border-color: var(--color-text-secondary);
-}
-
-.settings-select-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
-
-/* === Mobile Responsive === */
-@media (max-width: 48rem) {
-  .settings-dialog {
-    width: calc(100vw - var(--spacing-8));
-    max-width: none;
-    max-height: calc(100vh - var(--spacing-8) - var(--safe-area-inset-top) - var(--safe-area-inset-bottom));
-  }
-  
-  .settings-close {
-    width: var(--touch-target);
-    height: var(--touch-target);
-  }
 }
 
 /* === Touch Device Overrides === */
@@ -357,18 +231,8 @@
   .settings-toggle:hover {
     background: transparent;
   }
-  
+
   .settings-toggle:active {
     background: var(--color-bg);
-  }
-  
-  .settings-close:hover {
-    background: transparent;
-    color: var(--color-text-secondary);
-  }
-  
-  .settings-close:active {
-    background: var(--color-active-bg);
-    color: var(--color-text);
   }
 }

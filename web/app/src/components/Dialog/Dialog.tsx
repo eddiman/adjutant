@@ -1,4 +1,5 @@
 import { useEffect, useCallback } from 'react';
+import { Overlay } from '../ui';
 import styles from './Dialog.module.css';
 
 interface DialogProps {
@@ -22,16 +23,13 @@ export function Dialog({
   onConfirm,
   onCancel,
 }: DialogProps) {
-  // Handle Escape key to cancel
+  // Handle Enter key to confirm (Escape is handled by Overlay)
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onCancel();
-    } else if (e.key === 'Enter') {
+    if (e.key === 'Enter') {
       e.stopPropagation();
       onConfirm();
     }
-  }, [onCancel, onConfirm]);
+  }, [onConfirm]);
 
   useEffect(() => {
     if (open) {
@@ -43,15 +41,15 @@ export function Dialog({
   if (!open) return null;
 
   return (
-    <div className={styles['dialog-overlay']} onClick={onCancel}>
-      <div className={styles['dialog-container']} onClick={e => e.stopPropagation()}>
+    <Overlay open={open} onClose={onCancel}>
+      <div className={styles['dialog-container']}>
         <h2 className={styles['dialog-title']}>{title}</h2>
         <p className={styles['dialog-message']}>{message}</p>
         <div className={styles['dialog-actions']}>
           <button className={`${styles['dialog-button']} ${styles['dialog-button-cancel']}`} onClick={onCancel}>
             {cancelLabel}
           </button>
-          <button 
+          <button
             className={`${styles['dialog-button']} ${styles['dialog-button-confirm']} ${variant === 'danger' ? styles['dialog-button-danger'] : ''}`}
             onClick={onConfirm}
           >
@@ -59,6 +57,6 @@ export function Dialog({
           </button>
         </div>
       </div>
-    </div>
+    </Overlay>
   );
 }

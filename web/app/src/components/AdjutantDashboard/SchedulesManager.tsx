@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Card } from '../ui';
 import styles from './SchedulesManager.module.css';
 
 function cronToHuman(cron: string): string {
@@ -92,19 +93,14 @@ export function SchedulesManager({ schedules, onToggle, onRun }: SchedulesManage
 
   if (schedules.length === 0) {
     return (
-      <div className={styles.card}>
-        <h3 className={styles.cardTitle}>Schedules</h3>
+      <Card title="Schedules" className={styles.card}>
         <p className={styles.empty}>No schedules configured</p>
-      </div>
+      </Card>
     );
   }
 
   return (
-    <div className={styles.card}>
-      <h3 className={styles.cardTitle}>
-        Schedules <span className={styles.count}>({schedules.length})</span>
-      </h3>
-
+    <Card title="Schedules" headerAction={<span className={styles.count}>({schedules.length})</span>} className={styles.card}>
       <div className={styles.schedulesList}>
         {schedules.map(schedule => (
           <div key={schedule.name} className={styles.scheduleItem}>
@@ -148,6 +144,6 @@ export function SchedulesManager({ schedules, onToggle, onRun }: SchedulesManage
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

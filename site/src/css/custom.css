@@ -1,157 +1,390 @@
 /**
  * Adjutant documentation theme.
  *
- * Visual identity: Blue gradient palette with pink/rose accents.
- * Font: Jost (geometric sans-serif, Futura alternative).
+ * Glassmorphic design system aligned with the Adjutant web app.
+ * Font: Jost (geometric sans-serif) for all text.
+ * Surfaces: frosted glass over solid backgrounds.
  */
 
 @import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600;700&display=swap');
+@import './glass.css';
+
+/* ─── Design Tokens ───────────────────────────────────── */
 
 :root {
-  /* Primary: Royal blue */
-  --ifm-color-primary: #4670cc;
-  --ifm-color-primary-dark: #3560c2;
-  --ifm-color-primary-darker: #325bb8;
-  --ifm-color-primary-darkest: #2b4fa0;
-  --ifm-color-primary-light: #587dd2;
-  --ifm-color-primary-lighter: #6b8dd8;
-  --ifm-color-primary-lightest: #8dadee;
+  /* === Brand Color Scales === */
 
-  /* Accent colours */
-  --adj-accent: #e48dbf;
-  --adj-accent-light: #f7d4ee;
-  --adj-accent-pink: #e8a4d4;
+  /* Blue scale - base: #3B67F6 */
+  --color-blue-50: #EEF2FE;
+  --color-blue-100: #DFE6FD;
+  --color-blue-200: #C5D2FB;
+  --color-blue-300: #9FB4F9;
+  --color-blue-400: #6B8DF7;
+  --color-blue-500: #3B67F6;
+  --color-blue-600: #2952E0;
+  --color-blue-700: #2142B8;
+  --color-blue-800: #1A3491;
+  --color-blue-900: #152A73;
+  --color-blue-950: #0D1A4A;
 
-  /* Surface colours */
-  --adj-bg-subtle: #eef1ff;
-  --adj-bg-alt: #e4e9ff;
-  --adj-bg-card: #d4ddff;
-  --adj-border: #b4c6f7;
+  /* Pink scale - base: #F7A9F1 */
+  --color-pink-50: #FEF5FD;
+  --color-pink-100: #FDEBFB;
+  --color-pink-200: #FBD7F8;
+  --color-pink-300: #F9C3F4;
+  --color-pink-400: #F7A9F1;
+  --color-pink-500: #F07BE6;
+  --color-pink-600: #E34DD6;
+  --color-pink-700: #C733B8;
+  --color-pink-800: #A32B97;
+  --color-pink-900: #7E2375;
+  --color-pink-950: #55174F;
 
-  --ifm-code-font-size: 95%;
+  /* === Semantic Colors === */
+  --color-text: #1a1a1a;
+  --color-text-secondary: #666666;
+  --color-text-muted: #999999;
+  --color-bg: #f5f5f5;
+  --color-card: #ffffff;
+  --color-border: #e0e0e0;
+  --color-border-light: #eeeeee;
+  --color-success: #2ecc71;
+  --color-warning: #e67e22;
+  --color-danger: #c0392b;
+
+  /* === Glass Surfaces === */
+  --glass-blur: 20px;
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.25);
+  --glass-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  --glass-radius: 20px;
+  --glass-highlight-top: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  --glass-highlight-left: linear-gradient(180deg, rgba(255, 255, 255, 0.8), transparent, rgba(255, 255, 255, 0.3));
+
+  --glass-elevated-bg: rgba(255, 255, 255, 0.70);
+  --glass-elevated-blur: 32px;
+  --glass-elevated-shadow:
+    0 8px 40px rgba(0, 0, 0, 0.1),
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+
+  --glass-subtle-bg: rgba(255, 255, 255, 0.35);
+  --glass-subtle-blur: 12px;
+
+  /* === Spacing (4px base) === */
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+  --spacing-20: 5rem;
+  --spacing-24: 6rem;
+
+  /* === Transitions === */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-medium: 0.25s ease;
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* === Border Radius === */
+  --radius-xs: 0.375rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
+  --radius-pill: 999px;
+
+  /* === Shadows === */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-card-hover: 0 8px 32px rgba(0, 0, 0, 0.1), 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-overlay: 0 16px 56px rgba(0, 0, 0, 0.15);
+
+  /* === Font Weights === */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* === Z-Index === */
+  --z-dropdown: 10;
+  --z-toolbar: 100;
+  --z-sidebar: 201;
+  --z-dialog: 300;
+  --z-context-menu: 1000;
+
+  /* === Home Page Background (blue/white only, no pink) === */
+  --color-home-gradient-start: #f5f5f5;
+  --color-home-gradient-mid-1: var(--color-blue-50);
+  --color-home-gradient-mid-2: var(--color-blue-100);
+  --color-home-gradient-end: var(--color-blue-50);
+
+  --color-home-blob-1: color-mix(in srgb, var(--color-blue-300) 15%, transparent);
+  --color-home-blob-2: color-mix(in srgb, var(--color-blue-200) 20%, transparent);
+  --color-home-blob-3: color-mix(in srgb, var(--color-blue-400) 10%, transparent);
+  --color-home-blob-4: color-mix(in srgb, var(--color-blue-100) 25%, transparent);
+  --color-home-blob-5: color-mix(in srgb, var(--color-blue-300) 12%, transparent);
+
+  --color-home-dots: color-mix(in srgb, var(--color-blue-200) 30%, transparent);
+
+  /* === Infima Mappings (matches web app --color-primary: #0066cc) === */
+  --ifm-color-primary: #0066cc;
+  --ifm-color-primary-dark: #005bb8;
+  --ifm-color-primary-darker: #0055ad;
+  --ifm-color-primary-darkest: #00468f;
+  --ifm-color-primary-light: #1a75d4;
+  --ifm-color-primary-lighter: #3385dc;
+  --ifm-color-primary-lightest: #66a3e6;
+
   --ifm-font-family-base: 'Jost', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --ifm-heading-font-family: 'Jost', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --ifm-font-size-base: 100%;
+  --ifm-code-font-size: 95%;
+  --ifm-global-radius: 0.75rem;
+  --ifm-navbar-height: 3.5rem;
 
-  --docusaurus-highlighted-code-line-bg: rgba(70, 112, 204, 0.1);
+  --docusaurus-highlighted-code-line-bg: rgba(0, 102, 204, 0.1);
 }
+
+/* ─── Dark Mode ───────────────────────────────────────── */
 
 [data-theme='dark'] {
-  /* Primary: Azure for dark mode */
-  --ifm-color-primary: #8dadee;
-  --ifm-color-primary-dark: #6b93e4;
-  --ifm-color-primary-darker: #587dd2;
-  --ifm-color-primary-darkest: #4670cc;
-  --ifm-color-primary-light: #a4bff3;
-  --ifm-color-primary-lighter: #b4c6f7;
-  --ifm-color-primary-lightest: #d4ddff;
+  /* Infima primary (matches web app dark --color-primary: #7c8cf5) */
+  --ifm-color-primary: #7c8cf5;
+  --ifm-color-primary-dark: #6b7ae4;
+  --ifm-color-primary-darker: #5f6dd9;
+  --ifm-color-primary-darkest: #4a5bc4;
+  --ifm-color-primary-light: #96a3f7;
+  --ifm-color-primary-lighter: #a8b3f9;
+  --ifm-color-primary-lightest: #c5ccfb;
 
-  --adj-accent: #e8a4d4;
-  --adj-accent-light: #f7d4ee;
+  /* Semantic */
+  --color-text: #c8c8d0;
+  --color-text-secondary: #8888a0;
+  --color-text-muted: #5c5c72;
+  --color-bg: #111118;
+  --color-card: #1a1b26;
+  --color-border: #2a2b3d;
+  --color-border-light: #222233;
 
-  --adj-bg-subtle: #0e1f3f;
-  --adj-bg-alt: #162d5e;
-  --adj-bg-card: #1e3a6e;
-  --adj-border: #2b4fa0;
+  --ifm-background-color: #111118;
+  --ifm-background-surface-color: #1a1b26;
 
-  --docusaurus-highlighted-code-line-bg: rgba(141, 173, 238, 0.15);
+  /* Glass (dark) */
+  --glass-bg: rgba(20, 20, 30, 0.55);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+  --glass-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --glass-highlight-top: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  --glass-highlight-left: linear-gradient(180deg, rgba(255, 255, 255, 0.15), transparent, rgba(255, 255, 255, 0.05));
+  --glass-elevated-bg: rgba(26, 27, 38, 0.85);
+  --glass-elevated-shadow:
+    0 8px 40px rgba(0, 0, 0, 0.4),
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-subtle-bg: rgba(20, 20, 30, 0.5);
+
+  /* Shadows (dark) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-overlay: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  /* Home page (dark) */
+  --color-home-gradient-start: #111118;
+  --color-home-gradient-mid-1: #141422;
+  --color-home-gradient-mid-2: #17172a;
+  --color-home-gradient-end: #1a1a30;
+
+  --color-home-blob-1: rgba(124, 140, 245, 0.08);
+  --color-home-blob-2: rgba(100, 130, 255, 0.06);
+  --color-home-blob-3: rgba(100, 130, 255, 0.07);
+  --color-home-blob-4: rgba(124, 140, 245, 0.05);
+  --color-home-blob-5: rgba(100, 130, 255, 0.04);
+
+  --color-home-dots: rgba(124, 140, 245, 0.06);
+
+  --docusaurus-highlighted-code-line-bg: rgba(124, 140, 245, 0.15);
 }
 
-/* ─── Hero section (standard docs pages) ──────────────── */
+/* ─── Page Transition ─────────────────────────────────── */
 
-.hero--primary {
-  background: linear-gradient(135deg, var(--adj-bg-subtle) 0%, var(--ifm-color-primary-lightest) 50%, var(--adj-accent-light) 100%);
-  color: var(--ifm-color-primary-darkest);
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-[data-theme='dark'] .hero--primary {
-  background: linear-gradient(135deg, #0e1f3f 0%, #162d5e 50%, #2b4fa0 100%);
-  color: #d4ddff;
+/* Doc pages: only the content area, not the sidebar */
+.page-enter [class*="docMainContainer"] {
+  animation: pageIn 0.3s ease-in-out;
 }
 
-.hero__title {
-  font-size: 3rem;
-  font-weight: 700;
+/* Non-doc pages (landing, etc): the whole main wrapper */
+.page-enter .main-wrapper:not(:has([class*="docRoot"])) {
+  animation: pageIn 0.2s ease-out;
 }
 
-.hero__subtitle {
-  font-size: 1.25rem;
-  opacity: 0.85;
-  max-width: 600px;
+.main-wrapper {
+  padding-top: calc(var(--ifm-navbar-height) + var(--spacing-4));
+}
+/* ─── Navbar ──────────────────────────────────────────── */
+
+.navbar {
+  background: var(--glass-subtle-bg);
+  backdrop-filter: blur(var(--glass-subtle-blur));
+  -webkit-backdrop-filter: blur(var(--glass-subtle-blur));
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  z-index: var(--z-dialog);
+  transition: background var(--transition-smooth);
+
+  left: 0;
+  right: 0;
+  margin: 0.5rem;
+  border-radius: var(--radius-sm);
+  position: fixed;
 }
 
-/* ─── Landing page ─────────────────────────────────────── */
+[data-theme='dark'] .navbar {
+  background: var(--glass-subtle-bg);
+}
 
+.navbar__link {
+  transition: color var(--transition-fast);
+}
+
+.navbar__link:hover {
+  color: var(--ifm-color-primary);
+}
+
+/* Landing page: transparent navbar */
 .landing-page .navbar {
   background: transparent;
   box-shadow: none;
+  border-bottom-color: transparent;
+
 }
 
 [data-theme='dark'] .landing-page .navbar {
   background: transparent;
 }
 
-/* ─── Feature cards ────────────────────────────────────── */
+/* Mobile sidebar z-index (preserve existing fixes) */
+.navbar-sidebar {
+  z-index: 400;
 
-.feature-card {
-  padding: 1.5rem;
-  border-radius: 12px;
-  background: var(--adj-bg-subtle);
-  border: 1px solid var(--adj-border);
-  transition: transform 0.2s, box-shadow 0.2s;
+  height: 100vh;
+  border: var(--glass-border);
+  border-radius: var(--radius-sm);
+
+
 }
 
-.feature-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(43, 79, 160, 0.12);
+.navbar-sidebar__backdrop {
+  z-index: 350;
+  position: absolute;
+  height: 100vh;
+  left: -.5rem;
+  right: -.5rem;
+  top: -.5rem;
+  bottom: -.5rem;
+  border: var(--glass-border) 1px solid;
 }
 
-[data-theme='dark'] .feature-card {
-  background: var(--adj-bg-alt);
-  border-color: var(--adj-border);
+/* ─── Doc Sidebar ─────────────────────────────────────── */
+
+@media (min-width: 997px) {
+  .theme-doc-sidebar-container {
+    background: var(--glass-subtle-bg);
+    backdrop-filter: blur(var(--glass-subtle-blur));
+    -webkit-backdrop-filter: blur(var(--glass-subtle-blur));
+    border-right: var(--glass-border) !important;
+    box-shadow: var(--glass-shadow);
+  }
 }
 
-[data-theme='dark'] .feature-card:hover {
-  box-shadow: 0 4px 16px rgba(141, 173, 238, 0.12);
+.menu__link {
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
-
-.feature-card h3 {
-  color: var(--ifm-color-primary-darkest);
-  margin-bottom: 0.5rem;
-}
-
-[data-theme='dark'] .feature-card h3 {
-  color: var(--ifm-color-primary-lightest);
-}
-
-/* ─── Accent badge ─────────────────────────────────────── */
-
-.badge--accent {
-  background: var(--adj-accent-light);
-  color: #6b2d5a;
-  border: 1px solid var(--adj-accent);
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-[data-theme='dark'] .badge--accent {
-  background: rgba(228, 141, 191, 0.15);
-  color: var(--adj-accent-light);
-  border-color: var(--adj-accent);
-}
-
-/* ─── Sidebar ──────────────────────────────────────────── */
 
 .menu__link:hover {
-  background: var(--adj-bg-subtle);
+  background: rgba(0, 102, 204, 0.06);
 }
 
 [data-theme='dark'] .menu__link:hover {
-  background: var(--adj-bg-alt);
+  background: rgba(124, 140, 245, 0.08);
 }
 
-/* ─── Admonitions ──────────────────────────────────────── */
+.menu__link--active:not(.menu__link--sublist) {
+  background: rgba(0, 102, 204, 0.08);
+}
+
+[data-theme='dark'] .menu__link--active:not(.menu__link--sublist) {
+  background: rgba(124, 140, 245, 0.12);
+}
+
+/* ─── Table of Contents ───────────────────────────────── */
+
+.table-of-contents {
+  border-left: var(--glass-border);
+  padding: var(--spacing-3);
+}
+
+.table-of-contents__link {
+  transition: color var(--transition-fast);
+}
+
+.table-of-contents__link--active {
+  color: var(--ifm-color-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ─── Footer ──────────────────────────────────────────── */
+
+.footer {
+  background: var(--glass-subtle-bg) !important;
+  backdrop-filter: blur(var(--glass-subtle-blur));
+  -webkit-backdrop-filter: blur(var(--glass-subtle-blur));
+  border-top: var(--glass-border);
+}
+
+.footer--dark {
+  background: var(--glass-subtle-bg) !important;
+}
+
+.footer__title {
+  font-family: var(--ifm-heading-font-family);
+}
+
+.footer__link-item {
+  transition: color var(--transition-fast);
+}
+
+/* ─── Admonitions ─────────────────────────────────────── */
+
+.admonition {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius);
+}
 
 .admonition.admonition-tip {
   border-left-color: var(--ifm-color-primary);
@@ -159,59 +392,32 @@
 
 .admonition.admonition-caution,
 .admonition.admonition-warning {
-  border-left-color: var(--adj-accent);
+  border-left-color: var(--color-pink-400);
 }
 
-/* ─── Footer ───────────────────────────────────────────── */
-
-.footer--dark {
-  background: #0e1f3f;
-}
-
-/* ─── Code blocks ──────────────────────────────────────── */
+/* ─── Code Blocks ─────────────────────────────────────── */
 
 .prism-code {
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
-/* ─── Navbar ───────────────────────────────────────────── */
-
-.navbar {
-  backdrop-filter: blur(8px);
-  position: sticky;
-  z-index: 300;
+pre {
+  border: var(--glass-border);
+  border-radius: var(--radius) !important;
 }
 
-[data-theme='dark'] .navbar {
-  background: rgba(14, 31, 63, 0.85);
+/* ─── Accessibility ───────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
 }
 
-/* Ensure the mobile sidebar/dropdown stays above the 3D canvas */
-.navbar-sidebar {
-  z-index: 400;
-  /* Docusaurus v4 compat: the sidebar is position:fixed inside a
-     position:sticky navbar whose height is only 60px. The sidebar
-     inherits that height and clips its children via overflow:hidden.
-     Force it to cover the full viewport so menu items are visible. */
-  height: 100vh;
-}
-
-.navbar-sidebar__backdrop {
-  z-index: 350;
-}
-
-/* ─── Install command block ────────────────────────────── */
-
-.install-command {
-  background: var(--adj-bg-subtle);
-  border: 1px solid var(--adj-border);
-  border-radius: 8px;
-  padding: 1rem 1.5rem;
-  font-family: var(--ifm-font-family-monospace);
-  font-size: 0.9rem;
-  display: inline-block;
-}
-
-[data-theme='dark'] .install-command {
-  background: var(--adj-bg-alt);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    transition-duration: 0ms !important;
+  }
 }

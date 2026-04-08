@@ -6,21 +6,24 @@
 
 .user {
   margin-left: auto;
-  background: var(--cs-accent-bg);
-  border-right: 3px solid var(--cs-accent);
+  background: var(--color-primary-bg);
+  border-right: 3px solid var(--color-primary);
   border-radius: 0.75rem 0.25rem 0.25rem 0.75rem;
   text-align: right;
 }
 
 .assistant {
   margin-right: auto;
-  border-left: 3px solid var(--cs-border);
+  background: var(--glass-subtle-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-left: 3px solid var(--color-border);
   border-radius: 0.25rem 0.75rem 0.75rem 0.25rem;
 }
 
 .system {
   text-align: center;
-  color: var(--cs-text-muted);
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
   padding: 0.5rem 1rem;
   font-style: italic;
@@ -38,7 +41,7 @@
 .content h2,
 .content h3 {
   margin: 0.75rem 0 0.375rem;
-  color: var(--cs-text);
+  color: var(--color-text);
 }
 
 .content h1 { font-size: 1.25rem; }
@@ -50,7 +53,7 @@
 }
 
 .content a {
-  color: var(--cs-accent);
+  color: var(--color-primary);
   text-decoration: underline;
 }
 
@@ -64,10 +67,10 @@
 }
 
 .content blockquote {
-  border-left: 3px solid var(--cs-border);
+  border-left: 3px solid var(--color-border);
   margin: 0.5rem 0;
   padding: 0.25rem 0.75rem;
-  color: var(--cs-text-secondary);
+  color: var(--color-text-secondary);
 }
 
 .content code {
@@ -80,7 +83,7 @@
 
 .content pre {
   background: #0d0d14;
-  border: 1px solid var(--cs-border);
+  border: 1px solid var(--color-border);
   border-radius: 0.375rem;
   padding: 0.75rem 1rem;
   overflow-x: auto;
@@ -102,7 +105,7 @@
 
 .content th,
 .content td {
-  border: 1px solid var(--cs-border);
+  border: 1px solid var(--color-border);
   padding: 0.375rem 0.625rem;
   text-align: left;
   font-size: 0.8125rem;
@@ -119,7 +122,7 @@
   gap: 0.75rem;
   margin-top: 0.375rem;
   font-size: 0.6875rem;
-  color: var(--cs-text-muted);
+  color: var(--color-text-muted);
   flex-wrap: wrap;
 }
 
@@ -135,7 +138,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--cs-accent);
+  background: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -144,7 +147,7 @@
   display: inline-block;
   width: 0.5rem;
   height: 1rem;
-  background: var(--cs-accent);
+  background: var(--color-primary);
   margin-left: 0.125rem;
   animation: pulse 1.2s ease-in-out infinite;
   vertical-align: text-bottom;
@@ -164,7 +167,7 @@
   padding: 0.75rem 1rem;
   margin: 0.25rem 0;
   margin-right: auto;
-  border-left: 3px solid var(--cs-border);
+  border-left: 3px solid var(--color-border);
   border-radius: 0.25rem 0.75rem 0.75rem 0.25rem;
   max-width: fit-content;
 }
@@ -173,7 +176,7 @@
   width: 0.375rem;
   height: 0.375rem;
   border-radius: 50%;
-  background: var(--cs-accent);
+  background: var(--color-primary);
   animation: bounce 1.4s ease-in-out infinite;
 }
 

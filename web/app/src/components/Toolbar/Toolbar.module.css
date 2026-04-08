@@ -14,9 +14,11 @@
   border-radius: var(--radius-full);
   border: none;
   background: var(--color-primary);
-  color: var(--color-white);
+  color: white;
   cursor: pointer;
-  box-shadow: var(--shadow-card-hover);
+  box-shadow:
+    0 4px 16px rgba(59, 103, 246, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -25,7 +27,9 @@
 
 .toolbar-button:hover {
   transform: scale(1.1);
-  box-shadow: 0 0.5rem 2rem rgba(0, 102, 204, 0.4);
+  box-shadow:
+    0 6px 24px rgba(59, 103, 246, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .toolbar-button:active {
@@ -35,22 +39,28 @@
 /* FAB active state during placement mode */
 .toolbar-button.active {
   background: var(--color-danger);
+  box-shadow:
+    0 4px 16px rgba(192, 57, 43, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
-/* Secondary buttons (section, sticky) - smaller and muted */
+/* Secondary buttons (section, sticky) - glass style */
 .toolbar-button.secondary {
   width: calc(var(--touch-target-lg) * 0.8);
   height: calc(var(--touch-target-lg) * 0.8);
-  background: var(--color-bg-elevated);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   color: var(--color-text-secondary);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-card);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
 .toolbar-button.secondary:hover {
-  background: var(--color-bg-hover);
+  background: var(--glass-elevated-bg);
   color: var(--color-text);
-  box-shadow: var(--shadow-card-hover);
+  box-shadow: var(--glass-elevated-shadow);
+  transform: scale(1.08);
 }
 
 /* === Mobile Responsive === */

@@ -1,10 +1,13 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCodeSession } from '../../hooks/useCodeSession';
+import { AnimatedBackground } from '../Home/AnimatedBackground';
+import { PageShell } from '../ui';
 import { MessageList } from './MessageList';
 import { InputArea } from './InputArea';
 import { SessionHeader } from './SessionHeader';
 import { StatusBar } from './StatusBar';
-import { SessionList, StartScreenSessions, addCustomFolder } from './SessionList';
+import { ChatSessionList, addCustomFolder } from './SessionList';
 import { WorkingDirPicker } from './WorkingDirPicker';
 import { ModelPicker } from './ModelPicker';
 import type { SlashCommand } from '../../hooks/useSlashCommands';
@@ -15,6 +18,11 @@ interface CodeSessionProps {
 }
 
 export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
+  const { sessionId: urlSessionId } = useParams<{ sessionId?: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isSessionRoute = !!urlSessionId;
+
   const {
     connected,
     reconnecting,
@@ -22,6 +30,7 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
     backendError,
     activeSession,
     messages,
+    setMessages,
     streamingContent,
     isStreaming,
     error,
@@ -30,56 +39,99 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
     sendChatMessage,
     cancelMessage,
     clearMessages,
+    endSession,
   } = useCodeSession();
 
   const [showDirPicker, setShowDirPicker] = useState(false);
-  const [showSessionList, setShowSessionList] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
-  const [isResumed, setIsResumed] = useState(false);
-  // 'session' = start session in picked dir, 'folder' = add folder to list
-  const [dirPickerMode, setDirPickerMode] = useState<'session' | 'folder'>('session');
-  // Force re-render of start screen after adding folder
-  const [folderVersion, setFolderVersion] = useState(0);
+  const [dirPickerMode, setDirPickerMode] = useState<'session' | 'workspace'>('session');
+  const [listRefreshKey, setListRefreshKey] = useState(0);
+
+  // When URL has sessionId but no active session, resume it
+  useEffect(() => {
+    if (urlSessionId && (!activeSession || activeSession.id !== urlSessionId)) {
+      resumeSession(urlSessionId);
+    }
+  }, [urlSessionId, activeSession, resumeSession]);
+
+  // Track whether we're expecting a redirect (from Home prompt or explicit create)
+  const [pendingRedirect, setPendingRedirect] = useState(false);
+
+  // When a session is created and we're expecting a redirect, update URL
+  useEffect(() => {
+    if (activeSession && pendingRedirect) {
+      setPendingRedirect(false);
+      navigate(`/chat/${activeSession.id}`, { replace: true });
+    }
+  }, [activeSession, pendingRedirect, navigate]);
+
+  // Auto-create session from Home prompt (pending cwd in sessionStorage)
+  useEffect(() => {
+    if (!isSessionRoute && connected && backendInfo) {
+      const pendingCwd = sessionStorage.getItem('adjutant-pending-cwd');
+      if (pendingCwd) {
+        sessionStorage.removeItem('adjutant-pending-cwd');
+        const model = backendInfo.models.expensive;
+        setPendingRedirect(true);
+        createSession(pendingCwd, model);
+      }
+    }
+  }, [isSessionRoute, connected, backendInfo, createSession]);
+
+  // Pick up pending message from Home prompt after session is active
+  useEffect(() => {
+    if (activeSession && connected) {
+      const pending = sessionStorage.getItem('adjutant-pending-message');
+      if (pending) {
+        sessionStorage.removeItem('adjutant-pending-message');
+        setTimeout(() => sendChatMessage(pending), 300);
+      }
+    }
+  }, [activeSession, connected, sendChatMessage]);
 
   const handleNewSession = useCallback(() => {
     setDirPickerMode('session');
     setShowDirPicker(true);
   }, []);
 
-  const handleQuickNewSession = useCallback((cwd: string) => {
-    setIsResumed(false);
-    const model = selectedModel || backendInfo?.models.expensive;
-    createSession(cwd, model || undefined);
-  }, [createSession, selectedModel, backendInfo]);
-
-  const handleAddFolder = useCallback(() => {
-    setDirPickerMode('folder');
+  const handleAddWorkspace = useCallback(() => {
+    setDirPickerMode('workspace');
     setShowDirPicker(true);
   }, []);
 
+  const handleQuickNewSession = useCallback((cwd: string) => {
+    const model = selectedModel || backendInfo?.models.expensive;
+    setPendingRedirect(true);
+    createSession(cwd, model || undefined);
+  }, [createSession, selectedModel, backendInfo]);
+
   const handleDirSelect = useCallback((path: string) => {
     setShowDirPicker(false);
-    if (dirPickerMode === 'folder') {
+    if (dirPickerMode === 'workspace') {
       addCustomFolder(path);
-      setFolderVersion(v => v + 1);
-      return;
+      setListRefreshKey(k => k + 1);
+    } else {
+      const model = selectedModel || backendInfo?.models.expensive;
+      setPendingRedirect(true);
+      createSession(path, model || undefined);
     }
-    setIsResumed(false);
-    const model = selectedModel || backendInfo?.models.expensive;
-    createSession(path, model || undefined);
   }, [dirPickerMode, createSession, selectedModel, backendInfo]);
 
   const handleResume = useCallback((sessionId: string) => {
-    setIsResumed(true);
-    resumeSession(sessionId);
-  }, [resumeSession]);
+    navigate(`/chat/${sessionId}`);
+  }, [navigate]);
 
   const handleResumeCliSession = useCallback((cliSessionId: string, cwd: string) => {
-    setIsResumed(true);
     const model = selectedModel || backendInfo?.models.expensive;
+    setPendingRedirect(true);
     createSession(cwd, model || undefined, cliSessionId);
   }, [createSession, selectedModel, backendInfo]);
+
+  const handleBack = useCallback(() => {
+    endSession();
+    navigate('/chat');
+  }, [endSession, navigate]);
 
   const addSystemMessage = useCallback((text: string) => {
     setMessages(prev => [...prev, {
@@ -88,7 +140,7 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
       content: text,
       timestamp: new Date().toISOString(),
     }]);
-  }, []);
+  }, [setMessages]);
 
   const handleSlashCommand = useCallback((cmd: SlashCommand) => {
     switch (cmd.action) {
@@ -96,7 +148,7 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
         handleNewSession();
         break;
       case 'sessions':
-        setShowSessionList(true);
+        navigate('/chat');
         break;
       case 'browse':
         setShowDirPicker(true);
@@ -125,22 +177,19 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
         );
         break;
     }
-  }, [activeSession, handleNewSession, addSystemMessage]);
+  }, [activeSession, handleNewSession, addSystemMessage, navigate]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Ctrl+L: clear messages
       if (e.ctrlKey && e.key === 'l') {
         e.preventDefault();
         clearMessages();
       }
-      // Ctrl+C while streaming: cancel
       if (e.ctrlKey && e.key === 'c' && isStreaming) {
         e.preventDefault();
         cancelMessage();
       }
-      // Ctrl+N: new session
       if (e.ctrlKey && e.key === 'n') {
         e.preventDefault();
         handleNewSession();
@@ -157,8 +206,55 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
     return undefined;
   }, [messages]);
 
+  const rootClass = `${styles.root} ${sidebarOpen ? styles.sidebarOpen : ''}`;
+
+  // --- Session list view (/chat) ---
+  if (!isSessionRoute) {
+    return (
+      <PageShell sidebarOpen={sidebarOpen} background={<AnimatedBackground />}>
+        <nav className={styles.topNav}>
+          <h1 className={styles.pageTitle}>Chat</h1>
+          <div className={styles.topNavActions}>
+            <button className={styles.newSessionBtn} onClick={handleAddWorkspace} disabled={!connected}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+                <line x1="12" y1="11" x2="12" y2="17"/>
+                <line x1="9" y1="14" x2="15" y2="14"/>
+              </svg>
+              Add workspace
+            </button>
+          </div>
+        </nav>
+
+        {backendError ? (
+          <div className={styles.backendError}>
+            <h2>No CLI Backend Found</h2>
+            <p>{backendError}</p>
+            <p>Install Claude Code (<code>npm i -g @anthropic-ai/claude-code</code>) or OpenCode, then configure <code>llm.backend</code> in adjutant.yaml.</p>
+          </div>
+        ) : (
+          <ChatSessionList
+            key={listRefreshKey}
+            onResume={handleResume}
+            onResumeCliSession={handleResumeCliSession}
+            onNewSession={handleQuickNewSession}
+          />
+        )}
+
+        <WorkingDirPicker
+          open={showDirPicker}
+          onSelect={handleDirSelect}
+          onClose={() => setShowDirPicker(false)}
+        />
+      </PageShell>
+    );
+  }
+
+  // --- Active session view (/chat/:sessionId) ---
   return (
-    <div className={`${styles.root} ${sidebarOpen ? styles.sidebarOpen : ''}`}>
+    <div className={rootClass}>
+      <AnimatedBackground />
+
       {/* Connection banner */}
       {!connected && (
         <div className={styles.connectionBanner}>
@@ -174,62 +270,33 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
         </div>
       )}
 
-      {/* Content area — max-width centered like Dashboard */}
-      <div className={styles.content}>
-        {/* Backend not found state */}
-        {backendError ? (
-          <div className={styles.backendError}>
-            <h2>No CLI Backend Found</h2>
-            <p>{backendError}</p>
-            <p>Install Claude Code (<code>npm i -g @anthropic-ai/claude-code</code>) or OpenCode, then configure <code>llm.backend</code> in adjutant.yaml.</p>
-          </div>
-        ) : !activeSession ? (
-          /* No active session — show start screen with KB-grouped sessions */
-          <div className={styles.noSession}>
-            <h2>Code Session</h2>
-            <p>Interactive coding assistant powered by {backendInfo?.name || 'CLI'}</p>
-            <button className={styles.startBtn} onClick={handleNewSession} disabled={!connected}>
-              Start New Session
-            </button>
-            <StartScreenSessions
-              key={folderVersion}
-              onResume={handleResume}
-              onResumeCliSession={handleResumeCliSession}
-              onNewSession={handleQuickNewSession}
-              onShowAll={() => setShowSessionList(true)}
-              onAddFolder={handleAddFolder}
-            />
-          </div>
-        ) : (
-          /* Active session — show chat */
-          <>
-            <SessionHeader
-              session={activeSession}
-              backendInfo={backendInfo}
-              isResumed={isResumed}
-              onNewSession={handleNewSession}
-              onShowSessions={() => setShowSessionList(true)}
-            />
-            <MessageList
-              messages={messages}
-              streamingContent={streamingContent}
-              isStreaming={isStreaming}
-            />
-            <InputArea
-              onSend={sendChatMessage}
-              onCancel={cancelMessage}
-              onSlashCommand={handleSlashCommand}
-              isStreaming={isStreaming}
-              disabled={!connected}
-              lastUserMessage={lastUserMessage}
-            />
-            <StatusBar
-              cwd={activeSession.cwd}
-              backendName={backendInfo?.name || null}
-              connected={connected}
-              reconnecting={reconnecting}
-            />
-          </>
+      <div className={styles.chatContent}>
+        <SessionHeader
+          session={activeSession}
+          backendInfo={backendInfo}
+          onNewSession={handleNewSession}
+          onBack={handleBack}
+        />
+        <MessageList
+          messages={messages}
+          streamingContent={streamingContent}
+          isStreaming={isStreaming}
+        />
+        <InputArea
+          onSend={sendChatMessage}
+          onCancel={cancelMessage}
+          onSlashCommand={handleSlashCommand}
+          isStreaming={isStreaming}
+          disabled={!connected}
+          lastUserMessage={lastUserMessage}
+        />
+        {activeSession && (
+          <StatusBar
+            cwd={activeSession.cwd}
+            backendName={backendInfo?.name || null}
+            connected={connected}
+            reconnecting={reconnecting}
+          />
         )}
       </div>
 
@@ -238,14 +305,6 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
         open={showDirPicker}
         onSelect={handleDirSelect}
         onClose={() => setShowDirPicker(false)}
-      />
-      <SessionList
-        open={showSessionList}
-        onResume={handleResume}
-        onResumeCliSession={handleResumeCliSession}
-        onNewSession={handleQuickNewSession}
-        onAddFolder={handleAddFolder}
-        onClose={() => setShowSessionList(false)}
       />
       {backendInfo && (
         <ModelPicker

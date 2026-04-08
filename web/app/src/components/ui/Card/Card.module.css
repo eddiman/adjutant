@@ -1,0 +1,26 @@
+/* =============================================
+   Card — dashboard card with optional title/header
+   ============================================= */
+
+.card {
+  composes: card from '../DashboardCard.module.css';
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+}
+
+.cardTitle {
+  composes: cardTitle from '../DashboardCard.module.css';
+}
+
+.headerAction {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}

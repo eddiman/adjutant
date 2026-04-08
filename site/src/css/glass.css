@@ -1,0 +1,71 @@
+/* =============================================
+   Glass Surface — reusable utility classes
+   Ported from web app's GlassSurface.module.css
+   ============================================= */
+
+/* Standard glass */
+.adj-glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-radius: var(--glass-radius);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.adj-glass::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--glass-highlight-top);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.adj-glass::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--glass-highlight-left);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Elevated glass — dialogs, menus, popovers */
+.adj-glass-elevated {
+  background: var(--glass-elevated-bg);
+  backdrop-filter: blur(var(--glass-elevated-blur));
+  -webkit-backdrop-filter: blur(var(--glass-elevated-blur));
+  border-radius: var(--glass-radius);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: var(--glass-elevated-shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.adj-glass-elevated::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 5%, rgba(255, 255, 255, 0.6) 50%, transparent 95%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Subtle glass — toolbars, status bars, navbar */
+.adj-glass-subtle {
+  background: var(--glass-subtle-bg);
+  backdrop-filter: blur(var(--glass-subtle-blur));
+  -webkit-backdrop-filter: blur(var(--glass-subtle-blur));
+}

@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
 import type { Settings, Theme } from '../../types';
+import { Modal } from '../ui';
 import { FolderExplorer } from '../FolderExplorer/FolderExplorer';
 import styles from './SettingsDialog.module.css';
 
@@ -29,20 +30,6 @@ export function SettingsDialog({
   useEffect(() => {
     setKbRootInput(settings.kbRoot || '');
   }, [settings.kbRoot]);
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      onClose();
-    }
-  }, [onClose]);
-
-  useEffect(() => {
-    if (open) {
-      window.addEventListener('keydown', handleKeyDown, { capture: true });
-      return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
-    }
-  }, [open, handleKeyDown]);
 
   const handleKbRootSave = useCallback(async () => {
     if (!kbRootInput.trim()) return;
@@ -101,18 +88,8 @@ export function SettingsDialog({
   if (!open) return null;
 
   return (
-    <div className={styles['dialog-overlay']} onClick={onClose}>
-      <div className={styles['settings-dialog']} onClick={e => e.stopPropagation()}>
-        <div className={styles['settings-header']}>
-          <h2 className={styles['settings-title']}>Settings</h2>
-          <button className={styles['settings-close']} onClick={onClose} aria-label="Close">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
-        </div>
-        
-        <div className={styles['settings-content']}>
+    <>
+    <Modal open={open} onClose={onClose} title="Settings" width="var(--dialog-width)">
           {/* KB Root Directory */}
           <div className={styles['settings-section']}>
             <h3 className={styles['settings-section-title']}>Knowledge Bases</h3>
@@ -249,15 +226,14 @@ export function SettingsDialog({
               <span className={styles['settings-toggle-switch']} />
             </label>
           </div>
-        </div>
-      </div>
+    </Modal>
       <FolderExplorer
         open={explorerOpen}
         onSelect={handleExplorerSelect}
         onClose={() => setExplorerOpen(false)}
         initialPath={kbRootInput || undefined}
       />
-    </div>
+    </>
   );
 }
 

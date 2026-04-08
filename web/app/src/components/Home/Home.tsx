@@ -1,64 +1,79 @@
-import { useState, useCallback } from 'react';
-import type { KbMeta, NoteMeta } from '../../types';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatedBackground } from './AnimatedBackground';
 import styles from './Home.module.css';
 
 interface HomeProps {
-  kbs: KbMeta[];
+  kbs: { name: string }[];
   loadingKbs: boolean;
   kbRootConfigured: boolean;
   onKbSelect: (kbName: string) => void;
   onNoteSelect: (note: { kb: string; path: string }) => void;
   onSettingsClick: () => void;
-  searchNotes: (kb: string, query: string) => Promise<NoteMeta[]>;
+  searchNotes: (kb: string, query: string) => Promise<unknown[]>;
   searching: boolean;
 }
 
 export function Home({
-  kbs,
-  loadingKbs,
   kbRootConfigured,
-  onKbSelect,
-  onNoteSelect,
   onSettingsClick,
-  searchNotes,
-  searching,
 }: HomeProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<NoteMeta[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
+  const navigate = useNavigate();
+  const [message, setMessage] = useState('');
+  const [phase, setPhase] = useState<'idle' | 'animating' | 'done'>('idle');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleSearch = useCallback(async () => {
-    if (!searchQuery.trim()) return;
-    setHasSearched(true);
-    const allResults: NoteMeta[] = [];
-    for (const kb of kbs) {
-      const results = await searchNotes(kb.name, searchQuery.trim());
-      allResults.push(...results);
-    }
-    setSearchResults(allResults);
-  }, [searchQuery, kbs, searchNotes]);
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
 
-  const handleSearchKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSearch();
-    if (e.key === 'Escape') {
-      setSearchQuery('');
-      setSearchResults([]);
-      setHasSearched(false);
+  const handleInput = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setMessage(e.target.value);
+    const el = e.target;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, []);
+
+  const handleSend = useCallback(async () => {
+    if (!message.trim() || phase !== 'idle') return;
+
+    // Store message for chat to pick up
+    sessionStorage.setItem('adjutant-pending-message', message.trim());
+
+    // Phase 1: animate prompt to bottom
+    setPhase('animating');
+
+    // Fetch adjutant dir while animation plays
+    try {
+      const statusRes = await fetch('/api/adjutant/status');
+      const statusData = await statusRes.json();
+      const cwd = statusData.adjutantDir || '/';
+      sessionStorage.setItem('adjutant-pending-cwd', cwd);
+    } catch {
+      // Fallback
     }
-  }, [handleSearch]);
+
+    // Phase 2: after animation completes, navigate
+    setTimeout(() => {
+      setPhase('done');
+      navigate('/chat');
+    }, 500);
+  }, [message, phase, navigate]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  }, [handleSend]);
 
   if (!kbRootConfigured) {
     return (
       <div className={styles.home}>
         <AnimatedBackground />
-        <div className={styles.content}>
-          <h1 className={styles.title}>
-            <span className={styles.titleBracket}>&lt;</span>
-            Adjutant Web
-            <span className={styles.titleBracket}>&gt;</span>
-          </h1>
-          <p className={styles.subtitle}>KB Explorer</p>
+        <div className={`${styles.content} ${styles.centered}`}>
+          <h1 className={styles.title}>Adjutant</h1>
+          <p className={styles.subtitle}>Your personal AI assistant</p>
           <div className={styles.setupCard}>
             <p className={styles.setupText}>No knowledge base directory configured.</p>
             <button className={styles.setupButton} onClick={onSettingsClick}>
@@ -70,76 +85,51 @@ export function Home({
     );
   }
 
+  const isAnimating = phase === 'animating';
+
   return (
     <div className={styles.home}>
       <AnimatedBackground />
-      <div className={styles.content}>
-        <h1 className={styles.title}>
-          <span className={styles.titleBracket}>&lt;</span>
-          Adjutant Web
-          <span className={styles.titleBracket}>&gt;</span>
-        </h1>
-        <p className={styles.subtitle}>KB Explorer</p>
 
-        {/* Search bar */}
-        <div className={styles.searchWrapper}>
-          <input
-            type="text"
-            className={styles.searchInput}
-            placeholder="Search across all knowledge bases..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-          />
-        </div>
-
-        {/* Search results */}
-        {hasSearched && (
-          <div className={styles.searchResults}>
-            {searching ? (
-              <p className={styles.searchStatus}>Searching...</p>
-            ) : searchResults.length === 0 ? (
-              <p className={styles.searchStatus}>No results found</p>
-            ) : (
-              searchResults.map((note, i) => (
-                <button
-                  key={`${note.kb}-${note.path}-${i}`}
-                  className={styles.searchResult}
-                  onClick={() => onNoteSelect({ kb: note.kb, path: note.path })}
-                >
-                  <span className={styles.searchResultTitle}>{note.title}</span>
-                  <span className={styles.searchResultPath}>{note.kb}/{note.path}</span>
-                </button>
-              ))
-            )}
-          </div>
-        )}
-
-        {/* KB cards */}
-        {!hasSearched && (
-          <div className={styles.kbGrid}>
-            {loadingKbs ? (
-              <p className={styles.loadingText}>Discovering knowledge bases...</p>
-            ) : kbs.length === 0 ? (
-              <p className={styles.emptyText}>No knowledge bases found in the configured directory.</p>
-            ) : (
-              kbs.map(kb => (
-                <button
-                  key={kb.name}
-                  className={styles.kbCard}
-                  onClick={() => onKbSelect(kb.name)}
-                >
-                  <h3 className={styles.kbName}>{kb.name}</h3>
-                  <p className={styles.kbDescription}>{kb.description || 'No description'}</p>
-                  {kb.created && (
-                    <span className={styles.kbDate}>Created {kb.created}</span>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        )}
+      {/* Title + subtitle — fades out when animating */}
+      <div className={`${styles.titleBlock} ${isAnimating ? styles.titleHidden : ''}`}>
+        <h1 className={styles.title}>Adjutant</h1>
+        <p className={styles.subtitle}>Your personal AI assistant</p>
       </div>
+
+      {/* Prompt card — centered normally, slides to bottom when animating */}
+      <div className={`${styles.promptWrapper} ${isAnimating ? styles.promptDocked : ''}`}>
+        <div className={styles.promptCard}>
+          <div className={styles.promptInner}>
+            <textarea
+              ref={textareaRef}
+              className={styles.promptInput}
+              placeholder="Ask anything..."
+              value={message}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              disabled={phase !== 'idle'}
+            />
+            <button
+              className={`${styles.sendButton} ${message.trim() && phase === 'idle' ? styles.sendButtonVisible : ''}`}
+              onClick={handleSend}
+              aria-label="Send message"
+              tabIndex={message.trim() ? 0 : -1}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="19" x2="12" y2="5" />
+                <polyline points="5 12 12 5 19 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Hint — fades out */}
+      <p className={`${styles.hint} ${isAnimating ? styles.hintHidden : ''}`}>
+        Enter to send, Shift+Enter for new line
+      </p>
     </div>
   );
 }

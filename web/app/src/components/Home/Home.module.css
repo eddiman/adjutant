@@ -1,30 +1,36 @@
 /* ==============================================
-   HOME PAGE STYLES — KB Browser
-   Uses semantic --color-home-* tokens from index.css
+   HOME PAGE — Centered Prompt with transition
+   Glass-morphic design with animated background
    ============================================== */
 
 .home {
   position: relative;
   width: 100%;
-  height: 100%;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: flex-start;
-  padding: var(--spacing-6);
-  padding-top: 15vh;
-  overflow-y: auto;
+  justify-content: center;
+  overflow: hidden;
 }
 
-.content {
+/* === Title block — separate from prompt for independent animation === */
+
+.titleBlock {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--spacing-6);
-  width: 100%;
-  max-width: 44rem;
+  gap: var(--spacing-2);
+  margin-bottom: var(--spacing-6);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.titleHidden {
+  opacity: 0;
+  transform: translateY(-16px) scale(0.95);
+  pointer-events: none;
 }
 
 .title {
@@ -36,165 +42,167 @@
   text-align: center;
   letter-spacing: -0.5px;
   text-shadow: 0 2px 16px var(--color-home-title-shadow);
-}
-
-.titleBracket {
-  font-weight: var(--font-weight-normal);
-  opacity: 0.8;
+  animation: fadeScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .subtitle {
   font-family: var(--font-body);
   font-size: var(--font-size-md);
   color: var(--color-text-secondary);
-  margin: calc(-1 * var(--spacing-4)) 0 0;
+  margin: 0;
   letter-spacing: 0.5px;
+  animation: fadeScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.1s both;
 }
 
-/* === Search === */
+/* === Prompt wrapper — handles the position transition === */
 
-.searchWrapper {
+.promptWrapper {
+  position: relative;
+  z-index: 1;
   width: 100%;
-  max-width: 31.25rem;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: var(--radius-xl);
-  box-shadow:
-    0 4px 24px color-mix(in srgb, var(--color-home-card-shadow-1) 15%, transparent),
-    0 8px 48px color-mix(in srgb, var(--color-home-card-shadow-2) 10%, transparent);
-  overflow: hidden;
+  max-width: 37.5rem;
+  padding: 0 var(--spacing-6);
+
+  /* Transition from centered (default) to docked at bottom */
+  transition:
+    transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+    max-width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.promptDocked {
+  /* Move to bottom of screen */
+  position: fixed;
+  bottom: var(--spacing-4);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 1280px;
+  padding: 0 var(--spacing-4);
+
+  /* CSS animation for the slide-down effect */
+  animation: slideToBottom 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes slideToBottom {
+  from {
+    bottom: 50vh;
+    transform: translateX(-50%) translateY(50%);
+    max-width: 37.5rem;
+  }
+  to {
+    bottom: var(--spacing-4);
+    transform: translateX(-50%) translateY(0);
+    max-width: 1280px;
+  }
+}
+
+/* === Glass Prompt Card === */
+
+.promptCard {
+  composes: glass glassFocusGlow from '../ui/GlassSurface.module.css';
+  position: relative;
+  width: 100%;
+  animation: fadeScaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.2s both;
   transition: box-shadow var(--transition-smooth);
 }
 
-.searchWrapper:focus-within {
-  box-shadow:
-    0 4px 24px color-mix(in srgb, var(--color-home-card-shadow-1) 20%, transparent),
-    0 12px 64px color-mix(in srgb, var(--color-home-card-shadow-2) 15%, transparent);
+.promptInner {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4) var(--spacing-5);
+  background: var(--glass-bg-2);
 }
 
-.searchInput {
-  width: 100%;
+.promptInput {
+  flex: 1;
+  background: transparent;
   border: none;
   outline: none;
+  color: var(--color-text);
   font-family: var(--font-body);
   font-size: var(--font-size-md);
-  color: var(--color-text);
-  background: transparent;
-  padding: var(--spacing-4) var(--spacing-5);
-}
-
-.searchInput::placeholder {
-  color: var(--color-placeholder);
-}
-
-.searchResults {
-  width: 100%;
-  max-width: 31.25rem;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
-  max-height: 20rem;
+  line-height: 1.5;
+  resize: none;
+  /* Match send button height (2.25rem) so layout doesn't jump when button appears */
+  min-height: 2.25rem;
+  max-height: 10rem;
   overflow-y: auto;
 }
 
-.searchStatus {
-  padding: var(--spacing-4) var(--spacing-5);
+.promptInput::placeholder {
+  color: var(--color-text-muted);
+}
+
+.sendButton {
+  composes: btn iconCircle primary from '../ui/Button.module.css';
+  flex-shrink: 0;
+  /* Always present in layout, invisible until text entered */
+  opacity: 0;
+  transform: scale(0.8);
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.sendButtonVisible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.sendButtonVisible:hover {
+  background: var(--color-primary-hover);
+  transform: scale(1.05);
+}
+
+.sendButtonVisible:active {
+  transform: scale(0.95);
+}
+
+/* === Hint === */
+
+.hint {
+  position: relative;
+  z-index: 1;
   text-align: center;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-base);
-  margin: 0;
-}
-
-.searchResult {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-1);
-  width: 100%;
-  padding: var(--spacing-3) var(--spacing-5);
-  border: none;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--transition-fast);
-}
-
-.searchResult:hover {
-  background: var(--color-home-highlight);
-}
-
-.searchResultTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text);
-}
-
-.searchResultPath {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
-
-/* === KB Cards === */
-
-.kbGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  gap: var(--spacing-4);
-  width: 100%;
-}
-
-.kbCard {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-2);
-  padding: var(--spacing-5);
-  background: rgba(255, 255, 255, 0.95);
-  border: none;
-  border-radius: var(--radius-lg);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  cursor: pointer;
-  text-align: left;
-  transition: all var(--transition-smooth);
-}
-
-.kbCard:hover {
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
-  transform: translateY(-2px);
-}
-
-.kbName {
-  font-family: var(--font-heading);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text);
-  margin: 0;
-}
-
-.kbDescription {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.kbDate {
   font-size: var(--font-size-xxs);
   color: var(--color-text-muted);
-  margin-top: var(--spacing-1);
+  margin: var(--spacing-3) 0 0;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+}
+
+.hintHidden {
+  opacity: 0;
+}
+
+/* === Content wrapper (for setup state) === */
+
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-4);
+  width: 100%;
+  max-width: 40rem;
+  padding: var(--spacing-6);
+}
+
+.centered {
+  justify-content: center;
 }
 
 /* === Setup prompt (no kbRoot) === */
 
 .setupCard {
+  composes: glass from '../ui/GlassSurface.module.css';
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-4);
   padding: var(--spacing-8);
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
 }
 
 .setupText {
@@ -205,45 +213,43 @@
 }
 
 .setupButton {
-  padding: var(--spacing-3) var(--spacing-6);
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: background var(--transition-fast);
+  composes: btn lg primary from '../ui/Button.module.css';
 }
 
 .setupButton:hover {
-  background: var(--color-primary-hover);
+  transform: translateY(-1px);
 }
 
-/* === Loading / Empty === */
+.setupButton:active {
+  transform: scale(0.98);
+}
 
-.loadingText,
-.emptyText {
-  grid-column: 1 / -1;
-  text-align: center;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-base);
-  padding: var(--spacing-6);
+/* === Animations === */
+
+@keyframes fadeScaleIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* === Responsive === */
 
 @media (max-width: 37.5rem) {
-  .content {
-    gap: var(--spacing-5);
-  }
-
   .title {
     font-size: var(--font-size-4xl);
   }
 
-  .kbGrid {
-    grid-template-columns: 1fr;
+  .promptInner {
+    padding: var(--spacing-3) var(--spacing-4);
+  }
+
+  .promptWrapper {
+    padding: 0 var(--spacing-4);
   }
 }
 

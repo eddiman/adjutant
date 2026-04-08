@@ -1,31 +1,62 @@
-/* === Sidebar (Morphing) === */
+/* === Sidebar (Morphing + Glass) === */
+/* NOTE: Cannot use composes:glass here — CSS load order can override position:fixed */
 .sidebar {
   position: fixed;
   top: calc(var(--spacing-4) + var(--safe-area-inset-top));
   left: calc(var(--spacing-4) + var(--safe-area-inset-left));
   z-index: var(--z-sidebar);
-  background: var(--color-card);
-  border-radius: var(--radius);
   display: flex;
   flex-direction: column;
+
+  /* Glass surface (inlined to protect position:fixed) */
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-radius: var(--glass-radius);
+  border: var(--glass-border);
+  box-shadow: var(--glass-shadow);
   overflow: hidden;
-  
+
   /* Closed state: button size */
   width: var(--touch-target);
   height: var(--touch-target);
-  box-shadow: var(--shadow-card);
-  
+
   /* Smooth morphing transition */
-  transition: 
+  transition:
     width var(--transition-smooth),
     height var(--transition-smooth),
     box-shadow var(--transition-normal);
 }
 
+/* Glass edge highlights */
+.sidebar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--glass-highlight-top);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.sidebar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--glass-highlight-left);
+  z-index: 1;
+  pointer-events: none;
+}
+
 .sidebar.open {
   width: var(--sidebar-width);
   height: calc(100dvh - var(--spacing-8) - var(--safe-area-inset-top) - var(--safe-area-inset-bottom));
-  box-shadow: var(--shadow-overlay);
+  box-shadow: var(--glass-elevated-shadow);
 }
 
 /* Toggle button inside sidebar */

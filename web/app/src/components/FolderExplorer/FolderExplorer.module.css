@@ -1,77 +1,10 @@
 /* === Folder Explorer Modal === */
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--color-overlay);
-  backdrop-filter: blur(0.25rem);
-  z-index: calc(var(--z-dialog) + 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn var(--transition-fast);
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.explorer {
-  background: var(--color-card);
-  border-radius: var(--radius);
-  width: 36rem;
-  max-width: 90vw;
-  max-height: 80vh;
+/* Reset Modal's default content padding — sections use their own */
+.contentWrap {
+  margin: calc(-1 * var(--spacing-5));
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-overlay);
-  animation: slideIn var(--transition-fast);
-}
-
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(-0.625rem);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-/* Header */
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-3) var(--spacing-4);
-  border-bottom: 0.0625rem solid var(--color-border);
-}
-
-.title {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  margin: 0;
-  color: var(--color-text);
-}
-
-.closeBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--icon-button-sm);
-  height: var(--icon-button-sm);
-  border: none;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.closeBtn:hover {
-  background: var(--color-hover-bg);
-  color: var(--color-text);
 }
 
 /* Quick roots bar */
@@ -212,15 +145,7 @@
   opacity: 1;
 }
 
-/* Footer */
-.footer {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-  padding: var(--spacing-3) var(--spacing-4);
-  border-top: 0.0625rem solid var(--color-border);
-}
-
+/* Footer elements */
 .selectedPath {
   flex: 1;
   font-size: var(--font-size-xs);
@@ -245,26 +170,8 @@
 }
 
 .selectBtn {
-  padding: var(--spacing-2) var(--spacing-4);
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  font-family: var(--font-body);
-  cursor: pointer;
-  transition: background var(--transition-fast);
+  composes: btn md primary from '../ui/Button.module.css';
   white-space: nowrap;
-}
-
-.selectBtn:hover:not(:disabled) {
-  background: var(--color-primary-hover);
-}
-
-.selectBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* Loading spinner */
@@ -297,11 +204,3 @@
   text-align: center;
 }
 
-/* Mobile */
-@media (max-width: 48rem) {
-  .explorer {
-    width: calc(100vw - var(--spacing-8));
-    max-width: none;
-    max-height: calc(100vh - var(--spacing-8));
-  }
-}

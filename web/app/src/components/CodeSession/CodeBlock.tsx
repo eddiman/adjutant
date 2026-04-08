@@ -83,7 +83,7 @@ export const CodeBlock = memo(function CodeBlock({ code, language }: CodeBlockPr
   return (
     <pre style={{
       background: '#0d0d14',
-      border: '1px solid var(--cs-border)',
+      border: '1px solid var(--color-border)',
       borderRadius: '0.375rem',
       padding: '0.75rem 1rem',
       overflow: 'auto',

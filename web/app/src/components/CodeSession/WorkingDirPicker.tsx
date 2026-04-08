@@ -1,14 +1,12 @@
 /**
  * Working directory picker for code sessions.
- *
- * Thin wrapper around the existing FolderExplorer component,
- * stripping the KB validation UI and changing the title.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useExplorer } from '../../hooks/useExplorer';
 import type { DirectoryEntry } from '../../types';
-import { useEffect, useState } from 'react';
+import { Modal } from '../ui';
+import styles from './WorkingDirPicker.module.css';
 
 interface WorkingDirPickerProps {
   open: boolean;
@@ -39,13 +37,6 @@ export function WorkingDirPicker({ open, onSelect, onClose }: WorkingDirPickerPr
     if (currentPath) setSelected(currentPath);
   }, [currentPath]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
-    window.addEventListener('keydown', handler, { capture: true });
-    return () => window.removeEventListener('keydown', handler, { capture: true });
-  }, [open, onClose]);
-
   const handleEntryClick = useCallback((entry: DirectoryEntry) => {
     setSelected(entry.path);
   }, []);
@@ -71,124 +62,89 @@ export function WorkingDirPicker({ open, onSelect, onClose }: WorkingDirPickerPr
       }, [])
     : [];
 
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--cs-card)', border: '1px solid var(--cs-border)',
-          borderRadius: '0.5rem', width: '32rem', maxHeight: '28rem',
-          display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        }}
+  const footerJSX = (
+    <>
+      <span className={styles.footerPath}>
+        {selected || 'No directory selected'}
+      </span>
+      <button
+        className={styles.selectBtn}
+        onClick={handleSelect}
+        disabled={!selected}
       >
-        <div style={{
-          padding: '0.75rem 1rem', borderBottom: '1px solid var(--cs-border)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <h3 style={{ margin: 0, fontSize: '0.875rem', color: 'var(--cs-text)' }}>Select Working Directory</h3>
-          <button
-            onClick={onClose}
-            style={{ background: 'none', border: 'none', color: 'var(--cs-text-muted)', cursor: 'pointer', fontSize: '1rem' }}
-          >
-            x
-          </button>
+        Select
+      </button>
+    </>
+  );
+
+  return (
+    <Modal open={open} onClose={onClose} title="Select Working Directory" width="32rem" footer={footerJSX}>
+      {roots && (
+        <div className={styles.roots}>
+          {roots.roots.map(r => (
+            <button
+              key={r.path}
+              className={`${styles.rootBtn} ${currentPath === r.path ? styles.rootBtnActive : ''}`}
+              onClick={() => navigateTo(r.path)}
+            >
+              {r.label}
+            </button>
+          ))}
         </div>
+      )}
 
-        {roots && (
-          <div style={{ display: 'flex', gap: '0.375rem', padding: '0.5rem 1rem', flexWrap: 'wrap' }}>
-            {roots.roots.map(r => (
-              <button
-                key={r.path}
-                onClick={() => navigateTo(r.path)}
-                style={{
-                  padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderRadius: '0.25rem',
-                  border: '1px solid var(--cs-border)', cursor: 'pointer',
-                  background: currentPath === r.path ? 'rgba(124,92,191,0.15)' : 'none',
-                  color: 'var(--cs-text-secondary)', fontFamily: 'inherit',
-                }}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {currentPath && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 1rem', fontSize: '0.75rem' }}>
-            {currentPath !== '/' && (
-              <button onClick={navigateUp} style={{ background: 'none', border: 'none', color: 'var(--cs-text-secondary)', cursor: 'pointer', padding: '0.125rem' }}>
-                ..
-              </button>
-            )}
-            {breadcrumbSegments.map((seg, i) => (
-              <span key={seg.path} style={{ display: 'contents' }}>
-                {i > 0 && <span style={{ color: 'var(--cs-text-muted)' }}>/</span>}
-                <button
-                  onClick={() => navigateTo(seg.path)}
-                  style={{ background: 'none', border: 'none', color: 'var(--cs-text-secondary)', cursor: 'pointer', padding: '0.125rem', fontFamily: 'inherit', fontSize: 'inherit' }}
-                >
-                  {seg.label === '/' ? '/' : seg.label}
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0.25rem 0' }}>
-          {loading ? (
-            <p style={{ padding: '1rem', textAlign: 'center', color: 'var(--cs-text-muted)', fontSize: '0.8125rem' }}>Loading...</p>
-          ) : error ? (
-            <p style={{ padding: '1rem', textAlign: 'center', color: '#f56c6c', fontSize: '0.8125rem' }}>{error}</p>
-          ) : entries.length === 0 ? (
-            <p style={{ padding: '1rem', textAlign: 'center', color: 'var(--cs-text-muted)', fontSize: '0.8125rem' }}>No subdirectories</p>
-          ) : (
-            entries.map(entry => (
-              <button
-                key={entry.path}
-                onClick={() => handleEntryClick(entry)}
-                onDoubleClick={() => handleEntryDoubleClick(entry)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '0.5rem',
-                  width: '100%', padding: '0.375rem 1rem', background: selected === entry.path ? 'rgba(124,92,191,0.1)' : 'none',
-                  border: 'none', cursor: 'pointer', color: 'var(--cs-text)', textAlign: 'left',
-                  fontFamily: 'inherit', fontSize: '0.8125rem',
-                }}
-              >
-                <span>📁</span>
-                <span style={{ flex: 1 }}>{entry.name}</span>
-                {entry.hasChildren && <span style={{ color: 'var(--cs-text-muted)' }}>›</span>}
-              </button>
-            ))
+      {currentPath && (
+        <div className={styles.breadcrumb}>
+          {currentPath !== '/' && (
+            <button className={styles.breadcrumbBtn} onClick={navigateUp}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6" />
+              </svg>
+            </button>
           )}
+          {breadcrumbSegments.map((seg, i) => (
+            <span key={seg.path} style={{ display: 'contents' }}>
+              {i > 0 && <span className={styles.breadcrumbSep}>/</span>}
+              <button className={styles.breadcrumbBtn} onClick={() => navigateTo(seg.path)}>
+                {seg.label === '/' ? '/' : seg.label}
+              </button>
+            </span>
+          ))}
         </div>
+      )}
 
-        <div style={{
-          padding: '0.625rem 1rem', borderTop: '1px solid var(--cs-border)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--cs-text-secondary)', fontFamily: "'SF Mono', monospace" }}>
-            {selected || 'No directory selected'}
-          </span>
-          <button
-            onClick={handleSelect}
-            disabled={!selected}
-            style={{
-              background: selected ? 'var(--cs-accent)' : 'var(--cs-border)',
-              color: '#fff', border: 'none', padding: '0.375rem 1rem',
-              borderRadius: '0.25rem', cursor: selected ? 'pointer' : 'not-allowed',
-              fontSize: '0.8125rem', fontWeight: 500,
-            }}
-          >
-            Select
-          </button>
-        </div>
+      <div className={styles.listing}>
+        {loading ? (
+          <p className={styles.emptyMsg}>Loading...</p>
+        ) : error ? (
+          <p className={styles.errorMsg}>{error}</p>
+        ) : entries.length === 0 ? (
+          <p className={styles.emptyMsg}>No subdirectories</p>
+        ) : (
+          entries.map(entry => (
+            <button
+              key={entry.path}
+              className={`${styles.entry} ${selected === entry.path ? styles.entrySelected : ''}`}
+              onClick={() => handleEntryClick(entry)}
+              onDoubleClick={() => handleEntryDoubleClick(entry)}
+            >
+              <span className={styles.entryIcon}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+                </svg>
+              </span>
+              <span className={styles.entryName}>{entry.name}</span>
+              {entry.hasChildren && (
+                <span className={styles.entryChevron}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </span>
+              )}
+            </button>
+          ))
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
