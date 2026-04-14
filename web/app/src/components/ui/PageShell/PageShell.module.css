@@ -24,20 +24,38 @@
   z-index: 1;
   max-width: 1280px;
   margin: 0 auto;
-  padding: var(--spacing-8) var(--spacing-6) var(--spacing-12);
-  transition: margin-left var(--transition-medium);
+  /* Baseline left padding reserves space for the sidebar toggle button
+     so the topmost element isn't hidden behind it when the sidebar is
+     closed. Mirrors the pattern used in NoteEditor's topbar. */
+  padding: var(--spacing-8)
+           var(--spacing-6)
+           var(--spacing-12)
+           calc(var(--spacing-6) + var(--touch-target) + var(--spacing-4));
+  transition:
+    margin-left var(--transition-smooth),
+    padding-left var(--transition-smooth);
 }
 
 .sidebarOpen .content {
+  /* When the sidebar is open it owns the left gutter — shift the content
+     right by the sidebar width and relax the toggle-button reservation. */
   margin-left: calc(var(--sidebar-width) + var(--spacing-4));
+  padding-left: var(--spacing-6);
 }
 
 @media (max-width: 768px) {
-  .sidebarOpen .content {
-    margin-left: 0;
+  .content {
+    padding: var(--spacing-6)
+             var(--spacing-4)
+             var(--spacing-12)
+             calc(var(--spacing-4) + var(--touch-target) + var(--spacing-3));
   }
 
-  .content {
-    padding: var(--spacing-6) var(--spacing-4);
+  /* On mobile the sidebar overlays the content instead of pushing it,
+     so don't shift via margin-left. The toggle-button reservation
+     (baseline padding-left above) still keeps the top element clear. */
+  .sidebarOpen .content {
+    margin-left: 0;
+    padding-left: calc(var(--spacing-4) + var(--touch-target) + var(--spacing-3));
   }
 }

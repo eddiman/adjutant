@@ -1,40 +1,46 @@
 .hero {
+  composes: glassElevated from '../ui/GlassSurface.module.css';
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-8) var(--spacing-8) var(--spacing-6);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  padding: var(--spacing-7) var(--spacing-8);
   gap: var(--spacing-6);
 }
 
-[data-theme="bauhaus"] .hero {
+:global([data-theme="bauhaus"]) .hero {
+  background: var(--color-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   border: 2px solid var(--color-border);
   border-radius: 0;
   box-shadow: none;
 }
 
+:global([data-theme="bauhaus"]) .hero::before,
+:global([data-theme="bauhaus"]) .hero::after {
+  display: none;
+}
+
 .heroContent {
   flex: 1;
+  min-width: 0;
 }
 
 .statusLabel {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xxs);
+  font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   display: block;
-  margin-bottom: var(--spacing-1);
+  margin-bottom: var(--spacing-2);
 }
 
 .stateText {
   font-family: var(--font-heading);
-  font-size: 3rem;
+  font-size: var(--font-size-4xl);
   font-weight: var(--font-weight-bold);
-  font-style: italic;
   margin: 0 0 var(--spacing-5) 0;
   letter-spacing: -0.5px;
   line-height: 1;
@@ -42,15 +48,15 @@
 }
 
 .stateOperational {
-  color: var(--color-text);
+  color: var(--color-primary);
 }
 
 .statePaused {
-  color: var(--color-warning, #e67e22);
+  color: var(--color-warning);
 }
 
 .stateKilled {
-  color: var(--color-danger, #c0392b);
+  color: var(--color-danger);
 }
 
 .stateStopped {
@@ -66,31 +72,15 @@
 }
 
 .badge {
-  composes: badge dark from '../ui/Badge.module.css';
-  padding: var(--spacing-1) var(--spacing-3);
-  letter-spacing: 0.8px;
+  composes: badge muted from '../ui/Badge.module.css';
 }
 
 .badgeActive {
-  composes: success from '../ui/Badge.module.css';
-  background: #1a3a2a;
-  color: #4ade80;
-}
-
-[data-theme="bauhaus"] .badgeActive {
-  background: var(--color-text);
-  color: var(--color-success);
+  composes: badge success from '../ui/Badge.module.css';
 }
 
 .badgeInactive {
-  composes: danger from '../ui/Badge.module.css';
-  background: #3a1a1a;
-  color: #f87171;
-}
-
-[data-theme="bauhaus"] .badgeInactive {
-  background: var(--color-text);
-  color: var(--color-danger);
+  composes: badge danger from '../ui/Badge.module.css';
 }
 
 /* ===== Orb visual ===== */
@@ -108,9 +98,10 @@
   align-items: center;
   justify-content: center;
   position: relative;
+  transition: border-color var(--transition-smooth);
 }
 
-[data-theme="bauhaus"] .orb {
+:global([data-theme="bauhaus"]) .orb {
   border: 2px solid var(--color-border);
 }
 
@@ -119,42 +110,56 @@
   height: 20px;
   border-radius: var(--radius-full);
   background: var(--color-border-light);
-  transition: all 0.6s ease;
+  transition: all var(--transition-smooth);
 }
 
 .stateOperational .orbInner {
-  background: var(--color-success);
-  box-shadow: 0 0 12px rgba(46, 204, 113, 0.4);
+  background: var(--color-primary);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--color-primary) 50%, transparent);
+  animation: pulse 2.5s ease-in-out infinite;
 }
 
 .statePaused .orbInner {
-  background: var(--color-warning, #e67e22);
-  box-shadow: 0 0 12px rgba(230, 126, 34, 0.4);
+  background: var(--color-warning);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-warning) 40%, transparent);
 }
 
 .stateKilled .orbInner {
-  background: var(--color-danger, #c0392b);
-  box-shadow: 0 0 12px rgba(192, 57, 43, 0.4);
+  background: var(--color-danger);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-danger) 40%, transparent);
 }
 
 .stateStopped .orbInner {
   background: var(--color-text-muted);
 }
 
-[data-theme="bauhaus"] .orbInner {
+:global([data-theme="bauhaus"]) .orbInner,
+:global([data-theme="bauhaus"]) .stateOperational .orbInner,
+:global([data-theme="bauhaus"]) .statePaused .orbInner,
+:global([data-theme="bauhaus"]) .stateKilled .orbInner {
   box-shadow: none;
+  animation: none;
 }
 
-[data-theme="bauhaus"] .stateOperational .orbInner {
-  box-shadow: none;
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.85;
+  }
 }
 
-[data-theme="bauhaus"] .statePaused .orbInner {
-  box-shadow: none;
-}
-
-[data-theme="bauhaus"] .stateKilled .orbInner {
-  box-shadow: none;
+@media (prefers-reduced-motion: reduce) {
+  .stateOperational .orbInner {
+    animation: none;
+  }
+  .orbInner,
+  .orb {
+    transition-duration: 0ms;
+  }
 }
 
 /* ===== Responsive ===== */
@@ -162,10 +167,12 @@
 @media (max-width: 480px) {
   .hero {
     padding: var(--spacing-6);
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .stateText {
-    font-size: 2rem;
+    font-size: var(--font-size-3xl);
   }
 
   .orb {

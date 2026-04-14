@@ -3,11 +3,14 @@
 .topNav {
   display: flex;
   align-items: center;
-  gap: var(--spacing-8);
-  padding-bottom: var(--spacing-6);
-  padding-left: var(--spacing-12);
+  gap: var(--spacing-6);
+  padding: 0 var(--spacing-2) var(--spacing-6);
   margin-bottom: var(--spacing-8);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+:global([data-theme="bauhaus"]) .topNav {
+  border-bottom: 2px solid var(--color-border);
 }
 
 .logo {
@@ -16,71 +19,15 @@
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
   text-transform: uppercase;
-  letter-spacing: 1.5px;
+  letter-spacing: 2px;
   margin: 0;
-}
-
-.navTabs {
-  display: flex;
-  gap: var(--spacing-6);
-}
-
-.navTab {
-  background: none;
-  border: none;
-  font-family: var(--font-body);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: var(--spacing-1) 0;
-  transition: color var(--transition-fast);
-}
-
-.navTab:hover {
-  color: var(--color-text);
-}
-
-.navTabActive {
-  color: var(--color-text);
-  font-weight: var(--font-weight-semibold);
-}
-
-.navSpacer {
-  flex: 1;
-}
-
-.navIcons {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-3);
-}
-
-.navIcon {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-  background: var(--color-hover-bg);
-  border: 1px solid var(--color-border);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.navIcon:hover {
-  background: var(--color-active-bg);
-  color: var(--color-text);
 }
 
 /* ===== Two-column layout ===== */
 
 .columns {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr 22rem;
   gap: var(--spacing-8);
   align-items: start;
 }
@@ -88,7 +35,7 @@
 .mainColumn {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-8);
+  gap: var(--spacing-6);
   min-width: 0;
 }
 
@@ -97,12 +44,6 @@
   flex-direction: column;
   gap: var(--spacing-6);
   min-width: 0;
-}
-
-/* ===== Full-width bottom section ===== */
-
-.fullWidth {
-  margin-top: var(--spacing-8);
 }
 
 /* ===== Loading / Error ===== */
@@ -116,11 +57,16 @@
 }
 
 .error {
-  background: rgba(239, 68, 68, 0.06);
+  background: color-mix(in srgb, var(--color-danger) 6%, transparent);
   border-radius: var(--radius-lg);
-  color: #c0392b;
-  max-width: 600px;
+  color: var(--color-danger);
+  max-width: 37.5rem;
   margin: var(--spacing-12) auto;
+}
+
+:global([data-theme="bauhaus"]) .error {
+  border: 2px solid var(--color-danger);
+  border-radius: 0;
 }
 
 .errorHint {
@@ -135,19 +81,11 @@
   .columns {
     grid-template-columns: 1fr;
   }
-
-  .sideColumn {
-    order: -1;
-  }
 }
 
 @media (max-width: 768px) {
   .topNav {
     gap: var(--spacing-4);
     flex-wrap: wrap;
-  }
-
-  .navTabs {
-    gap: var(--spacing-4);
   }
 }

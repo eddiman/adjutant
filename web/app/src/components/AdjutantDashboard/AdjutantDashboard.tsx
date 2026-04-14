@@ -5,6 +5,8 @@ import { QuickActions } from './QuickActions';
 import { HealthChecks } from './HealthChecks';
 import { ActivityFeed } from './ActivityFeed';
 import { LastPulse } from './LastPulse';
+import { FindingsPanel } from './FindingsPanel';
+import { JournalPanel } from './JournalPanel';
 import { AnimatedBackground } from '../Home/AnimatedBackground';
 import { PageShell } from '../ui';
 import type { AdjutantData } from '../../hooks/useAdjutant';
@@ -23,7 +25,11 @@ export function AdjutantDashboard({ sidebarOpen = false, data }: AdjutantDashboa
     schedules,
     identity,
     health,
-    journalEntries,
+    logEntries,
+    insights,
+    loadingInsights,
+    journalDays,
+    loadingJournal,
     loading,
     error,
     fetchHealth,
@@ -44,9 +50,9 @@ export function AdjutantDashboard({ sidebarOpen = false, data }: AdjutantDashboa
   if (error || !status || !status.available) {
     return (
       <PageShell sidebarOpen={sidebarOpen} background={<AnimatedBackground />}>
-        <nav className={styles.topNav}>
+        <header className={styles.topNav}>
           <h1 className={styles.logo}>Adjutant</h1>
-        </nav>
+        </header>
         <div className={styles.error}>
           <p>{error || 'Adjutant integration not available'}</p>
           <p className={styles.errorHint}>
@@ -59,29 +65,17 @@ export function AdjutantDashboard({ sidebarOpen = false, data }: AdjutantDashboa
 
   return (
     <PageShell sidebarOpen={sidebarOpen} background={<AnimatedBackground />}>
-      <nav className={styles.topNav}>
+      <header className={styles.topNav}>
         <h1 className={styles.logo}>Adjutant</h1>
-        <div className={styles.navTabs}>
-          <button className={`${styles.navTab} ${styles.navTabActive}`}>Pulse</button>
-          <button className={styles.navTab}>Schedules</button>
-          <button className={styles.navTab}>System Logs</button>
-        </div>
-        <div className={styles.navSpacer} />
-        <div className={styles.navIcons}>
-          <button className={styles.navIcon} title="Settings">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-            </svg>
-          </button>
-        </div>
-      </nav>
+      </header>
 
       <div className={styles.columns}>
-        {/* Left: Hero status + Findings feed + Identity */}
+        {/* Left: Hero status + Findings + Journal + Activity + Identity */}
         <div className={styles.mainColumn}>
           <SystemStatus status={status} />
-          <ActivityFeed entries={journalEntries} />
+          <FindingsPanel insights={insights} loadingInsights={loadingInsights} />
+          <JournalPanel days={journalDays} loadingJournal={loadingJournal} />
+          <ActivityFeed entries={logEntries} />
           <IdentityDisplay identity={identity} />
         </div>
 

@@ -11,6 +11,7 @@ import path from 'path';
 import { spawn } from 'child_process';
 import { registryService } from '../services/registryService.js';
 import { kbService } from '../services/kbService.js';
+import { backendDetector } from '../services/backendDetector.js';
 
 const router = Router();
 
@@ -90,6 +91,12 @@ router.get('/status', async (_req: Request, res: Response) => {
       mode,
       available: adjDir !== null,
     };
+
+    // Include configured backend name so the frontend doesn't have to guess.
+    const backendInfo = await backendDetector.detect();
+    if (backendInfo) {
+      result.backendName = backendInfo.name;
+    }
 
     if (adjDir) {
       result.adjutantDir = adjDir;
@@ -446,11 +453,15 @@ router.get('/identity', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /api/adjutant/journal/recent — Get recent journal entries.
+ * GET /api/adjutant/insights — List escalation/insight files.
  *
- * Returns the last 20 lines from adjutant.log.
+ * Returns entries from both `insights/pending/` (awaiting user) and
+ * `insights/sent/` (already notified), newest first.  Each entry has
+ * a generated id (status-relative filename), status, title (extracted
+ * from the first `#` heading or filename), and an ISO timestamp parsed
+ * from the filename pattern `YYYY-MM-DD-HHMM(-slug).md`.
  */
-router.get('/journal/recent', async (_req: Request, res: Response) => {
+router.get('/insights', async (_req: Request, res: Response) => {
   try {
     const adjDir = await registryService.resolveAdjutantDir();
     if (!adjDir) {
@@ -458,20 +469,235 @@ router.get('/journal/recent', async (_req: Request, res: Response) => {
       return;
     }
 
-    const logPath = path.join(adjDir, 'journal', 'adjutant.log');
-    
+    type InsightSummary = {
+      id: string;
+      status: 'pending' | 'sent';
+      title: string;
+      filename: string;
+      timestamp: string | null;
+    };
+
+    const readDir = async (status: 'pending' | 'sent'): Promise<InsightSummary[]> => {
+      const dirPath = path.join(adjDir, 'insights', status);
+      let files: string[];
+      try {
+        files = await fs.readdir(dirPath);
+      } catch {
+        return [];
+      }
+
+      const mdFiles = files.filter(f => f.endsWith('.md'));
+      const entries = await Promise.all(mdFiles.map(async (filename): Promise<InsightSummary> => {
+        let title = filename.replace(/\.md$/, '');
+        try {
+          const content = await fs.readFile(path.join(dirPath, filename), 'utf-8');
+          const headingMatch = content.match(/^#\s+(.+?)$/m);
+          if (headingMatch) {
+            title = headingMatch[1].trim();
+          }
+        } catch {
+          // Fallback to filename as title
+        }
+
+        // Parse `YYYY-MM-DD-HHMM(-slug).md` → ISO timestamp
+        const tsMatch = filename.match(/^(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})/);
+        let timestamp: string | null = null;
+        if (tsMatch) {
+          const [, y, mo, d, h, mi] = tsMatch;
+          timestamp = `${y}-${mo}-${d}T${h}:${mi}:00`;
+        }
+
+        return {
+          id: `${status}/${filename}`,
+          status,
+          title,
+          filename,
+          timestamp,
+        };
+      }));
+
+      return entries;
+    };
+
+    const [pending, sent] = await Promise.all([readDir('pending'), readDir('sent')]);
+    const all = [...pending, ...sent].sort((a, b) => {
+      if (a.timestamp && b.timestamp) return b.timestamp.localeCompare(a.timestamp);
+      if (a.timestamp) return -1;
+      if (b.timestamp) return 1;
+      return b.filename.localeCompare(a.filename);
+    });
+
+    res.json({ insights: all });
+  } catch (error) {
+    console.error('Failed to list insights:', error);
+    res.status(500).json({ error: 'Failed to list insights' });
+  }
+});
+
+/**
+ * GET /api/adjutant/insights/:status/:filename — Read one insight file.
+ *
+ * `status` must be "pending" or "sent".  `filename` must match the
+ * YYYY-MM-DD-HHMM(-slug).md pattern — anything else is rejected to
+ * prevent path traversal.  Returns the raw markdown content.
+ */
+router.get('/insights/:status/:filename', async (req: Request, res: Response) => {
+  try {
+    const { status, filename } = req.params;
+    if (status !== 'pending' && status !== 'sent') {
+      res.status(400).json({ error: 'Invalid status. Must be "pending" or "sent".' });
+      return;
+    }
+    if (!/^[\w.-]+\.md$/.test(filename)) {
+      res.status(400).json({ error: 'Invalid filename.' });
+      return;
+    }
+
+    const adjDir = await registryService.resolveAdjutantDir();
+    if (!adjDir) {
+      res.status(503).json({ error: 'Adjutant integration not available' });
+      return;
+    }
+
+    const filePath = path.join(adjDir, 'insights', status, filename);
+    // Resolve and verify the path stays within insights/<status>/
+    const base = path.resolve(path.join(adjDir, 'insights', status));
+    const resolved = path.resolve(filePath);
+    if (!resolved.startsWith(base + path.sep)) {
+      res.status(400).json({ error: 'Invalid path.' });
+      return;
+    }
+
+    try {
+      const content = await fs.readFile(resolved, 'utf-8');
+      res.json({ id: `${status}/${filename}`, status, filename, content });
+    } catch {
+      res.status(404).json({ error: 'Insight not found' });
+    }
+  } catch (error) {
+    console.error('Failed to read insight:', error);
+    res.status(500).json({ error: 'Failed to read insight' });
+  }
+});
+
+/**
+ * GET /api/adjutant/journal/days — List available daily journal entries.
+ *
+ * Reads `journal/YYYY-MM-DD.md` files and returns a summary per day
+ * (date, filename, short preview, count of `## HH:MM — ...` sections),
+ * newest first.
+ */
+router.get('/journal/days', async (_req: Request, res: Response) => {
+  try {
+    const adjDir = await registryService.resolveAdjutantDir();
+    if (!adjDir) {
+      res.status(503).json({ error: 'Adjutant integration not available' });
+      return;
+    }
+
+    const journalDir = path.join(adjDir, 'journal');
+    let files: string[];
+    try {
+      files = await fs.readdir(journalDir);
+    } catch {
+      res.json({ days: [] });
+      return;
+    }
+
+    const dayFiles = files.filter(f => /^\d{4}-\d{2}-\d{2}\.md$/.test(f));
+
+    const days = await Promise.all(dayFiles.map(async filename => {
+      const date = filename.replace(/\.md$/, '');
+      let preview = '';
+      let entryCount = 0;
+      try {
+        const content = await fs.readFile(path.join(journalDir, filename), 'utf-8');
+        const lines = content.split('\n');
+        // Count `## HH:MM — ...` section headers
+        entryCount = lines.filter(l => /^##\s+\d{2}:\d{2}\s*[—–-]/.test(l)).length;
+        // Preview = first non-empty, non-heading, non-bullet line (or first bullet, trimmed)
+        const firstContent = lines.find(l => {
+          const t = l.trim();
+          return t && !t.startsWith('#');
+        });
+        if (firstContent) {
+          preview = firstContent.trim().replace(/^[-*]\s+/, '').slice(0, 140);
+        }
+      } catch {
+        // Unreadable — leave defaults
+      }
+      return { date, filename, preview, entryCount };
+    }));
+
+    days.sort((a, b) => b.date.localeCompare(a.date));
+    res.json({ days });
+  } catch (error) {
+    console.error('Failed to list journal days:', error);
+    res.status(500).json({ error: 'Failed to list journal days' });
+  }
+});
+
+/**
+ * GET /api/adjutant/journal/day/:date — Read one day's journal markdown.
+ *
+ * `date` must match YYYY-MM-DD to prevent path traversal.
+ */
+router.get('/journal/day/:date', async (req: Request, res: Response) => {
+  try {
+    const { date } = req.params;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: 'Invalid date. Expected YYYY-MM-DD.' });
+      return;
+    }
+
+    const adjDir = await registryService.resolveAdjutantDir();
+    if (!adjDir) {
+      res.status(503).json({ error: 'Adjutant integration not available' });
+      return;
+    }
+
+    const filePath = path.join(adjDir, 'journal', `${date}.md`);
+    try {
+      const content = await fs.readFile(filePath, 'utf-8');
+      res.json({ date, content });
+    } catch {
+      res.status(404).json({ error: 'Journal entry not found' });
+    }
+  } catch (error) {
+    console.error('Failed to read journal day:', error);
+    res.status(500).json({ error: 'Failed to read journal day' });
+  }
+});
+
+/**
+ * GET /api/adjutant/log/recent — Tail of the operational log.
+ *
+ * Returns the last 20 lines from `state/adjutant.log` (written by
+ * Adjutant's `adj_log()` helper — not to be confused with the human-
+ * readable daily journal markdown under `journal/YYYY-MM-DD.md`).
+ */
+router.get('/log/recent', async (_req: Request, res: Response) => {
+  try {
+    const adjDir = await registryService.resolveAdjutantDir();
+    if (!adjDir) {
+      res.status(503).json({ error: 'Adjutant integration not available' });
+      return;
+    }
+
+    const logPath = path.join(adjDir, 'state', 'adjutant.log');
+
     try {
       const content = await fs.readFile(logPath, 'utf-8');
       const lines = content.split('\n').filter(line => line.trim());
       const recent = lines.slice(-20).reverse(); // Last 20, newest first
-      
+
       res.json({ entries: recent });
     } catch {
       res.json({ entries: [] });
     }
   } catch (error) {
-    console.error('Failed to read journal:', error);
-    res.status(500).json({ error: 'Failed to read journal' });
+    console.error('Failed to read log:', error);
+    res.status(500).json({ error: 'Failed to read log' });
   }
 });
 

@@ -6,3 +6,5 @@ export { QuickActions } from './QuickActions';
 export { HealthChecks } from './HealthChecks';
 export { ActivityFeed } from './ActivityFeed';
 export { LastPulse } from './LastPulse';
+export { FindingsPanel } from './FindingsPanel';
+export { JournalPanel } from './JournalPanel';

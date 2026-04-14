@@ -27,7 +27,7 @@
   transition: background var(--transition-fast);
 }
 
-[data-theme="bauhaus"] .scheduleItem {
+:global([data-theme="bauhaus"]) .scheduleItem {
   border-radius: 0;
 }
 
@@ -40,7 +40,7 @@
   transition: background var(--transition-fast);
 }
 
-[data-theme="bauhaus"] .scheduleHeader {
+:global([data-theme="bauhaus"]) .scheduleHeader {
   border-radius: 0;
 }
 
@@ -123,34 +123,12 @@
   margin-top: var(--spacing-2);
 }
 
+/* ===== Actions (composed from ui/Button) ===== */
+
 .actionButton {
-  padding: var(--spacing-1) var(--spacing-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-xs);
-  background: var(--color-card);
-  color: var(--color-text);
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-[data-theme="bauhaus"] .actionButton {
-  border-radius: 0;
-}
-
-.actionButton:hover {
-  background: var(--color-hover-bg);
-  border-color: var(--color-text-muted);
+  composes: btn sm outlined from '../ui/Button.module.css';
 }
 
 .actionPrimary {
-  background: var(--color-primary);
-  color: #ffffff;
-  border-color: var(--color-primary);
-}
-
-.actionPrimary:hover {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
+  composes: btn sm primary from '../ui/Button.module.css';
 }

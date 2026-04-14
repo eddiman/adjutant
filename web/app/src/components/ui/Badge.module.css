@@ -40,10 +40,6 @@
 }
 
 .dark {
-  background: #1a2332;
-  color: #ffffff;
-}
-
-:global([data-theme="bauhaus"]) .dark {
   background: var(--color-text);
+  color: var(--color-card);
 }

@@ -24,6 +24,7 @@ export interface AdjutantStatus {
   mode: 'adjutant' | 'standalone';
   available: boolean;
   adjutantDir?: string;
+  backendName?: string;
   lifecycleState?: 'OPERATIONAL' | 'PAUSED' | 'KILLED' | 'STOPPED';
   processRunning?: boolean;
   listenerPid?: number;
@@ -58,18 +59,39 @@ export interface HealthStatus {
   };
 }
 
+export interface InsightSummary {
+  id: string;
+  status: 'pending' | 'sent';
+  title: string;
+  filename: string;
+  timestamp: string | null;
+}
+
+export interface JournalDaySummary {
+  date: string;      // YYYY-MM-DD
+  filename: string;  // YYYY-MM-DD.md
+  preview: string;   // first non-heading line, truncated
+  entryCount: number; // number of `## HH:MM — ...` sections
+}
+
 export interface AdjutantData {
   status: AdjutantStatus | null;
   schedules: Schedule[];
   identity: Identity | null;
   health: HealthStatus | null;
-  journalEntries: string[];
+  logEntries: string[];
+  insights: InsightSummary[];
+  loadingInsights: boolean;
+  journalDays: JournalDaySummary[];
+  loadingJournal: boolean;
   loading: boolean;
   error: string | null;
   actionStates: Record<LifecycleAction, ActionState>;
   fetchStatus: () => Promise<void>;
   fetchSchedules: () => Promise<void>;
   fetchHealth: () => Promise<void>;
+  fetchInsights: () => Promise<void>;
+  fetchJournalDays: () => Promise<void>;
   handleScheduleToggle: (name: string, enabled: boolean) => Promise<void>;
   handleScheduleRun: (name: string) => Promise<void>;
   runLifecycleAction: (action: LifecycleAction) => Promise<void>;
@@ -92,7 +114,11 @@ export function useAdjutant(): AdjutantData {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [journalEntries, setJournalEntries] = useState<string[]>([]);
+  const [logEntries, setLogEntries] = useState<string[]>([]);
+  const [insights, setInsights] = useState<InsightSummary[]>([]);
+  const [loadingInsights, setLoadingInsights] = useState(true);
+  const [journalDays, setJournalDays] = useState<JournalDaySummary[]>([]);
+  const [loadingJournal, setLoadingJournal] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,6 +132,10 @@ export function useAdjutant(): AdjutantData {
   const successTimers = useRef<Record<string, number>>({});
   // Track what was active on last poll to detect transitions
   const prevActiveAction = useRef<string | null>(null);
+  // Refs for post-completion refreshes — avoid circular useCallback deps
+  const fetchInsightsRef = useRef<(() => Promise<void>) | null>(null);
+  const fetchJournalDaysRef = useRef<(() => Promise<void>) | null>(null);
+  const fetchLogRef = useRef<(() => Promise<void>) | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -134,6 +164,13 @@ export function useAdjutant(): AdjutantData {
           });
           delete successTimers.current[completed];
         }, SUCCESS_DISPLAY_MS);
+
+        // Pulses and reviews produce new insights, journal entries, and log lines
+        if (completed === 'review' || completed === 'pulse') {
+          fetchInsightsRef.current?.();
+          fetchJournalDaysRef.current?.();
+          fetchLogRef.current?.();
+        }
       }
 
       prevActiveAction.current = currentActive;
@@ -177,16 +214,47 @@ export function useAdjutant(): AdjutantData {
     }
   }, []);
 
-  const fetchJournal = useCallback(async () => {
+  const fetchLog = useCallback(async () => {
     try {
-      const res = await fetch('/api/adjutant/journal/recent');
-      if (!res.ok) throw new Error('Failed to fetch journal');
+      const res = await fetch('/api/adjutant/log/recent');
+      if (!res.ok) throw new Error('Failed to fetch log');
       const data = await res.json();
-      setJournalEntries(data.entries || []);
+      setLogEntries(data.entries || []);
     } catch (err) {
-      console.error('Failed to fetch journal:', err);
+      console.error('Failed to fetch log:', err);
     }
   }, []);
+
+  const fetchJournalDays = useCallback(async () => {
+    setLoadingJournal(true);
+    try {
+      const res = await fetch('/api/adjutant/journal/days');
+      if (!res.ok) throw new Error('Failed to fetch journal days');
+      const data = await res.json();
+      setJournalDays(data.days || []);
+    } catch (err) {
+      console.error('Failed to fetch journal days:', err);
+    } finally {
+      setLoadingJournal(false);
+    }
+  }, []);
+
+  const fetchInsights = useCallback(async () => {
+    setLoadingInsights(true);
+    try {
+      const res = await fetch('/api/adjutant/insights');
+      if (!res.ok) throw new Error('Failed to fetch insights');
+      const data = await res.json();
+      setInsights(data.insights || []);
+    } catch (err) {
+      console.error('Failed to fetch insights:', err);
+    } finally {
+      setLoadingInsights(false);
+    }
+  }, []);
+  fetchInsightsRef.current = fetchInsights;
+  fetchLogRef.current = fetchLog;
+  fetchJournalDaysRef.current = fetchJournalDays;
 
   // Fetch everything once on first mount
   useEffect(() => {
@@ -201,13 +269,15 @@ export function useAdjutant(): AdjutantData {
         fetchSchedules(),
         fetchIdentity(),
         fetchHealth(),
-        fetchJournal(),
+        fetchLog(),
+        fetchInsights(),
+        fetchJournalDays(),
       ]);
       setLoading(false);
     };
 
     fetchAll();
-  }, [fetchStatus, fetchSchedules, fetchIdentity, fetchHealth, fetchJournal]);
+  }, [fetchStatus, fetchSchedules, fetchIdentity, fetchHealth, fetchLog, fetchInsights, fetchJournalDays]);
 
   // Poll /status ONLY while an operation is active — stop once it completes.
   // No idle polling. Initial state comes from the one-time fetch above.
@@ -332,13 +402,19 @@ export function useAdjutant(): AdjutantData {
     schedules,
     identity,
     health,
-    journalEntries,
+    logEntries,
+    insights,
+    loadingInsights,
+    journalDays,
+    loadingJournal,
     loading,
     error,
     actionStates,
     fetchStatus,
     fetchSchedules,
     fetchHealth,
+    fetchInsights,
+    fetchJournalDays,
     handleScheduleToggle,
     handleScheduleRun,
     runLifecycleAction,

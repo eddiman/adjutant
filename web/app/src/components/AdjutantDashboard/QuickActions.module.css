@@ -16,80 +16,34 @@
   gap: var(--spacing-2);
 }
 
-/* ===== Button base ===== */
-
-.actionButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-2);
-  padding: var(--spacing-3) var(--spacing-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-family: var(--font-body);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-[data-theme="bauhaus"] .actionButton {
-  border-radius: 0;
-}
-
-.actionButton:disabled {
-  cursor: default;
-  opacity: 0.8;
-}
-
-/* ===== Primary (Review Findings) ===== */
+/* ===== Button variants (compose from ui/Button) ===== */
 
 .primary {
-  background: #1a2332;
-  color: #ffffff;
-  border-color: #1a2332;
+  composes: btn md primary from '../ui/Button.module.css';
+  width: 100%;
 }
-
-[data-theme="bauhaus"] .primary {
-  background: var(--color-text);
-  border-color: var(--color-text);
-}
-
-.primary:hover:not(:disabled) {
-  background: #2a3a52;
-}
-
-/* ===== Secondary (Pause, Pulse) ===== */
 
 .secondary {
-  background: var(--color-card);
-  color: var(--color-text);
-  border-color: var(--color-border);
+  composes: btn md outlined from '../ui/Button.module.css';
+  width: 100%;
 }
 
-.secondary:hover:not(:disabled) {
-  background: var(--color-hover-bg);
-  border-color: var(--color-text-muted);
-}
-
-/* ===== State overrides ===== */
+/* ===== Transient state overrides ===== */
 
 .running {
-  border-color: var(--color-primary);
-  background: rgba(0, 102, 204, 0.06);
-  color: var(--color-primary);
+  opacity: 0.85;
 }
 
 .success {
-  border-color: var(--color-success);
-  background: rgba(46, 204, 113, 0.06);
-  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 14%, transparent) !important;
+  border-color: var(--color-success) !important;
+  color: var(--color-success) !important;
 }
 
 .error {
-  border-color: var(--color-danger);
-  background: rgba(192, 57, 43, 0.06);
-  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent) !important;
+  border-color: var(--color-danger) !important;
+  color: var(--color-danger) !important;
 }
 
 /* ===== Spinner ===== */
@@ -106,4 +60,10 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }

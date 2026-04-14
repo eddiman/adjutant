@@ -13,37 +13,53 @@ interface ParsedEntry {
 }
 
 /**
- * Try to parse a structured log line like:
- *   2026-03-28 14:02:19 [INFO] pulse — Synchronizing logistics schedules...
- *   2026-03-28 14:02:19 [WARN] review — Detected inconsistency...
+ * Parse Adjutant's `adj_log()` format:
+ *   [HH:MM DD.MM.YYYY] [context] message
+ *   [HH:MM DD.MM.YYYY] [context] ERROR: message
+ *   [HH:MM DD.MM.YYYY] [context] WARNING: message
+ *   [HH:MM DD.MM.YYYY] [context] DEBUG: message
  * Falls back to raw text if unparseable.
  */
 function parseEntry(raw: string): ParsedEntry {
-  // Pattern: optional timestamp, optional [LEVEL], optional component —, message
   const match = raw.match(
-    /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})?\s*\[?(\w+)\]?\s*(\w[\w.-]*)?\s*[—–-]?\s*(.+)$/
+    /^\[(\d{2}:\d{2})\s+(\d{2}\.\d{2}\.\d{4})\]\s+\[([^\]]+)\]\s+(.+)$/
   );
 
-  if (match) {
-    const [, timestamp, level, component, message] = match;
-    return {
-      timestamp: timestamp?.trim() ?? '',
-      level: (level ?? '').toUpperCase(),
-      component: component ?? '',
-      message: message?.trim() ?? raw,
-    };
+  if (!match) {
+    return { timestamp: '', level: '', component: '', message: raw };
   }
 
-  return { timestamp: '', level: '', component: '', message: raw };
+  const [, time, , component, body] = match;
+
+  // Derive level from the message prefix
+  let level = 'INFO';
+  let message = body;
+  if (body.startsWith('ERROR:')) {
+    level = 'ERROR';
+    message = body.slice(6).trim();
+  } else if (body.startsWith('WARNING:')) {
+    level = 'WARN';
+    message = body.slice(8).trim();
+  } else if (body.startsWith('DEBUG:')) {
+    level = 'DEBUG';
+    message = body.slice(6).trim();
+  }
+
+  return {
+    timestamp: time,
+    level,
+    component,
+    message,
+  };
 }
 
 function getStatusBadge(level: string): { label: string; className: string } | null {
   switch (level) {
     case 'INFO':
-      return { label: 'CHECKED', className: styles.badgeChecked };
+      return { label: 'INFO', className: styles.badgeChecked };
     case 'WARN':
     case 'WARNING':
-      return { label: 'ESCALATED', className: styles.badgeEscalated };
+      return { label: 'WARN', className: styles.badgeEscalated };
     case 'ERROR':
       return { label: 'ERROR', className: styles.badgeError };
     case 'DEBUG':
@@ -54,23 +70,21 @@ function getStatusBadge(level: string): { label: string; className: string } | n
 }
 
 function formatTime(timestamp: string): string {
-  if (!timestamp) return '';
-  // Extract HH:MM:SS from full timestamp
-  const timePart = timestamp.split(' ')[1];
-  return timePart ?? timestamp;
+  // Already HH:MM from the parser
+  return timestamp;
 }
 
 export function ActivityFeed({ entries }: ActivityFeedProps) {
   if (entries.length === 0) {
     return (
-      <Card title="Findings Feed" className={styles.card}>
+      <Card title="Activity Log" className={styles.card}>
         <p className={styles.empty}>No recent activity</p>
       </Card>
     );
   }
 
   return (
-    <Card title="Findings Feed" headerAction={<span className={styles.liveTag}>Live Telemetry Stream</span>} className={styles.card}>
+    <Card title="Activity Log" headerAction={<span className={styles.liveTag}>Live Telemetry Stream</span>} className={styles.card}>
       <div className={styles.feed}>
         {entries.map((entry, index) => {
           const parsed = parseEntry(entry);

@@ -5,6 +5,7 @@ interface SystemStatusProps {
     mode: 'adjutant' | 'standalone';
     available: boolean;
     adjutantDir?: string;
+    backendName?: string;
     lifecycleState?: 'OPERATIONAL' | 'PAUSED' | 'KILLED' | 'STOPPED';
     processRunning?: boolean;
     listenerPid?: number;
@@ -30,7 +31,7 @@ export function SystemStatus({ status }: SystemStatusProps) {
 
         <div className={styles.badges}>
           <span className={styles.badge}>
-            Backend: {status.mode === 'adjutant' ? 'Claude-CLI' : 'Standalone'}
+            Backend: {status.backendName === 'opencode' ? 'OpenCode' : status.backendName === 'claude-cli' ? 'Claude CLI' : status.mode === 'adjutant' ? 'Unknown' : 'Standalone'}
           </span>
           <span className={`${styles.badge} ${status.processRunning ? styles.badgeActive : styles.badgeInactive}`}>
             Process: {status.processRunning ? 'Running' : 'Stopped'}

@@ -3,17 +3,11 @@
 }
 
 .refreshButton {
-  background: transparent;
-  border: none;
+  composes: btn iconBtn ghost from '../ui/Button.module.css';
   color: var(--color-text-muted);
-  cursor: pointer;
-  padding: var(--spacing-1);
-  display: flex;
-  align-items: center;
-  transition: all var(--transition-fast);
 }
 
-.refreshButton:hover {
+.refreshButton:hover:not(:disabled) {
   color: var(--color-primary);
   transform: rotate(180deg);
 }

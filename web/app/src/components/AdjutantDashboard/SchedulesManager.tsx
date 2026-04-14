@@ -133,7 +133,7 @@ export function SchedulesManager({ schedules, onToggle, onRun }: SchedulesManage
                     {schedule.enabled ? 'Disable' : 'Enable'}
                   </button>
                   <button
-                    className={`${styles.actionButton} ${styles.actionPrimary}`}
+                    className={styles.actionPrimary}
                     onClick={() => handleRun(schedule.name)}
                   >
                     Run Now

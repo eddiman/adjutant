@@ -100,7 +100,7 @@
 }
 
 .badgeChecked {
-  composes: success from '../ui/Badge.module.css';
+  composes: info from '../ui/Badge.module.css';
 }
 
 .badgeEscalated {

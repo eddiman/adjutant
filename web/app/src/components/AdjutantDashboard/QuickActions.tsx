@@ -13,7 +13,7 @@ export function QuickActions({ lifecycleState, actionStates, onAction }: QuickAc
   const isKilled = lifecycleState === 'KILLED';
   const isStopped = lifecycleState === 'STOPPED';
 
-  const renderButton = (action: LifecycleAction, label: string, variant: string) => {
+  const renderButton = (action: LifecycleAction, label: string, variant: 'primary' | 'secondary') => {
     const state = actionStates[action];
     const isRunning = state === 'running';
     const isSuccess = state === 'success';
@@ -35,7 +35,7 @@ export function QuickActions({ lifecycleState, actionStates, onAction }: QuickAc
 
     return (
       <button
-        className={`${styles.actionButton} ${styles[variant] ?? ''} ${stateClass}`}
+        className={`${styles[variant]} ${stateClass}`}
         onClick={() => onAction(action)}
         disabled={isRunning}
       >
@@ -48,7 +48,7 @@ export function QuickActions({ lifecycleState, actionStates, onAction }: QuickAc
   return (
     <Card title="Quick Actions" className={styles.card}>
       <div className={styles.actions}>
-        {renderButton('review', 'Review Findings', 'primary')}
+        {renderButton('review', 'Run Review', 'primary')}
 
         <div className={styles.row}>
           {!isPaused && !isKilled && !isStopped && (
