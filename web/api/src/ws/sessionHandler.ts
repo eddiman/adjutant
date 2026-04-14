@@ -11,7 +11,7 @@ import { randomUUID } from 'crypto';
 import { backendDetector } from '../services/backendDetector.js';
 import { sessionService } from '../services/sessionService.js';
 import { runCli } from '../services/cliAdapter.js';
-import { readCliSessionMessages } from '../routes/sessions.js';
+import { readCliSessionMessages, readOpenCodeSessionMessages } from '../routes/sessions.js';
 import { WsClientMessageSchema } from '../types/session.js';
 import type { WsServerMessage, ChatMessage, CompleteEvent, ErrorEvent } from '../types/session.js';
 
@@ -69,7 +69,12 @@ export function handleConnection(ws: WebSocket): void {
         // If resuming a CLI session, pre-set the CLI session ID and load history
         if (msg.cliSessionId) {
           session.cliSessionId = msg.cliSessionId;
-          const history = await readCliSessionMessages(msg.cliSessionId);
+          let history: ChatMessage[];
+          if (backend.name === 'opencode') {
+            history = await readOpenCodeSessionMessages(backend.binary, msg.cliSessionId);
+          } else {
+            history = await readCliSessionMessages(msg.cliSessionId);
+          }
           for (const m of history) {
             session.messages.push(m);
           }

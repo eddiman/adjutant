@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useCodeSession } from '../../hooks/useCodeSession';
 import { AnimatedBackground } from '../Home/AnimatedBackground';
 import { PageShell } from '../ui';
@@ -20,7 +20,6 @@ interface CodeSessionProps {
 export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
   const { sessionId: urlSessionId } = useParams<{ sessionId?: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const isSessionRoute = !!urlSessionId;
 
   const {
@@ -58,20 +57,26 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
   // Track whether we're expecting a redirect (from Home prompt or explicit create)
   const [pendingRedirect, setPendingRedirect] = useState(false);
 
-  // When a session is created and we're expecting a redirect, update URL
+  // When a session is created and we're expecting a redirect, update URL.
+  // Also bump listRefreshKey so the session list refetches next time we
+  // land on /chat — this surfaces the new session without a full reload,
+  // and picks up any sub-agent sessions the backend may have written.
   useEffect(() => {
     if (activeSession && pendingRedirect) {
       setPendingRedirect(false);
+      setListRefreshKey(k => k + 1);
       navigate(`/chat/${activeSession.id}`, { replace: true });
     }
   }, [activeSession, pendingRedirect, navigate]);
 
-  // Auto-create session from Home prompt (pending cwd in sessionStorage)
+  // Auto-create session from Home prompt (pending cwd in localStorage).
+  // Uses localStorage because Safari PWA can wipe sessionStorage on
+  // relaunch — read-and-remove keeps it single-shot.
   useEffect(() => {
     if (!isSessionRoute && connected && backendInfo) {
-      const pendingCwd = sessionStorage.getItem('adjutant-pending-cwd');
+      const pendingCwd = localStorage.getItem('adjutant-pending-cwd');
       if (pendingCwd) {
-        sessionStorage.removeItem('adjutant-pending-cwd');
+        localStorage.removeItem('adjutant-pending-cwd');
         const model = backendInfo.models.expensive;
         setPendingRedirect(true);
         createSession(pendingCwd, model);
@@ -82,9 +87,9 @@ export function CodeSession({ sidebarOpen = false }: CodeSessionProps) {
   // Pick up pending message from Home prompt after session is active
   useEffect(() => {
     if (activeSession && connected) {
-      const pending = sessionStorage.getItem('adjutant-pending-message');
+      const pending = localStorage.getItem('adjutant-pending-message');
       if (pending) {
-        sessionStorage.removeItem('adjutant-pending-message');
+        localStorage.removeItem('adjutant-pending-message');
         setTimeout(() => sendChatMessage(pending), 300);
       }
     }

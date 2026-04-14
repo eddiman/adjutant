@@ -6,10 +6,10 @@
  */
 
 import { memo, useEffect, useState, useRef } from 'react';
-import type { BundledLanguage } from 'shiki';
+import type { BundledLanguage, Highlighter } from 'shiki';
 
 // Lazy-load shiki to keep initial bundle small
-let highlighterPromise: ReturnType<typeof import('shiki').then> | null = null;
+let highlighterPromise: Promise<Highlighter> | null = null;
 
 function getHighlighter() {
   if (!highlighterPromise) {
@@ -39,7 +39,7 @@ export const CodeBlock = memo(function CodeBlock({ code, language }: CodeBlockPr
   useEffect(() => {
     let cancelled = false;
 
-    getHighlighter().then(highlighter => {
+    getHighlighter().then((highlighter: Highlighter) => {
       if (cancelled) return;
 
       const langs = highlighter.getLoadedLanguages();

@@ -296,6 +296,187 @@ describe('Note routes', () => {
   });
 });
 
+describe('Session routes — CLI discovery', () => {
+  it('GET /api/sessions extracts real cwd from JSONL (handles underscores/dashes)', async () => {
+    // The Claude CLI encoding `-Volumes-Mandalor-knowledge-bases-my-kb`
+    // cannot be losslessly decoded — the true cwd may include underscores
+    // (e.g. `knowledge_bases`) that the decoder would have flattened to `/`.
+    // scanClaudeCliSessions must pull the real cwd from the JSONL records
+    // themselves, not from the directory name.
+    const encodedDir = '-Volumes-Mandalor-knowledge-bases-my-kb';
+    const realCwd = '/Volumes/Mandalor/knowledge_bases/my-kb';
+    const sessionId = '11111111-2222-3333-4444-555555555555';
+
+    const projDir = path.join(tempDir, '.claude', 'projects', encodedDir);
+    await fs.mkdir(projDir, { recursive: true });
+
+    const jsonl = [
+      JSON.stringify({
+        type: 'user',
+        uuid: 'u1',
+        cwd: realCwd,
+        timestamp: '2026-04-09T10:00:00Z',
+        message: { content: [{ type: 'text', text: 'Hello KB' }] },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        uuid: 'a1',
+        timestamp: '2026-04-09T10:00:01Z',
+        message: { model: 'claude-sonnet-4-6', content: [{ type: 'text', text: 'Hi' }] },
+      }),
+    ].join('\n');
+
+    await fs.writeFile(path.join(projDir, `${sessionId}.jsonl`), jsonl);
+
+    const res = await request(app).get('/api/sessions');
+    expect(res.status).toBe(200);
+    const match = res.body.cliSessions.find((s: { id: string }) => s.id === sessionId);
+    expect(match).toBeDefined();
+    expect(match.cwd).toBe(realCwd);
+    expect(match.name).toBe('Hello KB');
+  });
+
+  it('GET /api/sessions extracts preview from string content (not just array content)', async () => {
+    // The Claude CLI writes user records with `content` as either a
+    // plain string or an array of content blocks. Previously only the
+    // array case was handled, so every string-content session (the
+    // common case) showed up as "Untitled session".
+    const encodedDir = '-tmp-adj-test-string-content';
+    const realCwd = '/tmp/adj-test-string-content';
+    const sessionId = '33333333-2222-3333-4444-555555555555';
+
+    const projDir = path.join(tempDir, '.claude', 'projects', encodedDir);
+    await fs.mkdir(projDir, { recursive: true });
+
+    const jsonl = [
+      JSON.stringify({
+        type: 'user',
+        uuid: 'u1',
+        cwd: realCwd,
+        timestamp: '2026-04-09T10:00:00Z',
+        message: { content: 'Apply the following updates:\n\n1. Do a thing' },
+      }),
+    ].join('\n');
+
+    await fs.writeFile(path.join(projDir, `${sessionId}.jsonl`), jsonl);
+
+    const res = await request(app).get('/api/sessions');
+    expect(res.status).toBe(200);
+    const match = res.body.cliSessions.find((s: { id: string }) => s.id === sessionId);
+    expect(match).toBeDefined();
+    // Newlines and runs of whitespace should be collapsed to a single space.
+    expect(match.name).toBe('Apply the following updates: 1. Do a thing');
+  });
+
+  it('GET /api/sessions discovers nested sub-agent sessions and uses meta.json title', async () => {
+    // Claude CLI stores sub-agent session logs at:
+    //   <projectDir>/<parent-uuid>/subagents/agent-<hash>.jsonl
+    // with a sibling agent-<hash>.meta.json. These were previously not
+    // scanned at all (the scan only looked at top-level .jsonl files),
+    // so sub-agent sessions were invisible in the list.
+    const encodedDir = '-tmp-adj-test-subagents';
+    const realCwd = '/tmp/adj-test-subagents';
+    const parentId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const agentId = 'agent-1234567890abcdef';
+
+    const subagentsDir = path.join(tempDir, '.claude', 'projects', encodedDir, parentId, 'subagents');
+    await fs.mkdir(subagentsDir, { recursive: true });
+
+    // Sub-agent JSONL — every record is sidechain by design.
+    const jsonl = [
+      JSON.stringify({
+        type: 'user',
+        uuid: 'su1',
+        cwd: realCwd,
+        isSidechain: true,
+        timestamp: '2026-04-09T11:00:00Z',
+        message: { content: 'Do the thing' },
+      }),
+    ].join('\n');
+    await fs.writeFile(path.join(subagentsDir, `${agentId}.jsonl`), jsonl);
+
+    // Sibling meta.json with a human description.
+    await fs.writeFile(
+      path.join(subagentsDir, `${agentId}.meta.json`),
+      JSON.stringify({ agentType: 'claude-code-guide', description: 'Remote session clearing' }),
+    );
+
+    const res = await request(app).get('/api/sessions');
+    expect(res.status).toBe(200);
+    const match = res.body.cliSessions.find((s: { id: string }) => s.id === agentId);
+    expect(match).toBeDefined();
+    // Title should come from the meta.json, not the sidechain user text.
+    expect(match.name).toBe('claude-code-guide · Remote session clearing');
+    expect(match.cwd).toBe(realCwd);
+  });
+
+  it('GET /api/sessions falls back to sidechain text when no meta and no non-sidechain record exists', async () => {
+    // Sub-agent files without a meta.json should still get a title from
+    // their sidechain user record (second-pass fallback), rather than
+    // showing "Untitled session".
+    const encodedDir = '-tmp-adj-test-subagents-nometa';
+    const realCwd = '/tmp/adj-test-subagents-nometa';
+    const parentId = 'ffffffff-bbbb-cccc-dddd-eeeeeeeeeeee';
+    const agentId = 'agent-deadbeef12345678';
+
+    const subagentsDir = path.join(tempDir, '.claude', 'projects', encodedDir, parentId, 'subagents');
+    await fs.mkdir(subagentsDir, { recursive: true });
+
+    const jsonl = [
+      JSON.stringify({
+        type: 'user',
+        uuid: 'su1',
+        cwd: realCwd,
+        isSidechain: true,
+        timestamp: '2026-04-09T11:00:00Z',
+        message: { content: 'Analyze the production logs' },
+      }),
+    ].join('\n');
+    await fs.writeFile(path.join(subagentsDir, `${agentId}.jsonl`), jsonl);
+
+    const res = await request(app).get('/api/sessions');
+    const match = res.body.cliSessions.find((s: { id: string }) => s.id === agentId);
+    expect(match).toBeDefined();
+    expect(match.name).toBe('Analyze the production logs');
+  });
+
+  it('GET /api/sessions skips sidechain user records when picking preview', async () => {
+    const encodedDir = '-tmp-adj-test-sidechain';
+    const realCwd = '/tmp/adj-test-sidechain';
+    const sessionId = '22222222-2222-3333-4444-555555555555';
+
+    const projDir = path.join(tempDir, '.claude', 'projects', encodedDir);
+    await fs.mkdir(projDir, { recursive: true });
+
+    const jsonl = [
+      // Sidechain (sub-agent) user message — must be ignored for preview.
+      JSON.stringify({
+        type: 'user',
+        uuid: 'u-side',
+        cwd: realCwd,
+        isSidechain: true,
+        timestamp: '2026-04-09T10:00:00Z',
+        message: { content: [{ type: 'text', text: 'SIDECHAIN PROMPT' }] },
+      }),
+      // Real user message — should be used for preview.
+      JSON.stringify({
+        type: 'user',
+        uuid: 'u-real',
+        cwd: realCwd,
+        timestamp: '2026-04-09T10:00:01Z',
+        message: { content: [{ type: 'text', text: 'Real parent prompt' }] },
+      }),
+    ].join('\n');
+
+    await fs.writeFile(path.join(projDir, `${sessionId}.jsonl`), jsonl);
+
+    const res = await request(app).get('/api/sessions');
+    const match = res.body.cliSessions.find((s: { id: string }) => s.id === sessionId);
+    expect(match).toBeDefined();
+    expect(match.name).toBe('Real parent prompt');
+  });
+});
+
 describe('404 handler', () => {
   it('returns 404 for unknown routes', async () => {
     const res = await request(app).get('/api/unknown');

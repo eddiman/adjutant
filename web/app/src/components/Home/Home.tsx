@@ -37,8 +37,11 @@ export function Home({
   const handleSend = useCallback(async () => {
     if (!message.trim() || phase !== 'idle') return;
 
-    // Store message for chat to pick up
-    sessionStorage.setItem('adjutant-pending-message', message.trim());
+    // Store message for chat to pick up.
+    // Use localStorage (not sessionStorage) because Safari PWA can wipe
+    // sessionStorage on relaunch; we still read-and-remove on the chat
+    // side so this stays single-shot.
+    localStorage.setItem('adjutant-pending-message', message.trim());
 
     // Phase 1: animate prompt to bottom
     setPhase('animating');
@@ -48,7 +51,7 @@ export function Home({
       const statusRes = await fetch('/api/adjutant/status');
       const statusData = await statusRes.json();
       const cwd = statusData.adjutantDir || '/';
-      sessionStorage.setItem('adjutant-pending-cwd', cwd);
+      localStorage.setItem('adjutant-pending-cwd', cwd);
     } catch {
       // Fallback
     }

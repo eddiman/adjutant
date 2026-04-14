@@ -71,7 +71,7 @@ export function useCodeSession() {
   const [error, setError] = useState<string | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const reconnectAttemptRef = useRef(0);
   const mountedRef = useRef(true);
   const autoResumeAttemptedRef = useRef(false);
@@ -86,7 +86,7 @@ export function useCodeSession() {
 
   // Stable message handler — uses refs, no state dependencies.
   // This prevents WS reconnection on every state change.
-  const handleMessageRef = useRef<(event: MessageEvent) => void>();
+  const handleMessageRef = useRef<((event: MessageEvent) => void) | undefined>(undefined);
   handleMessageRef.current = (event: MessageEvent) => {
     let msg: WsServerMessage;
     try {
@@ -230,6 +230,41 @@ export function useCodeSession() {
     };
   }, [connect]);
 
+  // Force reconnect when the tab/PWA becomes visible or comes back online.
+  // iOS Safari PWA suspension does not reliably fire `ws.onclose`, so the
+  // exponential-backoff reconnect path alone isn't enough — on wake we
+  // actively clear any pending timeout, reset the backoff counter, and
+  // call connect() if the socket isn't already OPEN.
+  useEffect(() => {
+    const tryReconnect = () => {
+      if (!mountedRef.current) return;
+      if (document.visibilityState === 'hidden') return;
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) return;
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = undefined;
+      }
+      reconnectAttemptRef.current = 0;
+      // If there is a stale socket still in CONNECTING/CLOSING, close it
+      // so connect() can create a fresh one.
+      if (ws && ws.readyState !== WebSocket.CLOSED) {
+        try { ws.onclose = null; ws.close(); } catch { /* ignore */ }
+        wsRef.current = null;
+      }
+      connect();
+    };
+
+    window.addEventListener('visibilitychange', tryReconnect);
+    window.addEventListener('focus', tryReconnect);
+    window.addEventListener('online', tryReconnect);
+    return () => {
+      window.removeEventListener('visibilitychange', tryReconnect);
+      window.removeEventListener('focus', tryReconnect);
+      window.removeEventListener('online', tryReconnect);
+    };
+  }, [connect]);
+
   const sendWs = useCallback((data: Record<string, unknown>) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
@@ -237,6 +272,10 @@ export function useCodeSession() {
   }, []);
 
   const createSession = useCallback((cwd: string, model?: string, cliSessionId?: string) => {
+    // Clear any previous session so the pendingRedirect effect in CodeSession.tsx
+    // waits for the NEW session.created payload instead of navigating to the
+    // stale activeSession left over from a previous /chat/:id visit.
+    setActiveSession(null);
     setMessages([]);
     setStreamingContent('');
     setError(null);

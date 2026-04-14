@@ -118,9 +118,15 @@ class RegistryService {
 
       const kbs: KbMeta[] = [];
       for (const entry of registry.knowledge_bases) {
-        // Validate the KB path actually exists and has kb.yaml
+        // Validate the KB path itself exists. We do NOT require a
+        // kb.yaml inside — the adjutant daemon treats registry.yaml as
+        // the single source of truth (its review heartbeat queries
+        // every entry regardless of a kb.yaml), and some valid KBs
+        // (e.g. `fagkomite`) don't have one. Requiring kb.yaml made the
+        // web UI silently drop KBs the rest of adjutant uses happily.
         try {
-          await fs.access(path.join(entry.path, 'kb.yaml'));
+          const stat = await fs.stat(entry.path);
+          if (!stat.isDirectory()) continue;
           kbs.push({
             name: entry.name,
             description: entry.description || '',
@@ -129,7 +135,7 @@ class RegistryService {
             created: entry.created,
           });
         } catch {
-          // KB path doesn't exist or isn't accessible — skip silently
+          // KB path doesn't exist or isn't accessible — skip silently.
         }
       }
 

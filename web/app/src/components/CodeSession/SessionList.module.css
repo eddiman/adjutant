@@ -19,6 +19,47 @@
   padding: var(--spacing-10);
 }
 
+/* Error banner shown when one or more session-list fetches fail. */
+.errorBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+  margin: var(--spacing-3) var(--spacing-4);
+  padding: var(--spacing-3) var(--spacing-4);
+  background: rgba(220, 53, 69, 0.08);
+  border: 1px solid rgba(220, 53, 69, 0.25);
+  border-radius: var(--radius-md, 8px);
+  color: var(--color-text, #333);
+  font-size: var(--font-size-sm);
+}
+
+.errorBannerBody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+}
+
+.errorBannerTitle {
+  font-weight: 600;
+  color: #b42318;
+}
+
+.errorBannerDismiss {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: var(--spacing-1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.errorBannerDismiss:hover {
+  color: var(--color-text);
+}
+
 /* Folder group — flat, no glass */
 .folderCard {
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);

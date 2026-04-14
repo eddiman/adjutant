@@ -5,7 +5,8 @@
  * SessionList     — modal overlay (kept for backward compat)
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import type { ReactElement } from 'react';
 import type { SessionInfo } from '../../hooks/useCodeSession';
 import type { KbMeta } from '../../types';
 import styles from './SessionList.module.css';
@@ -114,7 +115,7 @@ function IconAdd() {
   );
 }
 
-const ICON_MAP: Record<string, () => JSX.Element> = {
+const ICON_MAP: Record<string, () => ReactElement> = {
   home: IconHome,
   book: IconBook,
   folder: IconFolder,
@@ -251,7 +252,10 @@ interface FolderEntry {
   icon: string;
   label: string;
   path: string;
+  /** True for registered KBs and the adjutant dir — never removable. */
   isKb: boolean;
+  /** True for auto-discovered workspaces derived from session cwds — not removable. */
+  discovered: boolean;
   sessions: SessionInfo[];
   cliSessions: CliSessionSummary[];
 }
@@ -266,7 +270,7 @@ function groupSessions(
   sessions: SessionInfo[],
   adjutantDir: string | null,
   cliSessions: CliSessionSummary[] = [],
-): { groups: FolderEntry[]; orphans: SessionInfo[] } {
+): { groups: FolderEntry[] } {
   const groups: FolderEntry[] = [];
   const claimed = new Set<string>();
   const claimedCli = new Set<string>();
@@ -276,7 +280,7 @@ function groupSessions(
     matching.forEach(s => claimed.add(s.id));
     const matchingCli = cliSessions.filter(s => matchPath(s.cwd, adjutantDir));
     matchingCli.forEach(s => claimedCli.add(s.id));
-    groups.push({ icon: 'home', label: 'Adjutant', path: adjutantDir, isKb: true, sessions: matching, cliSessions: matchingCli });
+    groups.push({ icon: 'home', label: 'Adjutant', path: adjutantDir, isKb: true, discovered: false, sessions: matching, cliSessions: matchingCli });
   }
 
   for (const kb of kbs) {
@@ -284,7 +288,7 @@ function groupSessions(
     matching.forEach(s => claimed.add(s.id));
     const matchingCli = cliSessions.filter(s => !claimedCli.has(s.id) && matchPath(s.cwd, kb.path));
     matchingCli.forEach(s => claimedCli.add(s.id));
-    groups.push({ icon: 'book', label: kb.name, path: kb.path, isKb: true, sessions: matching, cliSessions: matchingCli });
+    groups.push({ icon: 'book', label: kb.name, path: kb.path, isKb: true, discovered: false, sessions: matching, cliSessions: matchingCli });
   }
 
   for (const folder of customFolders) {
@@ -294,11 +298,60 @@ function groupSessions(
     matching.forEach(s => claimed.add(s.id));
     const matchingCli = cliSessions.filter(s => !claimedCli.has(s.id) && matchPath(s.cwd, folder));
     matchingCli.forEach(s => claimedCli.add(s.id));
-    groups.push({ icon: 'folder', label: pathLabel(folder), path: folder, isKb: false, sessions: matching, cliSessions: matchingCli });
+    groups.push({ icon: 'folder', label: pathLabel(folder), path: folder, isKb: false, discovered: false, sessions: matching, cliSessions: matchingCli });
   }
 
-  const orphans = sessions.filter(s => !claimed.has(s.id));
-  return { groups, orphans };
+  // Auto-discover a workspace for every unique cwd among the unmatched
+  // sessions. Replaces the old "Other" orphan bucket: instead of dumping
+  // unknown-workspace sessions into one pile, each distinct cwd gets its
+  // own accordion. Covers:
+  //   - KB dirs that exist on disk with Claude CLI sessions but aren't
+  //     registered in the adjutant KB registry (e.g. fagkomite);
+  //   - Sub-agent sessions spawned into cwds that don't belong to any
+  //     known KB or custom folder.
+  const discoveredByCwd = new Map<string, FolderEntry>();
+
+  const ensureDiscovered = (cwd: string): FolderEntry | null => {
+    if (!cwd) return null;
+    const existing = discoveredByCwd.get(cwd);
+    if (existing) return existing;
+    const entry: FolderEntry = {
+      icon: 'folder',
+      label: pathLabel(cwd),
+      path: cwd,
+      isKb: false,
+      discovered: true,
+      sessions: [],
+      cliSessions: [],
+    };
+    discoveredByCwd.set(cwd, entry);
+    return entry;
+  };
+
+  for (const s of sessions) {
+    if (claimed.has(s.id)) continue;
+    const entry = ensureDiscovered(s.cwd);
+    if (entry) {
+      entry.sessions.push(s);
+      claimed.add(s.id);
+    }
+  }
+  for (const s of cliSessions) {
+    if (claimedCli.has(s.id)) continue;
+    const entry = ensureDiscovered(s.cwd);
+    if (entry) {
+      entry.cliSessions.push(s);
+      claimedCli.add(s.id);
+    }
+  }
+
+  // Sort discovered groups alphabetically by label for stable ordering.
+  const discoveredGroups = [...discoveredByCwd.values()].sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
+  groups.push(...discoveredGroups);
+
+  return { groups };
 }
 
 // ============================================================
@@ -318,29 +371,86 @@ export function ChatSessionList({ onResume, onResumeCliSession, onNewSession }: 
   const [adjutantDir, setAdjutantDir] = useState<string | null>(null);
   const [customFolders, setCustomFolders] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errors, setErrors] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['__all__']));
+  const autoExpandedRef = useRef(false);
+  const lastLoadRef = useRef(0);
 
+  // Independent fetches so one failure can't blank out the others.
+  // Each failure is collected into `errors` and surfaced in the UI
+  // (previously all errors were swallowed by .catch(() => {})).
+  const loadData = useCallback(async () => {
+    // Debounce rapid visibility/focus refreshes (Fix 8).
+    const now = Date.now();
+    if (now - lastLoadRef.current < 2000) return;
+    lastLoadRef.current = now;
+
+    const collected: string[] = [];
+
+    // Sessions endpoint — critical; clears loading regardless of outcome.
+    try {
+      const r = await fetch('/api/sessions');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setSessions(d.sessions || []);
+      setCliSessions(d.cliSessions || []);
+    } catch (e) {
+      collected.push(`Failed to load sessions: ${(e as Error).message}`);
+    }
+
+    try {
+      const r = await fetch('/api/kbs');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setKbs(d.kbs || []);
+    } catch (e) {
+      collected.push(`Failed to load knowledge bases: ${(e as Error).message}`);
+    }
+
+    try {
+      const r = await fetch('/api/adjutant/status');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      setAdjutantDir(d.adjutantDir || null);
+    } catch {
+      // adjutant/status is best-effort — no error surfaced.
+      setAdjutantDir(null);
+    }
+
+    setErrors(collected);
+    setLoading(false);
+  }, []);
+
+  // Initial load.
   useEffect(() => {
     setCustomFolders(loadCustomFolders());
-    Promise.all([
-      fetch('/api/sessions').then(r => r.json()).then(d => ({ sessions: d.sessions || [], cliSessions: d.cliSessions || [] })),
-      fetch('/api/kbs').then(r => r.json()).then(d => d.kbs || []),
-      fetch('/api/adjutant/status').then(r => r.json()).then(d => d.adjutantDir || null).catch(() => null),
-    ])
-      .then(([sessData, kbList, adjDir]) => {
-        setSessions(sessData.sessions);
-        setCliSessions(sessData.cliSessions);
-        setKbs(kbList);
-        setAdjutantDir(adjDir);
-        // Auto-expand first group
-        const { groups } = groupSessions(kbList, loadCustomFolders(), sessData.sessions, adjDir, sessData.cliSessions);
-        if (groups.length > 0) {
-          setExpanded(new Set([groups[0].path]));
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+    loadData();
+  }, [loadData]);
+
+  // Auto-expand the first group once sessions have arrived.
+  useEffect(() => {
+    if (autoExpandedRef.current) return;
+    if (loading) return;
+    const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
+    if (groups.length > 0) {
+      setExpanded(new Set([groups[0].path]));
+      autoExpandedRef.current = true;
+    }
+  }, [loading, kbs, customFolders, sessions, adjutantDir, cliSessions]);
+
+  // Refetch on tab/PWA wake so sub-agent sessions written while we were
+  // backgrounded show up without requiring a manual reload (Fix 8).
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadData();
+    };
+    window.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      window.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [loadData]);
 
   const toggleExpand = useCallback((path: string) => {
     setExpanded(prev => {
@@ -365,14 +475,36 @@ export function ChatSessionList({ onResume, onResumeCliSession, onNewSession }: 
     return <p className={styles.loading}>Loading sessions...</p>;
   }
 
-  const { groups, orphans } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
+  const { groups } = groupSessions(kbs, customFolders, sessions, adjutantDir, cliSessions);
 
-  if (groups.length === 0 && orphans.length === 0) {
-    return <p className={styles.empty}>No sessions yet. Start a new chat to begin.</p>;
+  const errorBanner = errors.length > 0 ? (
+    <div className={styles.errorBanner}>
+      <div className={styles.errorBannerBody}>
+        <span className={styles.errorBannerTitle}>Some data couldn't load</span>
+        {errors.map((e, i) => <span key={i}>{e}</span>)}
+      </div>
+      <button
+        className={styles.errorBannerDismiss}
+        onClick={() => setErrors([])}
+        aria-label="Dismiss"
+      >
+        <IconClose />
+      </button>
+    </div>
+  ) : null;
+
+  if (groups.length === 0) {
+    return (
+      <>
+        {errorBanner}
+        <p className={styles.empty}>No sessions yet. Start a new chat to begin.</p>
+      </>
+    );
   }
 
   return (
     <div className={styles.list}>
+      {errorBanner}
       {groups.map(g => (
         <FolderGroup
           key={g.path}
@@ -387,23 +519,9 @@ export function ChatSessionList({ onResume, onResumeCliSession, onNewSession }: 
           onResume={onResume}
           onResumeCliSession={onResumeCliSession}
           onDelete={handleDelete}
-          onRemoveFolder={g.isKb ? undefined : () => handleRemoveFolder(g.path)}
+          onRemoveFolder={(g.isKb || g.discovered) ? undefined : () => handleRemoveFolder(g.path)}
         />
       ))}
-      {orphans.length > 0 && (
-        <FolderGroup
-          icon="document"
-          label="Other"
-          path=""
-          sessions={orphans}
-          cliSessions={[]}
-          expanded={expanded.has('__orphans__')}
-          onToggle={() => toggleExpand('__orphans__')}
-          onNewSession={() => {}}
-          onResume={onResume}
-          onDelete={handleDelete}
-        />
-      )}
     </div>
   );
 }
