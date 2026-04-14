@@ -223,7 +223,7 @@
 @keyframes pageIn {
   from {
     opacity: 0;
-    transform: translateY(15px);
+
   }
   to {
     opacity: 1;
@@ -312,12 +312,13 @@
 
 @media (min-width: 997px) {
   .theme-doc-sidebar-container {
-    background: var(--glass-subtle-bg);
-    backdrop-filter: blur(var(--glass-subtle-blur));
-    -webkit-backdrop-filter: blur(var(--glass-subtle-blur));
     border-right: var(--glass-border) !important;
     box-shadow: var(--glass-shadow);
   }
+}
+.menu {
+  padding: 0 0.5rem !important;
+  margin-top: 1rem;
 }
 
 .menu__link {
@@ -364,6 +365,7 @@
   backdrop-filter: blur(var(--glass-subtle-blur));
   -webkit-backdrop-filter: blur(var(--glass-subtle-blur));
   border-top: var(--glass-border);
+  color: var(--color-text-secondary);
 }
 
 .footer--dark {
@@ -372,10 +374,12 @@
 
 .footer__title {
   font-family: var(--ifm-heading-font-family);
+  color: var(--color-text-primary);
 }
 
 .footer__link-item {
   transition: color var(--transition-fast);
+  color: var(--color-text-secondary);
 }
 
 /* ─── Admonitions ─────────────────────────────────────── */

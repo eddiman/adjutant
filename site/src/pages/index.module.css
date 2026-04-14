@@ -12,6 +12,7 @@
   position: relative;
   overflow: hidden;
   background: transparent;
+  margin-top: calc(-1 * (var(--ifm-navbar-height) + var(--spacing-4)));
 }
 
 .heroText {
