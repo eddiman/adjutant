@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from adjutant.core.backend import ResolvedModel
 from adjutant.core.model import (
+    DEFAULT_CHAT_TIER,
     DEFAULT_MODEL,
     TIER_DEFAULTS,
     get_chat_model,
+    resolve_model_spec,
     resolve_kb_model,
 )
 
@@ -100,3 +103,32 @@ class TestResolveKbModel:
         config = {"llm": {"models": {"cheap": "custom/cheap"}}}
         result = resolve_kb_model("openai/gpt-4o", adj_dir / "state", config=config)
         assert result == "openai/gpt-4o"
+
+
+class TestResolveModelSpec:
+    def test_resolves_tier_with_variant(self, adj_dir: Path):
+        config = {
+            "llm": {
+                "models": {"medium": "github-copilot/gpt-5.4"},
+                "reasoning_effort": {"medium": "medium"},
+            }
+        }
+        result = resolve_model_spec("medium", adj_dir / "state", config)
+        assert result == ResolvedModel(
+            model="github-copilot/gpt-5.4", variant="medium", source="medium"
+        )
+
+    def test_explicit_model_has_no_variant(self, adj_dir: Path):
+        result = resolve_model_spec("github-copilot/gpt-5.4", adj_dir / "state")
+        assert result == ResolvedModel(
+            model="github-copilot/gpt-5.4", variant=None, source="explicit"
+        )
+
+    def test_default_to_chat_uses_config_default_model(self, adj_dir: Path):
+        config = {"messaging": {"telegram": {"default_model": "medium"}}}
+        result = resolve_model_spec("", adj_dir / "state", config, default_to_chat=True)
+        assert result.source == "medium"
+
+    def test_default_to_chat_falls_back_to_tier_name(self, adj_dir: Path):
+        result = resolve_model_spec("", adj_dir / "state", None, default_to_chat=True)
+        assert result.source == DEFAULT_CHAT_TIER

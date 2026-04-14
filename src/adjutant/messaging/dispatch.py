@@ -40,7 +40,6 @@ _FEATURE_GATES: dict[str, str] = {
 _PENDING_REFLECT_FILE_NAME = "pending_reflect"
 
 
-
 def _rate_limit_config(adj_dir: Path) -> tuple[int, int]:
     """Return (max_messages, window_seconds) from config with env var override."""
     window = _DEFAULT_RATE_LIMIT_WINDOW
@@ -142,7 +141,6 @@ async def dispatch_message(
         chat_id: Authorized chat ID.
     """
     from adjutant.messaging.telegram.commands import (
-        _load_pending_model,
         cmd_brief,
         cmd_digest,
         cmd_forget,
@@ -196,13 +194,6 @@ async def dispatch_message(
                 pending_reflect.unlink(missing_ok=True)
             _send("No problem — I've cancelled the reflection.")
             adj_log("messaging", "Reflect cancelled.")
-        return
-
-    # Pending model refinement flow — user is narrowing down a multi-match
-    if _load_pending_model(adj_dir) is not None and not text.startswith("/"):
-        await cmd_model(
-            text, message_id, adj_dir, bot_token=bot_token, chat_id=chat_id, refine=True
-        )
         return
 
     # Feature gate check — reject commands for disabled features

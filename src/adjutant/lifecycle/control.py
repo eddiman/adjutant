@@ -170,27 +170,6 @@ def restart(adj_dir: Path | None = None) -> str:
     else:
         lines.append("Telegram listener not running")
 
-    # Stop backend services (both — handles mid-switch state)
-    for svc_name, pattern, pid_name in [
-        ("OpenCode web server", "opencode web", "opencode_web.pid"),
-        ("CloudCLI web server", "cloudcli", "cloudcli_web.pid"),
-    ]:
-        pid_file = d / "state" / pid_name
-        pid = _read_pid(pid_file)
-        if pid and _pid_alive(pid):
-            with contextlib.suppress(ProcessLookupError, PermissionError):
-                os.kill(pid, signal.SIGTERM)
-            pid_file.unlink(missing_ok=True)
-            lines.append(f"{svc_name} stopped")
-        else:
-            orphan = _pgrep_first(pattern)
-            if orphan:
-                _kill_by_pattern(pattern, signal.SIGTERM)
-                time.sleep(1)
-                lines.append(f"{svc_name} stopped")
-            else:
-                lines.append(f"{svc_name} not running")
-
     lines += ["", "Waiting for clean shutdown..."]
     time.sleep(2)
 
@@ -255,18 +234,7 @@ def emergency_kill(adj_dir: Path | None = None) -> str:
     _kill_by_pattern("opencode.*adjutant", signal.SIGTERM)
     time.sleep(1)
     _kill_by_pattern("opencode.*adjutant", signal.SIGKILL)
-    web_pid_file = d / "state" / "opencode_web.pid"
-    web_pid_file.unlink(missing_ok=True)
     lines.append("OpenCode processes terminated")
-
-    # Terminate CloudCLI processes
-    lines.append("Terminating CloudCLI processes...")
-    _kill_by_pattern("cloudcli", signal.SIGTERM)
-    time.sleep(2)
-    _kill_by_pattern("cloudcli", signal.SIGKILL)
-    cloudcli_pid_file = d / "state" / "cloudcli_web.pid"
-    cloudcli_pid_file.unlink(missing_ok=True)
-    lines.append("CloudCLI processes terminated")
 
     # Terminate Telegram listener
     lines.append("Terminating Telegram listener...")
@@ -368,47 +336,6 @@ def _start_telegram_service(adj_dir: Path) -> str:
     return listener_start(adj_dir)
 
 
-def start_opencode_web(adj_dir: Path) -> str:
-    """Start the OpenCode web server. Returns status line."""
-    web_pid_file = adj_dir / "state" / "opencode_web.pid"
-    owned_pid = _read_pid(web_pid_file)
-
-    running_pid = _pgrep_first("opencode web")
-
-    if running_pid:
-        if owned_pid and running_pid == owned_pid and _pid_alive(owned_pid):
-            return f"OpenCode web server already running (PID {owned_pid})"
-        # Orphan — kill all and restart
-        _kill_by_pattern("opencode web", signal.SIGTERM)
-        time.sleep(2)
-        _kill_by_pattern("opencode web", signal.SIGKILL)
-        web_pid_file.unlink(missing_ok=True)
-
-    # Launch
-    log_file = adj_dir / "state" / "opencode_web.log"
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-    opencode_bin = shutil.which("opencode")
-    if not opencode_bin:
-        return "OpenCode not found in PATH — web server not started"
-
-    try:
-        with open(log_file, "a") as lf:
-            proc = subprocess.Popen(
-                [opencode_bin, "web", "--mdns"],
-                stdout=lf,
-                stderr=lf,
-                start_new_session=True,
-            )
-        web_pid_file.parent.mkdir(parents=True, exist_ok=True)
-        web_pid_file.write_text(str(proc.pid))
-        time.sleep(2)
-        if _pgrep_first("opencode web"):
-            return f"OpenCode web server started (PID {proc.pid})"
-        return f"OpenCode web server failed to start (check {log_file})"
-    except OSError as e:
-        return f"OpenCode web server error: {e}"
-
-
 def _sync_schedule_crontab(adj_dir: Path) -> str:
     """Sync schedule registry to crontab. Returns status line."""
     try:
@@ -468,23 +395,14 @@ def _handle_backend_switch(adj_dir: Path, old_backend: str, new_backend: str) ->
         from adjutant.core.backend import get_backend
 
         current_model = model_file.read_text().strip()
-        backend = get_backend(new_backend)
-        new_model = backend.translate_model_id(current_model)
-        if new_model != current_model:
-            model_file.write_text(new_model)
-            lines.append(f"Translated model: {current_model} → {new_model}")
+        if current_model not in {"cheap", "medium", "expensive"}:
+            backend = get_backend(new_backend)
+            new_model = backend.translate_model_id(current_model)
+            if new_model != current_model:
+                model_file.write_text(new_model)
+                lines.append(f"Translated model: {current_model} → {new_model}")
 
-    # 3. Stop old backend services
-    if old_backend == "opencode":
-        _kill_by_pattern("opencode web", signal.SIGTERM)
-        (adj_dir / "state" / "opencode_web.pid").unlink(missing_ok=True)
-        lines.append("Stopped opencode web server")
-    elif old_backend == "claude-cli":
-        _kill_by_pattern("cloudcli", signal.SIGTERM)
-        (adj_dir / "state" / "cloudcli_web.pid").unlink(missing_ok=True)
-        lines.append("Stopped CloudCLI web server")
-
-    # 4. Record new backend
+    # 3. Record new backend
     (adj_dir / "state" / "backend.txt").write_text(new_backend)
 
     # 5. Log
@@ -530,77 +448,6 @@ def _warn_nested_opencode_dependencies(adj_dir: Path) -> list[str]:
     return warnings
 
 
-def start_backend_service(adj_dir: Path) -> str:
-    """Start the appropriate backend service (opencode web or CloudCLI web)."""
-    try:
-        from adjutant.core.config import load_typed_config
-
-        config = load_typed_config(adj_dir / "adjutant.yaml")
-        backend_name = config.llm.backend
-    except Exception:  # noqa: BLE001
-        backend_name = "opencode"
-
-    if backend_name == "claude-cli":
-        return _start_cloudcli_web(adj_dir)
-    return start_opencode_web(adj_dir)
-
-
-def _start_cloudcli_web(adj_dir: Path) -> str:
-    """Start the CloudCLI web server (browser UI for Claude Code CLI)."""
-    web_pid_file = adj_dir / "state" / "cloudcli_web.pid"
-    owned_pid = _read_pid(web_pid_file)
-
-    running_pid = _pgrep_first("cloudcli")
-
-    if running_pid:
-        if owned_pid and running_pid == owned_pid and _pid_alive(owned_pid):
-            return f"CloudCLI web server already running (PID {owned_pid})"
-        # Orphan — kill all and restart
-        _kill_by_pattern("cloudcli", signal.SIGTERM)
-        time.sleep(2)
-        _kill_by_pattern("cloudcli", signal.SIGKILL)
-        web_pid_file.unlink(missing_ok=True)
-
-    # Find binary
-    cloudcli_bin = os.environ.get("CLOUDCLI_BIN") or shutil.which("cloudcli")
-    if not cloudcli_bin:
-        return "CloudCLI not found in PATH — web server not started"
-
-    port = os.environ.get("CLOUDCLI_PORT", "3001")
-
-    # Build env: point CloudCLI at the adjutant workspace and claude binary
-    run_env = os.environ.copy()
-    run_env["WORKSPACES_ROOT"] = str(adj_dir)
-    from adjutant.core.backend import get_backend
-
-    backend = get_backend("claude-cli")
-    claude_bin = backend.find_binary()
-    if claude_bin:
-        run_env["CLAUDE_CLI_PATH"] = claude_bin
-
-    # Launch
-    log_file = adj_dir / "state" / "cloudcli_web.log"
-    log_file.parent.mkdir(parents=True, exist_ok=True)
-
-    try:
-        with open(log_file, "a") as lf:
-            proc = subprocess.Popen(
-                [cloudcli_bin, "--port", port],
-                stdout=lf,
-                stderr=lf,
-                start_new_session=True,
-                env=run_env,
-            )
-        web_pid_file.parent.mkdir(parents=True, exist_ok=True)
-        web_pid_file.write_text(str(proc.pid))
-        time.sleep(2)
-        if _pgrep_first("cloudcli"):
-            return f"CloudCLI web server started (PID {proc.pid})"
-        return f"CloudCLI web server failed to start (check {log_file})"
-    except OSError as e:
-        return f"CloudCLI web server error: {e}"
-
-
 def startup(
     adj_dir: Path | None = None,
     interactive: bool = True,
@@ -634,7 +481,6 @@ def startup(
             "  - Remove KILLED lockfile",
             "  - Restore crontab from backup",
             "  - Start telegram listener",
-            "  - Start OpenCode web server",
             "  - Send status to Telegram",
             "",
         ]
@@ -689,10 +535,7 @@ def startup(
     # Telegram listener
     lines.append(_start_telegram_service(d))
 
-    # Backend service (opencode web or CloudCLI web)
-    lines.append(start_backend_service(d))
-
-    # Post-startup PID sync
+    # Post-startup PID sync for the telegram listener
     sync_pid = _pgrep_first("messaging/telegram/listener")
     if sync_pid:
         lock_dir = d / "state" / "listener.lock"
@@ -702,16 +545,6 @@ def startup(
         tg_pid_file = d / "state" / "telegram.pid"
         if not tg_pid_file.exists():
             tg_pid_file.write_text(str(sync_pid))
-
-    sync_web = _pgrep_first("opencode web")
-    web_pid_file = d / "state" / "opencode_web.pid"
-    if sync_web and not web_pid_file.exists():
-        web_pid_file.write_text(str(sync_web))
-
-    sync_cloudcli = _pgrep_first("cloudcli")
-    cloudcli_pid_file = d / "state" / "cloudcli_web.pid"
-    if sync_cloudcli and not cloudcli_pid_file.exists():
-        cloudcli_pid_file.write_text(str(sync_cloudcli))
 
     # Sync schedules to crontab
     lines.append(_sync_schedule_crontab(d))

@@ -1,7 +1,6 @@
 ---
 description: Adjutant — your global orchestrator. Monitors projects, manages priorities, gives briefings.
 mode: primary
-model: anthropic/claude-sonnet-4-6
 tools:
   playwright_*: false
   chrome-devtools_*: false

@@ -111,7 +111,10 @@ class TestRunVision:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value="anthropic/claude-haiku-4-5"),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model="anthropic/claude-haiku-4-5", variant=None),
+            ),
         ):
             result = run_vision(str(img), "Describe this image.", tmp_path)
         assert result == "A cat on a mat"
@@ -123,7 +126,10 @@ class TestRunVision:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value="bad-model"),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model="bad-model", variant=None),
+            ),
         ):
             result = run_vision(str(img), "Describe", tmp_path)
         assert "vision" in result.lower() or "model" in result.lower()
@@ -135,7 +141,10 @@ class TestRunVision:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+            ),
         ):
             result = run_vision(str(img), "Describe", tmp_path)
         assert result == ""
@@ -147,7 +156,10 @@ class TestRunVision:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+            ),
         ):
             result = run_vision(str(img), "Describe", tmp_path)
         assert "timed out" in result.lower()
@@ -163,6 +175,7 @@ class TestRunVision:
             run_vision(str(img), "Describe", tmp_path, model="override-model")
         call_kwargs = backend.run.call_args[1]
         assert call_kwargs["model"] == "override-model"
+        assert call_kwargs["variant"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +205,10 @@ class TestRunVisionMulti:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+            ),
         ):
             result = run_vision_multi([str(img)], "Describe.", tmp_path)
         assert result == "A cat on a mat"
@@ -206,7 +222,10 @@ class TestRunVisionMulti:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+            ),
         ):
             result = run_vision_multi([str(img1), str(img2)], "Describe both.", tmp_path)
         assert result == "Two images described."
@@ -222,7 +241,10 @@ class TestRunVisionMulti:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+            ),
         ):
             run_vision_multi([str(img1), str(img2), str(img3)], "Describe.", tmp_path)
         call_kwargs = backend.run.call_args[1]
@@ -236,7 +258,10 @@ class TestRunVisionMulti:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+            ),
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
         assert "timed out" in result.lower()
@@ -248,7 +273,10 @@ class TestRunVisionMulti:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value="bad-model"),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model="bad-model", variant=None),
+            ),
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
         assert "model" in result.lower()
@@ -260,7 +288,10 @@ class TestRunVisionMulti:
         with (
             patch("adjutant.core.backend.get_backend", return_value=backend),
             patch("adjutant.core.logging.adj_log"),
-            patch("adjutant.capabilities.vision.vision.resolve_vision_model", return_value=_FALLBACK_MODEL),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+            ),
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
         assert result == ""

@@ -19,10 +19,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from adjutant.core.backend import ResolvedModel
+
 if TYPE_CHECKING:
     from pathlib import Path
 
 DEFAULT_MODEL = "anthropic/claude-haiku-4-5"
+DEFAULT_CHAT_TIER = "cheap"
 
 TIER_DEFAULTS: dict[str, str] = {
     "cheap": "anthropic/claude-haiku-4-5",
@@ -95,3 +98,57 @@ def resolve_kb_model(
 
     # Explicit model ID — use as-is
     return kb_model
+
+
+def _configured_default_chat_model(config: dict[str, Any] | None = None) -> str:
+    """Return messaging.telegram.default_model or a safe fallback."""
+    if config:
+        messaging = config.get("messaging", {})
+        telegram = messaging.get("telegram", {})
+        configured = telegram.get("default_model")
+        if configured:
+            return str(configured).strip()
+    return DEFAULT_CHAT_TIER
+
+
+def resolve_model_spec(
+    model_spec: str | None,
+    state_dir: Path | None = None,
+    config: dict[str, Any] | None = None,
+    *,
+    default_to_chat: bool = False,
+) -> ResolvedModel:
+    """Resolve a tier or explicit model into concrete model + variant.
+
+    Tier names resolve through adjutant.yaml and may carry a reasoning-effort
+    variant. Explicit model IDs pass through unchanged with no variant.
+    """
+    spec = (model_spec or "").strip()
+    if not spec:
+        spec = _configured_default_chat_model(config) if default_to_chat else "cheap"
+
+    if spec in ("inherit", ""):
+        if state_dir is not None:
+            model_file = state_dir / "telegram_model.txt"
+            if model_file.exists():
+                inherited = model_file.read_text().strip()
+                if inherited:
+                    return resolve_model_spec(inherited, state_dir, config)
+        spec = "cheap"
+
+    if spec in TIER_DEFAULTS:
+        configured_model = TIER_DEFAULTS[spec]
+        variant = None
+        if config:
+            llm = config.get("llm", {})
+            models = llm.get("models", {})
+            configured = models.get(spec)
+            if configured:
+                configured_model = str(configured)
+            reasoning_effort = llm.get("reasoning_effort", {})
+            configured_variant = reasoning_effort.get(spec)
+            if configured_variant:
+                variant = str(configured_variant)
+        return ResolvedModel(model=configured_model, variant=variant, source=spec)
+
+    return ResolvedModel(model=spec, variant=None, source="explicit")

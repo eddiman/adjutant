@@ -886,12 +886,12 @@ def doctor(ctx: click.Context) -> None:
         backend_name = "opencode"
 
     if backend_name == "claude-cli":
-        for cmd in ("claude", "cloudcli"):
-            path = shutil.which(cmd)
-            if path:
-                click.echo(f"  {cmd:<12} OK ({path})")
-            else:
-                click.echo(f"  {cmd:<12} MISSING")
+        cmd = "claude"
+        path = shutil.which(cmd)
+        if path:
+            click.echo(f"  {cmd:<12} OK ({path})")
+        else:
+            click.echo(f"  {cmd:<12} MISSING")
     else:
         cmd = "opencode"
         path = shutil.which(cmd)

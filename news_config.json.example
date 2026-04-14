@@ -22,7 +22,7 @@
   },
 
   "analysis": {
-    "model": "anthropic/claude-haiku-4-5",
+    "model": "cheap",
     "top_n": 3,
     "prefilter_limit": 20
   },

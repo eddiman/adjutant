@@ -119,7 +119,9 @@ class ClaudeCLIBackend:
             vision=True,
             model_listing=True,
             reaping=False,
-            web_server=True,
+            # web_server is False since the native CloudCLI web server
+            # was retired in favor of adjutant's own web/app.
+            web_server=False,
             remote_session=False,
             streaming=False,
             cost_tracking=True,
@@ -132,11 +134,13 @@ class ClaudeCLIBackend:
         agent: str | None = None,
         workdir: Path | None = None,
         model: str | None = None,
+        variant: str | None = None,
         session_id: str | None = None,
         timeout: float | None = None,
         env: dict[str, str] | None = None,
         files: list[Path] | None = None,
     ) -> LLMResult:
+        _ = variant  # Claude CLI does not expose a separate reasoning-effort flag.
         # Inject image file paths into prompt so Claude CLI reads them via
         # its built-in Read tool (which supports multimodal image viewing).
         if files:
@@ -240,8 +244,10 @@ class ClaudeCLIBackend:
         agent: str | None = None,
         workdir: Path | None = None,
         model: str | None = None,
+        variant: str | None = None,
         log_path: Path | None = None,
     ) -> None:
+        _ = variant  # Claude CLI does not expose a separate reasoning-effort flag.
         claude_bin = _find_claude()
         args = [claude_bin, "-p", "--output-format", "json"]
 
@@ -305,27 +311,12 @@ class ClaudeCLIBackend:
         return 0
 
     async def health_check(self, adj_dir: Path) -> bool:
-        if not self.find_binary():
-            return False
-        # Check if CloudCLI web server is running
-        from adjutant.core.process import read_pid_file
-
-        pid_file = adj_dir / "state" / "cloudcli_web.pid"
-        pid = read_pid_file(pid_file)
-        if pid is None:
-            return True  # No web server expected if PID file absent
-
-        # PID alive — try HTTP health endpoint
-        port = int(os.environ.get("CLOUDCLI_PORT", "3001"))
-        try:
-            import httpx
-
-            with httpx.Client(timeout=3.0) as client:
-                resp = client.get(f"http://localhost:{port}/health")
-                data = resp.json()
-                return data.get("status") == "ok"
-        except Exception:  # noqa: BLE001 — network/parse errors are a health failure
-            return False
+        # Previously this also probed the CloudCLI web server's /health
+        # endpoint. That native web server has been retired — adjutant's
+        # own web/app is the remote access UI — so healthy now just means
+        # "the claude binary is on PATH".
+        _ = adj_dir  # unused — kept for protocol compatibility
+        return self.find_binary() is not None
 
     async def list_models(self) -> str:
         return "haiku\nsonnet\nopus"

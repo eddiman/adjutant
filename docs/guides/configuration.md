@@ -29,7 +29,7 @@ messaging:
   backend: "telegram"           # "telegram" or "none" (CLI-only)
   telegram:
     session_timeout_seconds: 7200       # 2h window for conversational context
-    default_model: "anthropic/claude-haiku-4-5"
+    default_model: "cheap"             # tier name or explicit model ID
     chat_timeout_seconds: 240           # LLM response timeout per message
     rate_limit:
       messages_per_minute: 10
@@ -44,6 +44,10 @@ llm:
     cheap: "anthropic/claude-haiku-4-5"     # routine chat and triage
     medium: "anthropic/claude-sonnet-4-6"   # escalations
     expensive: "anthropic/claude-opus-4-6"  # /confirm only
+  reasoning_effort:
+    cheap: null                              # OpenCode only: passed as --variant
+    medium: null
+    expensive: null
   caps:
     session_tokens: 44000             # per-session token budget
     session_window_hours: 5           # rolling window for session tracking
@@ -125,6 +129,8 @@ debug:
 **`llm.permission_mode`** — Claude CLI only. `"skip"` (default) uses `--dangerously-skip-permissions` for non-interactive mode. `"allowlist"` uses `--allowedTools` with an explicit whitelist. Ignored when backend is `"opencode"`.
 
 **`llm.models`** — Three tiers. Adjutant uses `cheap` by default for chat and triage, escalates to `medium` for reasoning, analysis, and `/reflect`, and only uses `expensive` for `/confirm`. Default tiers: `cheap` = claude-haiku-4-5, `medium` = claude-sonnet-4-6, `expensive` = claude-opus-4-6. You can change these to any model supported by your backend.
+
+**`llm.reasoning_effort`** — Optional per-tier reasoning effort. On the OpenCode backend this is passed through as `opencode run --variant ...`. This is provider-specific, so only set values your selected model supports.
 
 **`llm.caps`** — Token budget guardrails. These generate usage warnings but do not hard-block requests.
 

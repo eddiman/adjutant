@@ -84,23 +84,10 @@ class TestHandleBackendSwitch:
 
         assert (adj_dir / "state" / "backend.txt").read_text() == "claude-cli"
 
-    def test_stops_opencode_web_when_switching_away(self, adj_dir: Path) -> None:
-        (adj_dir / "state" / "opencode_web.pid").write_text("12345")
-
-        with patch("adjutant.lifecycle.control._kill_by_pattern") as mock_kill:
-            _handle_backend_switch(adj_dir, "opencode", "claude-cli")
-
-        mock_kill.assert_called()
-        assert not (adj_dir / "state" / "opencode_web.pid").exists()
-
-    def test_stops_cloudcli_when_switching_away(self, adj_dir: Path) -> None:
-        (adj_dir / "state" / "cloudcli_web.pid").write_text("12345")
-
-        with patch("adjutant.lifecycle.control._kill_by_pattern") as mock_kill:
-            _handle_backend_switch(adj_dir, "claude-cli", "opencode")
-
-        mock_kill.assert_called()
-        assert not (adj_dir / "state" / "cloudcli_web.pid").exists()
+    # NOTE: _handle_backend_switch used to stop the old backend's native
+    # web server (opencode web / cloudcli) here. That lifecycle was
+    # removed — adjutant's own web/app is the remote UI now — so there
+    # are no web-server side effects to test on a backend switch.
 
     def test_no_crash_when_no_session_or_model(self, adj_dir: Path) -> None:
         """Switch works even when there's no session or model file."""

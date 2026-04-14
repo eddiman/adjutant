@@ -100,7 +100,7 @@ def adj_config(adj_dir: Path) -> dict:
             "backend": "telegram",
             "telegram": {
                 "session_timeout_seconds": 7200,
-                "default_model": "anthropic/claude-haiku-4-5",
+                "default_model": "cheap",
                 "rate_limit": {"messages_per_minute": 10},
             },
         },
@@ -109,7 +109,8 @@ def adj_config(adj_dir: Path) -> dict:
                 "cheap": "anthropic/claude-haiku-4-5",
                 "medium": "anthropic/claude-sonnet-4-6",
                 "expensive": "anthropic/claude-opus-4-6",
-            }
+            },
+            "reasoning_effort": {"cheap": None, "medium": None, "expensive": None},
         },
         "features": {
             "news": {"enabled": False},
@@ -143,8 +144,7 @@ def mock_claude(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     mock_bin.mkdir(exist_ok=True)
     script = mock_bin / "claude"
     script.write_text(
-        '#!/bin/bash\n'
-        'echo \'{"result":"OK","session_id":"test-uuid-123","is_error":false}\'\n'
+        '#!/bin/bash\necho \'{"result":"OK","session_id":"test-uuid-123","is_error":false}\'\n'
     )
     script.chmod(0o755)
     monkeypatch.setenv("PATH", f"{mock_bin}:{os.environ['PATH']}")

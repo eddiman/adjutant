@@ -130,10 +130,12 @@ class TestAdjutantConfig:
         config_file = tmp_path / "adjutant.yaml"
         config_file.write_text(
             "instance:\n  name: test-instance\n\nllm:\n  models:\n    cheap: test-model\n"
+            "  reasoning_effort:\n    cheap: medium\n"
         )
         config = AdjutantConfig.load(config_file)
         assert config.instance.name == "test-instance"
         assert config.llm.models.cheap == "test-model"
+        assert config.llm.reasoning_effort.cheap == "medium"
 
     def test_load_missing_file_returns_defaults(self, tmp_path: Path) -> None:
         config = AdjutantConfig.load(tmp_path / "nonexistent.yaml")
@@ -148,6 +150,14 @@ class TestAdjutantConfig:
     def test_get_model_unknown_tier_falls_back_to_cheap(self) -> None:
         config = AdjutantConfig()
         assert config.get_model("unknown") == "anthropic/claude-haiku-4-5"
+
+    def test_get_reasoning_effort(self) -> None:
+        config = AdjutantConfig.model_validate(
+            {"llm": {"reasoning_effort": {"cheap": "medium", "expensive": "xhigh"}}}
+        )
+        assert config.get_reasoning_effort("cheap") == "medium"
+        assert config.get_reasoning_effort("expensive") == "xhigh"
+        assert config.get_reasoning_effort("medium") is None
 
     def test_is_feature_enabled_defaults_false(self) -> None:
         config = AdjutantConfig()

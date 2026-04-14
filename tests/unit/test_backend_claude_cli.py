@@ -235,11 +235,17 @@ class TestReap:
 
 
 class TestHealthCheck:
+    """health_check just verifies the claude binary is available.
+
+    Previously it also probed the CloudCLI web server's /health endpoint;
+    that native web server has been retired in favor of adjutant's own
+    web/app, so the check is now a pure binary availability check.
+    """
+
     @pytest.mark.asyncio
-    async def test_healthy_when_binary_found_no_pid(
+    async def test_healthy_when_binary_found(
         self, mock_claude: Path, tmp_path: Path
     ) -> None:
-        """No PID file → healthy (CloudCLI not expected to be running)."""
         backend = ClaudeCLIBackend()
         assert await backend.health_check(tmp_path) is True
 
@@ -251,42 +257,6 @@ class TestHealthCheck:
         monkeypatch.delenv("CLAUDE_CODE_BIN", raising=False)
         backend = ClaudeCLIBackend()
         assert await backend.health_check(tmp_path) is False
-
-    @pytest.mark.asyncio
-    async def test_healthy_when_cloudcli_responds(
-        self, mock_claude: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """PID file exists and /health endpoint returns ok → healthy."""
-        state = tmp_path / "state"
-        state.mkdir()
-        (state / "cloudcli_web.pid").write_text(str(os.getpid()))
-
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "ok"}
-        mock_client.get.return_value = mock_response
-        mock_client.__enter__ = MagicMock(return_value=mock_client)
-        mock_client.__exit__ = MagicMock(return_value=False)
-
-        with patch("adjutant.core.backend_claude_cli.httpx.Client", return_value=mock_client):
-            backend = ClaudeCLIBackend()
-            assert await backend.health_check(tmp_path) is True
-
-    @pytest.mark.asyncio
-    async def test_unhealthy_when_cloudcli_unreachable(
-        self, mock_claude: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """PID file exists but /health endpoint fails → unhealthy."""
-        state = tmp_path / "state"
-        state.mkdir()
-        (state / "cloudcli_web.pid").write_text(str(os.getpid()))
-
-        with patch(
-            "adjutant.core.backend_claude_cli.httpx.Client",
-            side_effect=ConnectionError("refused"),
-        ):
-            backend = ClaudeCLIBackend()
-            assert await backend.health_check(tmp_path) is False
 
 
 # ---------------------------------------------------------------------------

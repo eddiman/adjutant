@@ -60,7 +60,7 @@ Three model tiers are configured in `adjutant.yaml`:
 | `medium` | Escalations, deeper analysis |
 | `expensive` | Complex reasoning (`/confirm` only) |
 
-The active model for Telegram chat is stored in `state/telegram_model.txt` and can be switched at runtime via `/model <model-name>`.
+The active Telegram chat tier is stored in `state/telegram_model.txt` and can be switched at runtime via `/model cheap`, `/model medium`, or `/model expensive`.
 
 ---
 

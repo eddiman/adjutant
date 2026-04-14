@@ -21,6 +21,8 @@ import os
 import sys
 from pathlib import Path
 
+from adjutant.core.model import resolve_model_spec
+
 # ---------------------------------------------------------------------------
 # Model resolution
 # ---------------------------------------------------------------------------
@@ -60,6 +62,18 @@ def resolve_vision_model(adj_dir: Path) -> str:
     if model:
         return model
     return _FALLBACK_MODEL
+
+
+def resolve_vision_model_spec(adj_dir: Path, model: str | None = None):
+    """Resolve the concrete vision model and optional reasoning-effort variant."""
+    from adjutant.core.config import load_config
+
+    return resolve_model_spec(
+        model or resolve_vision_model(adj_dir),
+        adj_dir / "state",
+        load_config(adj_dir / "adjutant.yaml"),
+        default_to_chat=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -105,20 +119,29 @@ def run_vision_multi(
         if not img.is_file():
             raise FileNotFoundError(f"Image file not found: {image_path}")
 
-    resolved_model = model or resolve_vision_model(adj_dir)
+    resolved = resolve_vision_model_spec(adj_dir, model)
 
     if len(image_paths) == 1:
-        adj_log("vision", f"Vision analysis: {image_paths[0]} using {resolved_model}")
+        adj_log(
+            "vision",
+            f"Vision analysis: {image_paths[0]} using {resolved.model} variant={resolved.variant}",
+        )
     else:
         adj_log(
             "vision",
-            f"Vision analysis: {len(image_paths)} images using {resolved_model}",
+            f"Vision analysis: {len(image_paths)} images using {resolved.model} variant={resolved.variant}",
         )
 
     backend = get_backend()
     files = [Path(p) for p in image_paths]
     result = asyncio.run(
-        backend.run(prompt, model=resolved_model, files=files, timeout=_VISION_TIMEOUT)
+        backend.run(
+            prompt,
+            model=resolved.model,
+            variant=resolved.variant,
+            files=files,
+            timeout=_VISION_TIMEOUT,
+        )
     )
 
     if result.error_type == "vision_unsupported":

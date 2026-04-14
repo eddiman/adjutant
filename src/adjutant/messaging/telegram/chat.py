@@ -16,6 +16,7 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from adjutant.core.model import DEFAULT_CHAT_TIER, resolve_model_spec
 from adjutant.core.logging import adj_log
 
 if TYPE_CHECKING:
@@ -57,14 +58,20 @@ _CHAT_TIMEOUT = _DEFAULT_CHAT_TIMEOUT
 def get_model(adj_dir: Path) -> str:
     """Get the current chat model.
 
-    Reads adj_dir/state/telegram_model.txt; fallback: anthropic/claude-haiku-4-5.
+    Reads adj_dir/state/telegram_model.txt; fallback: messaging.telegram.default_model.
     """
+    from adjutant.core.config import load_config
+
     model_file = adj_dir / "state" / "telegram_model.txt"
     if model_file.is_file():
         model = model_file.read_text().strip()
         if model:
             return model
-    return "anthropic/claude-haiku-4-5"
+    config = load_config(adj_dir / "adjutant.yaml")
+    messaging = config.get("messaging", {})
+    telegram = messaging.get("telegram", {})
+    default_model = str(telegram.get("default_model") or "").strip()
+    return default_model or DEFAULT_CHAT_TIER
 
 
 # ---------------------------------------------------------------------------
@@ -181,11 +188,19 @@ async def run_chat(message: str, adj_dir: Path) -> str:
     """
     from adjutant.core.backend import BackendNotFoundError, get_backend
 
-    model = get_model(adj_dir)
-    existing_session = get_session_id(adj_dir, model=model)
+    from adjutant.core.config import load_config
+
+    model_spec = get_model(adj_dir)
+    config = load_config(adj_dir / "adjutant.yaml")
+    resolved = resolve_model_spec(model_spec, adj_dir / "state", config, default_to_chat=True)
+    existing_session = get_session_id(adj_dir, model=f"{resolved.model}|{resolved.variant or ''}")
 
     _, chat_timeout = _get_config_timeouts(adj_dir)
-    adj_log("telegram", f"Chat: model={model} session={'yes' if existing_session else 'new'}")
+    adj_log(
+        "telegram",
+        f"Chat: model={resolved.model} variant={resolved.variant} "
+        f"spec={model_spec} session={'yes' if existing_session else 'new'}",
+    )
 
     try:
         backend = get_backend()
@@ -193,7 +208,8 @@ async def run_chat(message: str, adj_dir: Path) -> str:
             message,
             agent="adjutant",
             workdir=adj_dir,
-            model=model,
+            model=resolved.model,
+            variant=resolved.variant,
             session_id=existing_session,
             timeout=chat_timeout,
         )
@@ -202,7 +218,7 @@ async def run_chat(message: str, adj_dir: Path) -> str:
 
     if result.timed_out:
         adj_log("telegram", "Chat timed out after 240s")
-        if model.startswith("anthropic/"):
+        if resolved.model.startswith("anthropic/"):
             return (
                 "Request timed out after 240s. If this keeps happening, you may have hit your "
                 "Anthropic 5-hour usage limit — check usage.anthropic.com. "
@@ -211,7 +227,10 @@ async def run_chat(message: str, adj_dir: Path) -> str:
         return "Request timed out after 240s — the AI server may be slow. Try again in a moment."
 
     if result.error_type == "model_not_found":
-        return f"The model `{model}` is no longer available. Use /model to switch to a valid one."
+        return (
+            f"The model `{resolved.model}` is no longer available. "
+            "Use /model to switch to a valid one."
+        )
 
     reply = result.text
 
@@ -219,7 +238,7 @@ async def run_chat(message: str, adj_dir: Path) -> str:
     new_sid = result.session_id
     if new_sid:
         if not existing_session:
-            save_session(new_sid, adj_dir, model=model)
+            save_session(new_sid, adj_dir, model=f"{resolved.model}|{resolved.variant or ''}")
         else:
             touch_session(adj_dir)
 

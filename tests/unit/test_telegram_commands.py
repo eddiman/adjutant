@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from adjutant.core.backend import LLMResult
 from adjutant.messaging.telegram.commands import (
     _journal_append,
+    _run_opencode_prompt,
     cmd_help,
     cmd_kb,
     cmd_kill,
@@ -18,10 +21,13 @@ from adjutant.messaging.telegram.commands import (
     cmd_reflect_request,
     cmd_resume,
     cmd_schedule,
-    cmd_search,
     cmd_screenshot,
+    cmd_search,
     cmd_status,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 BOT = "123:testtoken"
@@ -41,6 +47,43 @@ def _capture_send():
 
     mock = MagicMock(side_effect=_fake_send)
     return mock, sent
+
+
+# ---------------------------------------------------------------------------
+# _run_opencode_prompt
+# ---------------------------------------------------------------------------
+
+
+class TestRunOpencodePrompt:
+    @pytest.mark.asyncio
+    async def test_runs_standalone_prompt_without_agent_wrapper(self, tmp_path: Path) -> None:
+        prompt = tmp_path / "prompts" / "self_assess.md"
+        prompt.parent.mkdir(parents=True)
+        prompt.write_text("Standalone prompt text")
+
+        backend = MagicMock()
+        backend.run = AsyncMock(return_value=LLMResult(text="Done"))
+        backend.reap = AsyncMock(return_value=0)
+        backend.capabilities = SimpleNamespace(reaping=False)
+
+        resolved = SimpleNamespace(model="anthropic/claude-sonnet-4-6", variant="high")
+
+        with (
+            patch("adjutant.core.backend.get_backend", return_value=backend),
+            patch("adjutant.core.config.load_config", return_value={}),
+            patch("adjutant.messaging.telegram.commands.resolve_model_spec", return_value=resolved),
+        ):
+            result = await _run_opencode_prompt(prompt, 30.0, tmp_path, "medium")
+
+        assert result == "Done"
+        backend.run.assert_awaited_once()
+        assert backend.run.await_args.args == ("Standalone prompt text",)
+        assert backend.run.await_args.kwargs == {
+            "workdir": tmp_path,
+            "model": "anthropic/claude-sonnet-4-6",
+            "variant": "high",
+            "timeout": 30.0,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +176,7 @@ class TestCmdKill:
     async def test_sends_confirmation_and_starts_kill(self, tmp_path: Path) -> None:
         mock_send, sent = _capture_send()
         with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
-            with patch("adjutant.lifecycle.control.emergency_kill") as mock_kill:
+            with patch("adjutant.lifecycle.control.emergency_kill"):
                 await cmd_kill(1, tmp_path, bot_token=BOT, chat_id=CHAT)
                 import time
 
@@ -202,41 +245,56 @@ class TestCmdModel:
         state = tmp_path / "state"
         state.mkdir()
 
-        # Mock opencode models to include the target model
-        fake_proc = AsyncMock()
-        fake_proc.communicate = AsyncMock(
-            return_value=(b"anthropic/claude-opus-4-6\nanthropicmodel2\n", b"")
-        )
-        fake_proc.returncode = 0
-
         with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
-            with patch("asyncio.create_subprocess_exec", return_value=fake_proc):
-                await cmd_model(
-                    "anthropic/claude-opus-4-6", 1, tmp_path, bot_token=BOT, chat_id=CHAT
-                )
+            await cmd_model("expensive", 1, tmp_path, bot_token=BOT, chat_id=CHAT)
 
         model_file = state / "telegram_model.txt"
         assert model_file.is_file()
-        assert model_file.read_text().strip() == "anthropic/claude-opus-4-6"
-        assert any("switched" in m.lower() or "claude-opus" in m for m in sent)
+        assert model_file.read_text().strip() == "expensive"
+        assert any("switched" in m.lower() or "expensive" in m.lower() for m in sent)
 
     @pytest.mark.asyncio
     async def test_shows_current_model_when_no_arg(self, tmp_path: Path) -> None:
         mock_send, sent = _capture_send()
         state = tmp_path / "state"
         state.mkdir()
-        (state / "telegram_model.txt").write_text("anthropic/claude-haiku-4-5")
-
-        fake_proc = AsyncMock()
-        fake_proc.communicate = AsyncMock(return_value=(b"model1\nmodel2\n", b""))
-        fake_proc.returncode = 0
+        (state / "telegram_model.txt").write_text("medium")
 
         with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
-            with patch("asyncio.create_subprocess_exec", return_value=fake_proc):
-                await cmd_model("", 1, tmp_path, bot_token=BOT, chat_id=CHAT)
+            await cmd_model("", 1, tmp_path, bot_token=BOT, chat_id=CHAT)
 
         assert len(sent) == 1
-        assert "current model" in sent[0].lower()
+        assert "current tier" in sent[0].lower()
+        assert "available tiers" in sent[0].lower()
+        assert "reasoning" in sent[0].lower()
+        assert "`cheap`" in sent[0]
+        assert "`medium`" in sent[0]
+        assert "`expensive`" in sent[0]
+
+    @pytest.mark.asyncio
+    async def test_switches_to_tier_name_without_model_lookup(self, tmp_path: Path) -> None:
+        mock_send, sent = _capture_send()
+        state = tmp_path / "state"
+        state.mkdir()
+
+        with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
+            await cmd_model("medium", 1, tmp_path, bot_token=BOT, chat_id=CHAT)
+
+        model_file = state / "telegram_model.txt"
+        assert model_file.read_text().strip() == "medium"
+        assert any("tier" in m.lower() for m in sent)
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_tier_model_name(self, tmp_path: Path) -> None:
+        mock_send, sent = _capture_send()
+        state = tmp_path / "state"
+        state.mkdir()
+
+        with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
+            await cmd_model("anthropic/claude-opus-4-6", 1, tmp_path, bot_token=BOT, chat_id=CHAT)
+
+        assert not (state / "telegram_model.txt").exists()
+        assert any("only the configured tiers are allowed" in m.lower() for m in sent)
 
 
 # ---------------------------------------------------------------------------

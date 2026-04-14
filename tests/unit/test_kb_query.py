@@ -49,7 +49,9 @@ def _make_kb(tmp_path: Path, name: str, model: str = "inherit") -> Path:
     return kb_path
 
 
-def _mock_backend(text="The answer.", session_id=None, error_type=None, returncode=0, timed_out=False):
+def _mock_backend(
+    text="The answer.", session_id=None, error_type=None, returncode=0, timed_out=False
+):
     """Return a MagicMock backend whose ``run`` returns an ``LLMResult``."""
     result = LLMResult(
         text=text,
@@ -161,6 +163,7 @@ class TestKbQueryByPath:
 
         call_kwargs = backend.run.call_args[1]
         assert call_kwargs["timeout"] == 30.0
+        assert call_kwargs["variant"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +291,10 @@ class TestKbWriteByPath:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
 
-        with patch("adjutant.capabilities.kb.query.get_backend", side_effect=BackendNotFoundError("not found")):
+        with patch(
+            "adjutant.capabilities.kb.query.get_backend",
+            side_effect=BackendNotFoundError("not found"),
+        ):
             with pytest.raises(BackendNotFoundError):
                 kb_write_by_path(kb_path, "update issue #1", adj_dir)
 
@@ -319,6 +325,7 @@ class TestKbWriteByPath:
         call_kwargs = backend.run_detached.call_args[1]
         assert call_kwargs["agent"] == "kb"
         assert call_kwargs["workdir"] == kb_path
+        assert "variant" in call_kwargs
 
     def test_truncates_long_instruction_in_preview(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
@@ -409,10 +416,13 @@ class TestKbQueryAll:
         adj_dir = _make_adj_dir(tmp_path)
         kb1 = _make_kb(tmp_path, "alpha")
         kb2 = _make_kb(tmp_path, "beta")
-        _make_registry_multi(adj_dir, [
-            ("alpha", str(kb1), ""),
-            ("beta", str(kb2), "Ask about deadlines"),
-        ])
+        _make_registry_multi(
+            adj_dir,
+            [
+                ("alpha", str(kb1), ""),
+                ("beta", str(kb2), "Ask about deadlines"),
+            ],
+        )
 
         backend = _mock_backend(text="Status OK.")
         with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
@@ -441,10 +451,13 @@ class TestKbQueryAll:
         adj_dir = _make_adj_dir(tmp_path)
         kb1 = _make_kb(tmp_path, "good")
         kb2 = tmp_path / "bad"  # Don't create — will cause error
-        _make_registry_multi(adj_dir, [
-            ("good", str(kb1), ""),
-            ("bad", str(kb2), ""),
-        ])
+        _make_registry_multi(
+            adj_dir,
+            [
+                ("good", str(kb1), ""),
+                ("bad", str(kb2), ""),
+            ],
+        )
 
         backend = _mock_backend(text="Working fine.")
         with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
@@ -503,10 +516,13 @@ class TestKbCrossQuery:
         adj_dir = _make_adj_dir(tmp_path)
         kb1 = _make_kb(tmp_path, "alpha")
         kb2 = _make_kb(tmp_path, "beta")
-        _make_registry_multi(adj_dir, [
-            ("alpha", str(kb1), ""),
-            ("beta", str(kb2), ""),
-        ])
+        _make_registry_multi(
+            adj_dir,
+            [
+                ("alpha", str(kb1), ""),
+                ("beta", str(kb2), ""),
+            ],
+        )
 
         # First 2 calls return KB results, 3rd call returns synthesis
         call_count = 0

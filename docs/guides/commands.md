@@ -57,8 +57,8 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 
 | Command | What it does |
 |---------|-------------|
-| `/model` | Shows the currently active model |
-| `/model <name>` | Switches to a different model for the current session. Example: `/model anthropic/claude-opus-4-6`. The model reverts to default on session expiry. |
+| `/model` | Shows the currently active tier and the configured `cheap` / `medium` / `expensive` mappings, including reasoning effort |
+| `/model <tier>` | Switches Telegram chat to one of the configured tiers only: `cheap`, `medium`, or `expensive`. Example: `/model medium`. |
 
 ### Help
 

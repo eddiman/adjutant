@@ -121,7 +121,18 @@ def analyze_news(adj_dir: Path | None = None) -> str:
     )
 
     top_n = int(config.get("analysis", {}).get("top_n", 5))
-    model = config.get("analysis", {}).get("model", "anthropic/claude-haiku-4-5")
+    model_spec = config.get("analysis", {}).get("model", "cheap")
+
+    # Resolve tier names (cheap/medium/expensive) through adjutant.yaml;
+    # explicit model IDs pass through unchanged.
+    from adjutant.core.config import load_config
+    from adjutant.core.model import resolve_model_spec
+
+    resolved = resolve_model_spec(
+        model_spec,
+        adj_dir / "state",
+        load_config(adj_dir / "adjutant.yaml"),
+    )
 
     prompt = (
         f"You are analyzing agentic AI news. Here are {len(top_items)} candidate items:\n\n"
@@ -133,11 +144,16 @@ def analyze_news(adj_dir: Path | None = None) -> str:
         '"summary": "One sentence why it matters"}\n]'
     )
 
-    adj_log("news-analyze", f"Calling {model}...")
+    adj_log(
+        "news-analyze",
+        f"Calling {resolved.model} variant={resolved.variant} (spec={model_spec})...",
+    )
 
     try:
         backend = get_backend()
-        llm_result = asyncio.run(backend.run(prompt, model=model))
+        llm_result = asyncio.run(
+            backend.run(prompt, model=resolved.model, variant=resolved.variant)
+        )
     except (BackendNotFoundError, Exception) as exc:
         return f"ERROR:LLM call failed: {exc}"
 

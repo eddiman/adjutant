@@ -220,7 +220,7 @@ messaging:
   backend: "telegram"
   telegram:
     session_timeout_seconds: 7200
-    default_model: "anthropic/claude-haiku-4-5"
+    default_model: "cheap"
     rate_limit:
       messages_per_minute: 10
       backoff_exponential: true
@@ -231,6 +231,10 @@ llm:
     cheap: "anthropic/claude-haiku-4-5"
     medium: "anthropic/claude-sonnet-4-6"
     expensive: "anthropic/claude-opus-4-6"
+  reasoning_effort:
+    cheap: null
+    medium: null
+    expensive: null
   caps:
     session_tokens: 44000
     session_window_hours: 5

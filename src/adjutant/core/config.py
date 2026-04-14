@@ -42,7 +42,7 @@ class TelegramRateLimitConfig(BaseModel):
 class TelegramConfig(BaseModel):
     session_timeout_seconds: int = 7200
     chat_timeout_seconds: int = 240
-    default_model: str = "anthropic/claude-haiku-4-5"
+    default_model: str = "cheap"
     rate_limit: TelegramRateLimitConfig = Field(default_factory=TelegramRateLimitConfig)
 
 
@@ -57,6 +57,12 @@ class ModelsConfig(BaseModel):
     expensive: str = "anthropic/claude-opus-4-6"
 
 
+class ReasoningEffortConfig(BaseModel):
+    cheap: str | None = None
+    medium: str | None = None
+    expensive: str | None = None
+
+
 class CapsConfig(BaseModel):
     session_tokens: int = 44000
     session_window_hours: int = 5
@@ -68,6 +74,7 @@ class LLMConfig(BaseModel):
     permission_mode: str = "skip"
     allowed_tools: str | None = None
     models: ModelsConfig = Field(default_factory=ModelsConfig)
+    reasoning_effort: ReasoningEffortConfig = Field(default_factory=ReasoningEffortConfig)
     caps: CapsConfig = Field(default_factory=CapsConfig)
 
     @field_validator("backend")
@@ -217,6 +224,10 @@ class AdjutantConfig(BaseModel):
         """Return the model string for a tier (cheap/medium/expensive)."""
         model = getattr(self.llm.models, tier, None)
         return model if model is not None else self.llm.models.cheap
+
+    def get_reasoning_effort(self, tier: str) -> str | None:
+        """Return the configured reasoning-effort variant for a tier."""
+        return getattr(self.llm.reasoning_effort, tier, None)
 
     def get_schedule(self, name: str) -> ScheduleConfig | None:
         """Return a ScheduleConfig by name, or None if not found."""

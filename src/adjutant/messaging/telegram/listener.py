@@ -11,8 +11,11 @@ Responsibilities (and nothing else):
   6. Advance offset past ALL updates
   7. Route to dispatch_message / dispatch_photo
   8. Run opencode_reap every 6 cycles (~1 minute)
-  9. Check opencode web server liveness every 30 cycles (~5 min)
-  10. Release lock and clean up on exit
+  9. Release lock and clean up on exit
+
+The backend-service watchdog (which used to restart the native
+`opencode web` / `cloudcli` web servers) was removed when those
+services were retired in favor of adjutant's own web/app.
 
 Run as: python -m adjutant.messaging.telegram.listener
 """
@@ -30,7 +33,6 @@ from adjutant.core.logging import adj_log
 
 _POLL_TIMEOUT = 10  # seconds — long-poll interval passed to Telegram
 _REAP_INTERVAL = 6  # poll cycles between opencode_reap calls
-_WEB_WATCHDOG_INTERVAL = 30  # poll cycles between web server liveness checks (~5 min)
 _OFFSET_FILE_NAME = "telegram_offset"
 _LOCKDIR_NAME = "listener.lock"
 
@@ -89,50 +91,6 @@ async def _poll_once(
         return None
 
 
-async def _watchdog_check_backend_service(adj_dir: Path) -> None:
-    """Check if the backend service is alive; restart if dead.
-
-    Dispatches to the correct backend service (opencode web or CloudCLI
-    web server) based on the active backend configuration.
-    """
-    from adjutant.core.process import read_pid_file
-    from adjutant.lifecycle.control import start_backend_service
-
-    # Determine which PID file to check
-    try:
-        from adjutant.core.config import load_typed_config
-
-        backend_name = load_typed_config(adj_dir / "adjutant.yaml").llm.backend
-    except Exception:  # noqa: BLE001
-        backend_name = "opencode"
-
-    if backend_name == "claude-cli":
-        pid_file = adj_dir / "state" / "cloudcli_web.pid"
-        svc_name = "CloudCLI web server"
-    else:
-        pid_file = adj_dir / "state" / "opencode_web.pid"
-        svc_name = "opencode web"
-
-    if not pid_file.exists():
-        adj_log("telegram", f"Watchdog: no {svc_name} PID file — starting service")
-        result = await asyncio.to_thread(start_backend_service, adj_dir)
-        adj_log("telegram", f"Watchdog: {result}")
-        return
-
-    live_pid = read_pid_file(pid_file)
-    if live_pid is not None:
-        return  # Process is alive
-
-    try:
-        stale_pid_str = pid_file.read_text().strip()
-    except OSError:
-        stale_pid_str = "?"
-    adj_log("telegram", f"Watchdog: {svc_name} (PID {stale_pid_str}) is dead — restarting")
-    pid_file.unlink(missing_ok=True)
-    result = await asyncio.to_thread(start_backend_service, adj_dir)
-    adj_log("telegram", f"Watchdog: {result}")
-
-
 async def main() -> None:  # noqa: C901 — complexity is inherent to a polling loop
     adj_dir = _adj_dir()
     adj_dir.joinpath("state").mkdir(parents=True, exist_ok=True)
@@ -172,7 +130,6 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
     offset = _load_offset(adj_dir)
     last_processed_id = 0
     reap_counter = 0
-    watchdog_counter = 0
 
     adj_log("telegram", f"Listener started (offset={offset})")
 
@@ -195,15 +152,6 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                         await backend.reap(adj_dir)
                 except Exception as exc:
                     adj_log("telegram", f"reap error: {exc}")
-
-            # Periodic backend service watchdog (~5 min)
-            watchdog_counter += 1
-            if watchdog_counter >= _WEB_WATCHDOG_INTERVAL:
-                watchdog_counter = 0
-                try:
-                    await _watchdog_check_backend_service(adj_dir)
-                except Exception as exc:
-                    adj_log("telegram", f"Watchdog error: {exc}")
 
             # Poll Telegram
             updates = await _poll_once(bot_token, offset)

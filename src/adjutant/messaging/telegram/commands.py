@@ -13,23 +13,20 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import os
 import subprocess
 import sys
-import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 from adjutant.core.logging import adj_log
+from adjutant.core.model import resolve_model_spec
 
 # ---------------------------------------------------------------------------
 # Model selection state
 # ---------------------------------------------------------------------------
 
-_PENDING_MODEL_FILE = "pending_model_matches.json"
-_PENDING_MODEL_TTL = 120  # seconds — auto-expire stale refinement prompts
+_MODEL_TIERS = {"cheap", "medium", "expensive"}
 
 
 async def _fetch_available_models() -> list[str]:
@@ -46,122 +43,28 @@ async def _fetch_available_models() -> list[str]:
         return []
 
 
-def _normalize(s: str) -> str:
-    """Normalize a model string for fuzzy comparison.
+def _get_default_model(adj_dir: Path) -> str:
+    """Read the configured default Telegram model/tier."""
+    from adjutant.core.config import load_config
 
-    Replaces hyphens and dots with spaces so that "4.6", "4-6", and "4 6"
-    all compare equal.  Also lowercases.
-    """
-    return s.lower().replace("-", " ").replace(".", " ")
-
-
-def _fuzzy_match(query: str, models: list[str]) -> list[str]:
-    """Return models matching *query*.
-
-    Matching rules (applied in order — first non-empty result wins):
-      1. Exact match (case-sensitive)
-      2. Exact match (case-insensitive)
-      3. Token match: every space-separated token in the normalized *query*
-         must appear in the normalized model string.  Normalization replaces
-         hyphens and dots with spaces, so "opus 4.6" matches both
-         ``anthropic/claude-opus-4-6`` and ``github-copilot/claude-opus-4.6``.
-    """
-    # 1. Exact
-    if query in models:
-        return [query]
-
-    # 2. Case-insensitive exact
-    lower = query.lower()
-    exact_ci = [m for m in models if m.lower() == lower]
-    if exact_ci:
-        return exact_ci
-
-    # 3. Normalized token substring
-    norm_query = _normalize(query)
-    tokens = norm_query.split()
-    if not tokens:
-        return []
-    matches = [m for m in models if all(tok in _normalize(m) for tok in tokens)]
-    return matches
+    config = load_config(adj_dir / "adjutant.yaml")
+    messaging = config.get("messaging", {})
+    telegram = messaging.get("telegram", {})
+    configured = str(telegram.get("default_model") or "").strip()
+    return configured or "cheap"
 
 
-async def _llm_suggest_model(query: str, models: list[str], adj_dir: Path) -> str | None:
-    """Use the current LLM to find the closest model match for *query*.
+def _format_tier_mapping(adj_dir: Path) -> str:
+    """Return the configured tier -> model/reasoning mapping."""
+    from adjutant.core.config import load_config
 
-    Returns the best matching model name from *models*, or None if the LLM
-    cannot determine a match.
-    """
-    from adjutant.core.backend import get_backend
-    from adjutant.messaging.telegram.chat import get_model
-
-    model_list = "\n".join(models)
-    prompt = (
-        f"The user asked to switch to model: \"{query}\"\n"
-        f"Available models:\n{model_list}\n\n"
-        f"Which model from the list above is the closest match? "
-        f"Reply with ONLY the exact model name from the list, nothing else. "
-        f"If none are a reasonable match, reply with NONE."
-    )
-    try:
-        backend = get_backend()
-        result = await backend.run(
-            prompt,
-            agent="adjutant",
-            workdir=adj_dir,
-            model=get_model(adj_dir),
-            timeout=30,
-        )
-        answer = result.text.strip()
-        if answer and answer != "NONE" and answer in models:
-            return answer
-    except Exception:  # noqa: BLE001 — best-effort suggestion
-        adj_log("telegram", f"LLM model suggestion failed for query: {query}")
-    return None
-
-
-def _save_pending_model(adj_dir: Path, matches: list[str], query: str) -> None:
-    state = adj_dir / "state" / _PENDING_MODEL_FILE
-    state.parent.mkdir(parents=True, exist_ok=True)
-    state.write_text(
-        json.dumps(
-            {
-                "matches": matches,
-                "original_query": query,
-                "timestamp": int(time.time()),
-            }
-        )
-    )
-
-
-def _load_pending_model(adj_dir: Path) -> dict[str, Any] | None:
-    state = adj_dir / "state" / _PENDING_MODEL_FILE
-    if not state.is_file():
-        return None
-    try:
-        raw = json.loads(state.read_text())
-    except (json.JSONDecodeError, OSError):
-        _clear_pending_model(adj_dir)
-        return None
-    if not isinstance(raw, dict):
-        _clear_pending_model(adj_dir)
-        return None
-    data: dict[str, Any] = raw
-    # Auto-expire
-    if int(time.time()) - data.get("timestamp", 0) > _PENDING_MODEL_TTL:
-        _clear_pending_model(adj_dir)
-        return None
-    return data
-
-
-def _clear_pending_model(adj_dir: Path) -> None:
-    state = adj_dir / "state" / _PENDING_MODEL_FILE
-    with contextlib.suppress(OSError):
-        state.unlink(missing_ok=True)
-
-
-def _format_match_list(matches: list[str]) -> str:
-    """Format a list of model names as a bulleted Telegram message."""
-    return "\n".join(f"  • {m}" for m in matches[:20])
+    config = load_config(adj_dir / "adjutant.yaml")
+    lines: list[str] = []
+    for tier in ("cheap", "medium", "expensive"):
+        resolved = resolve_model_spec(tier, adj_dir / "state", config)
+        effort = resolved.variant or "default"
+        lines.append(f"- `{tier}` -> `{resolved.model}` (reasoning: `{effort}`)")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -193,11 +96,14 @@ async def _run_opencode_prompt(
     prompt_path: Path,
     timeout: float,
     adj_dir: Path,
-    model: str,
+    model_spec: str,
 ) -> str:
-    """Run an LLM prompt file and return plain text (max 3800 chars).
+    """Run a standalone prompt file and return plain text (max 3800 chars).
 
-    Sends the prompt via the backend, reaps orphans if supported, truncates to 3800 chars.
+    Sends the prompt directly via the backend, reaps orphans if supported,
+    truncates to 3800 chars. These autonomy prompts are self-contained and
+    should not be wrapped in the tracked ``adjutant`` agent prompt, which can
+    conflict with prompt-file security guidance.
     """
     from adjutant.core.backend import BackendNotFoundError, get_backend
 
@@ -206,13 +112,19 @@ async def _run_opencode_prompt(
 
     prompt_text = prompt_path.read_text()
 
+    from adjutant.core.config import load_config
+
+    resolved = resolve_model_spec(
+        model_spec, adj_dir / "state", load_config(adj_dir / "adjutant.yaml")
+    )
+
     try:
         backend = get_backend()
         result = await backend.run(
             prompt_text,
-            agent="adjutant",
             workdir=adj_dir,
-            model=model,
+            model=resolved.model,
+            variant=resolved.variant,
             timeout=timeout,
         )
     except BackendNotFoundError:
@@ -484,7 +396,6 @@ async def cmd_self_assess(
 ) -> None:
     """Run the weekly self-assessment."""
     from adjutant.core.lockfiles import clear_active_operation, set_active_operation
-    from adjutant.core.model import TIER_DEFAULTS
 
     _send(
         "Starting self-assessment — reviewing journal, notifications, and priorities.",
@@ -495,7 +406,7 @@ async def cmd_self_assess(
     adj_log("telegram", "Self-assess triggered via Telegram.")
 
     assess_prompt = adj_dir / "prompts" / "self_assess.md"
-    model = TIER_DEFAULTS["medium"]
+    model = "medium"
     set_active_operation("self-assess", "telegram", adj_dir=adj_dir)
     try:
         result = await _run_opencode_prompt(assess_prompt, 300.0, adj_dir, model)
@@ -538,8 +449,8 @@ async def cmd_restart(
     await asyncio.sleep(0.5)
 
     # Spawn a detached process that will:
-    #   1. Kill this listener (and opencode web)
-    #   2. Start fresh instances of both
+    #   1. Kill this listener
+    #   2. Start a fresh instance
     # Using start_new_session=True so it survives our death.
     log_file = adj_dir / "state" / "restart.log"
     log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -628,10 +539,9 @@ async def cmd_reflect_confirm(
         return
 
     from adjutant.core.lockfiles import clear_active_operation, set_active_operation
-    from adjutant.core.model import TIER_DEFAULTS
 
     reflect_prompt = adj_dir / "prompts" / "review.md"
-    model = TIER_DEFAULTS["medium"]
+    model = "medium"
     set_active_operation("review", "telegram", adj_dir=adj_dir)
     try:
         result = await _run_opencode_prompt(reflect_prompt, 300.0, adj_dir, model)
@@ -670,7 +580,7 @@ registered scheduled jobs, and when I last checked in.
 and summarise what I find.
 /brief — Morning brief: deadlines, priorities, and \
 what needs your attention today.
-/restart — Restart all services (listener, opencode web).
+/restart — Restart the Telegram listener.
 /reflect — I'll run a deep review using Sonnet \
 (I'll ask you to confirm first).
 /self-assess — Weekly self-assessment: how am I doing? \
@@ -689,7 +599,8 @@ synthesis across multiple KBs.
 /pause — I'll stop monitoring until you're ready \
 for me to resume.
 /resume — I'll pick back up where I left off.
-/model — Show current model, or switch with /model <name>.
+/model — Show current tier and the cheap/medium/expensive mappings.
+/model <tier> — Switch Telegram chat to cheap, medium, or expensive.
 /remember <text> — Save something to long-term memory \
 (auto-classified).
 /forget <topic> — Archive memory entries matching a topic.
@@ -707,7 +618,7 @@ and tell you what I see.\
 
 
 # ---------------------------------------------------------------------------
-# /model [name]
+# /model [tier]
 # ---------------------------------------------------------------------------
 
 
@@ -723,7 +634,6 @@ def _switch_model(adj_dir: Path, new_model: str) -> None:
     with contextlib.suppress(OSError):
         session_file.unlink(missing_ok=True)
 
-    _clear_pending_model(adj_dir)
     adj_log("telegram", f"Model switched to {new_model} (session cleared)")
 
 
@@ -734,188 +644,44 @@ async def cmd_model(
     *,
     bot_token: str,
     chat_id: str,
-    refine: bool = False,
 ) -> None:
-    """Show, switch, or fuzzy-search models.
-
-    Behaviour:
-      /model             — show current model + full list
-      /model <exact>     — switch immediately
-      /model <partial>   — fuzzy-match; if 1 hit → switch, if N → ask to refine
-      (refinement msg)   — narrow previous multi-match down further
-
-    When *refine* is True the arg is treated as a follow-up to a previous
-    multi-match prompt (loaded from state/pending_model_matches.json).
-    """
+    """Show or switch the configured model tiers."""
     model_file = adj_dir / "state" / "telegram_model.txt"
 
-    current_model = "anthropic/claude-haiku-4-5"
+    current_model = _get_default_model(adj_dir)
     if model_file.is_file():
         raw = model_file.read_text().strip()
         if raw:
             current_model = raw
 
-    # --- Refinement of a previous multi-match prompt ---
-    if refine:
-        pending = _load_pending_model(adj_dir)
-        if not pending:
-            # Expired or missing — treat as normal chat (caller handles this)
-            return
-
-        prev_matches: list[str] = pending.get("matches", [])
-        query = arg.strip()
-
-        # "cancel" / "nevermind" / "keep" → abort
-        if query.lower() in ("cancel", "nevermind", "never mind", "nvm", "keep", "no"):
-            _clear_pending_model(adj_dir)
-            _send(
-                f"No problem — keeping *{current_model}*.",
-                message_id,
-                bot_token=bot_token,
-                chat_id=chat_id,
-            )
-            return
-
-        # "yes" / "y" → confirm when there's exactly 1 pending match (LLM suggestion)
-        if query.lower() in ("yes", "y", "yeah", "yep", "sure", "ok") and len(prev_matches) == 1:
-            _switch_model(adj_dir, prev_matches[0])
-            _send(
-                f"Switched to *{prev_matches[0]}*.",
-                message_id,
-                bot_token=bot_token,
-                chat_id=chat_id,
-            )
-            return
-
-        # Narrow previous matches with new tokens
-        narrowed = _fuzzy_match(query, prev_matches)
-
-        if len(narrowed) == 1:
-            _switch_model(adj_dir, narrowed[0])
-            _send(
-                f"Switched to *{narrowed[0]}*.",
-                message_id,
-                bot_token=bot_token,
-                chat_id=chat_id,
-            )
-            return
-
-        if len(narrowed) == 0:
-            # Tokens didn't match any of the previous candidates — try full list
-            all_models = await _fetch_available_models()
-            full_search = _fuzzy_match(query, all_models)
-            if len(full_search) == 1:
-                _switch_model(adj_dir, full_search[0])
-                _send(
-                    f"Switched to *{full_search[0]}*.",
-                    message_id,
-                    bot_token=bot_token,
-                    chat_id=chat_id,
-                )
-                return
-            if len(full_search) > 1:
-                _save_pending_model(adj_dir, full_search, query)
-                _send(
-                    f'Still multiple matches for "{query}":\n'
-                    f"{_format_match_list(full_search)}\n\n"
-                    f'Reply with another keyword to narrow down, or "cancel".',
-                    message_id,
-                    bot_token=bot_token,
-                    chat_id=chat_id,
-                )
-                return
-            # Zero everywhere — give up
-            _clear_pending_model(adj_dir)
-            _send(
-                f'No models match "{query}". Run /model to see the full list.',
-                message_id,
-                bot_token=bot_token,
-                chat_id=chat_id,
-            )
-            return
-
-        # Multiple narrowed matches — keep refining
-        _save_pending_model(adj_dir, narrowed, query)
-        _send(
-            f"Narrowed to {len(narrowed)} matches:\n"
-            f"{_format_match_list(narrowed)}\n\n"
-            f'Reply with another keyword to narrow down, or "cancel".',
-            message_id,
-            bot_token=bot_token,
-            chat_id=chat_id,
-        )
-        return
-
-    # --- /model (no arg) — show current + list ---
+    # --- /model (no arg) — show current tier + configured mappings ---
     if not arg:
-        available = await _fetch_available_models()
-        model_list = "\n".join(available[:30]) if available else "(could not retrieve model list)"
+        tier_mapping = _format_tier_mapping(adj_dir)
 
         _send(
-            f"Current model: *{current_model}*\n\n"
-            f"Available models (first 30):\n"
-            f"```\n{model_list}\n```\n\n"
-            f"Switch with: /model <name> (exact or partial, e.g. /model opus 4.6)",
+            f"Current tier: *{current_model}*\n\n"
+            f"Available tiers:\n{tier_mapping}\n\n"
+            f"Switch with: `/model cheap`, `/model medium`, or `/model expensive`.",
             message_id,
             bot_token=bot_token,
             chat_id=chat_id,
         )
         return
 
-    # --- /model <query> — fuzzy search + switch ---
-    query = arg.strip()
-    available = await _fetch_available_models()
-
-    if not available:
-        # Can't verify — allow verbatim (matches original fallback behaviour)
+    query = arg.strip().lower()
+    if query in _MODEL_TIERS:
         _switch_model(adj_dir, query)
         _send(
-            f"Switched to *{query}* (could not verify against model list).",
+            f"Switched to *{query}* tier.",
             message_id,
             bot_token=bot_token,
             chat_id=chat_id,
         )
         return
 
-    matches = _fuzzy_match(query, available)
-
-    if len(matches) == 1:
-        _switch_model(adj_dir, matches[0])
-        _send(
-            f"Switched to *{matches[0]}*.",
-            message_id,
-            bot_token=bot_token,
-            chat_id=chat_id,
-        )
-        return
-
-    if len(matches) == 0:
-        # Use LLM to find the closest match from the available list
-        suggestion = await _llm_suggest_model(query, available, adj_dir)
-        if suggestion:
-            _save_pending_model(adj_dir, [suggestion], query)
-            _send(
-                f'No exact match for "{query}". Did you mean *{suggestion}*?\n\n'
-                f'Reply "yes" to switch, or "cancel" to keep the current model.',
-                message_id,
-                bot_token=bot_token,
-                chat_id=chat_id,
-            )
-            return
-        _send(
-            f'No models match "{query}". Run /model to see the full list.',
-            message_id,
-            bot_token=bot_token,
-            chat_id=chat_id,
-        )
-        return
-
-    # Multiple matches — save state and ask to refine
-    _save_pending_model(adj_dir, matches, query)
     _send(
-        f'Found {len(matches)} matches for "{query}":\n'
-        f"{_format_match_list(matches)}\n\n"
-        f'Reply with a keyword to narrow down (e.g. "anthropic"), or "cancel".',
+        "Only the configured tiers are allowed: `cheap`, `medium`, `expensive`.\n\n"
+        "Run `/model` to see which concrete model and reasoning effort each tier uses.",
         message_id,
         bot_token=bot_token,
         chat_id=chat_id,

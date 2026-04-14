@@ -16,7 +16,7 @@ All runtime state lives under `ADJ_DIR/state/`. These files are gitignored and u
 | `listener.lock/pid` | The authoritative PID of the running listener. |
 | `telegram.pid` | PID written by `service.py start`. Kept in sync with `listener.lock/pid`. |
 | `telegram_session.json` | Session ID for LLM backend chat continuity. Reused within a configured window; starts fresh after expiry. |
-| `telegram_model.txt` | Currently selected LLM model for Telegram chat. Switched via `/model`. |
+| `telegram_model.txt` | Currently selected Telegram model tier (`cheap`, `medium`, or `expensive`). Switched via `/model`. |
 | `rate_limit_window` | Sliding-window timestamp log for rate limiting. |
 | `pending_reflect` | Marker file indicating a `/reflect` confirmation is awaited. |
 | `last_heartbeat.json` | Timestamp and summary of the last `/pulse` or `/reflect` run. |

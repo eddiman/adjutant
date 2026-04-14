@@ -253,12 +253,14 @@ def kb_run(
     kb_model_raw = entry.get("model", "")
     if kb_model_raw:
         from adjutant.core.config import load_config
-        from adjutant.core.model import resolve_kb_model
+        from adjutant.core.model import resolve_model_spec
 
         config = load_config(adj_dir / "adjutant.yaml")
-        resolved_model = resolve_kb_model(kb_model_raw, adj_dir / "state", config)
-        if resolved_model:
-            env["KB_MODEL"] = resolved_model
+        resolved = resolve_model_spec(kb_model_raw, adj_dir / "state", config)
+        if resolved.model:
+            env["KB_MODEL"] = resolved.model
+        if resolved.variant:
+            env["KB_REASONING_EFFORT"] = resolved.variant
 
     cli_module = _read_kb_cli_module(kb_path)
 

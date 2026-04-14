@@ -22,7 +22,7 @@ from pathlib import Path
 
 from adjutant.core.backend import BackendNotFoundError, get_backend
 from adjutant.core.logging import adj_log
-from adjutant.core.model import resolve_kb_model
+from adjutant.core.model import resolve_kb_model, resolve_model_spec
 
 # Keep under the 120 s bash-tool ceiling.
 # health check (~5-20 s) + query timeout must not exceed ~110 s total.
@@ -56,6 +56,17 @@ def _resolve_model(kb_path: Path, adj_dir: Path) -> str:
     return resolve_kb_model(kb_model_raw, state_dir, config)
 
 
+def _resolve_model_with_variant(kb_path: Path, adj_dir: Path):
+    """Resolve the model and reasoning-effort variant for a KB."""
+    kb_model_raw = _read_kb_model_from_yaml(kb_path)
+    state_dir = adj_dir / "state"
+
+    from adjutant.core.config import load_config
+
+    config = load_config(adj_dir / "adjutant.yaml")
+    return resolve_model_spec(kb_model_raw, state_dir, config)
+
+
 async def kb_query_by_path(
     kb_path: Path,
     query: str,
@@ -83,14 +94,23 @@ async def kb_query_by_path(
     if not query.strip():
         raise KBQueryError("Query is empty.")
 
-    model = _resolve_model(kb_path, adj_dir)
+    resolved = _resolve_model_with_variant(kb_path, adj_dir)
 
     kb_name = kb_path.name
-    adj_log("kb", f"Query start: kb='{kb_name}' model='{model}' timeout={timeout}s")
+    adj_log(
+        "kb",
+        f"Query start: kb='{kb_name}' model='{resolved.model}' "
+        f"variant='{resolved.variant}' timeout={timeout}s",
+    )
 
     backend = get_backend()
     result = await backend.run(
-        query, agent="kb", workdir=kb_path, model=model, timeout=timeout,
+        query,
+        agent="kb",
+        workdir=kb_path,
+        model=resolved.model,
+        variant=resolved.variant,
+        timeout=timeout,
     )
 
     if result.returncode != 0 or result.timed_out:
@@ -185,15 +205,23 @@ def kb_write_by_path(
     if not instruction.strip():
         raise KBQueryError("Write instruction is empty.")
 
-    model = _resolve_model(kb_path, adj_dir)
+    resolved = _resolve_model_with_variant(kb_path, adj_dir)
     kb_name = kb_path.name
 
-    adj_log("kb", f"Write dispatched: kb='{kb_name}' model='{model}'")
+    adj_log(
+        "kb",
+        f"Write dispatched: kb='{kb_name}' model='{resolved.model}' variant='{resolved.variant}'",
+    )
 
     log_path = adj_dir / "state" / "adjutant.log"
     backend = get_backend()
     backend.run_detached(
-        instruction, agent="kb", workdir=kb_path, model=model, log_path=log_path,
+        instruction,
+        agent="kb",
+        workdir=kb_path,
+        model=resolved.model,
+        variant=resolved.variant,
+        log_path=log_path,
     )
 
     preview = instruction[:120]
@@ -275,17 +303,16 @@ async def kb_query_all(
         q = query or (hint if hint else default_query)
         try:
             result = await kb_query_by_path(
-                Path(path), q, adj_dir, timeout=timeout,
+                Path(path),
+                q,
+                adj_dir,
+                timeout=timeout,
             )
         except (KBQueryError, BackendNotFoundError) as exc:
             result = f"[error: {exc}]"
         return name, result
 
-    tasks = [
-        _query_one(e.name, e.path, e.query_hint)
-        for e in entries
-        if e.path
-    ]
+    tasks = [_query_one(e.name, e.path, e.query_hint) for e in entries if e.path]
     results = await asyncio.gather(*tasks)
 
     parts: list[str] = []
@@ -363,13 +390,16 @@ async def kb_cross_query(
     # not deep reasoning.  Saves tokens and avoids the timeout ceiling.
     from adjutant.core.config import load_typed_config
 
-    cheap_model = load_typed_config(adj_dir / "adjutant.yaml").llm.models.cheap
+    resolved = resolve_model_spec(
+        "cheap", adj_dir / "state", load_typed_config(adj_dir / "adjutant.yaml").model_dump()
+    )
 
     backend = get_backend()
     result = await backend.run(
         synthesis_prompt,
         workdir=adj_dir,
-        model=cheap_model,
+        model=resolved.model,
+        variant=resolved.variant,
         timeout=_CROSS_QUERY_SYNTH_TIMEOUT,
     )
 

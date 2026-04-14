@@ -179,15 +179,15 @@ The configured model may not be available in your backend setup. Check:
 adjutant status
 ```
 
-Look at the current model. Switch to a known working model:
+Look at the current tier mapping. Switch to a known working tier:
 
 ```
-/model anthropic/claude-haiku-4-5
+/model cheap
 ```
 
 ### Model switch doesn't persist
 
-Model changes via `/model` are stored in `state/telegram_model.txt`. They persist across restarts but not across `adjutant kill` + `adjutant startup` (which resets state). Set the default model in `adjutant.yaml` instead:
+Model changes via `/model` are stored in `state/telegram_model.txt` as a tier name (`cheap`, `medium`, or `expensive`). They persist across restarts but not across `adjutant kill` + `adjutant startup` (which resets state). Set the default model in `adjutant.yaml` instead:
 
 ```yaml
 llm:
@@ -197,7 +197,7 @@ llm:
 
 ### Responses are very slow
 
-- Check which model is active with `/model` -- expensive models (Opus) are slower
+- Check which tier is active with `/model` -- expensive tiers are slower
 - Switch to a cheaper model: `/model cheap`
 - Check if your backend is healthy: `opencode --version` or `claude --version`
 

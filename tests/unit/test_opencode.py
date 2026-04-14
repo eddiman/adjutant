@@ -174,90 +174,36 @@ class TestOpenCodeReap:
 
 
 class TestOpenCodeHealthCheck:
-    """Test opencode_health_check() — two-stage probe with restart."""
+    """Test opencode_health_check() — verifies the opencode binary is callable.
+
+    The old two-stage probe (HTTP ping + API probe + web server restart)
+    was removed along with the native `opencode web` server. The health
+    check is now a plain binary availability check.
+    """
 
     @pytest.mark.asyncio
-    async def test_fails_with_no_pid_file(self, adj_dir: Path):
-        """No web server PID file → health check fails."""
-        with patch("adjutant.lifecycle.control.start_opencode_web", return_value="started"):
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await opencode_health_check(adj_dir)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_succeeds_when_both_stages_pass(self, adj_dir: Path, mock_opencode: Path):
-        """When HTTP ping and API probe both pass, returns True."""
-        # No PID file → health check should return False
-        with patch("adjutant.lifecycle.control.start_opencode_web", return_value="started"):
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await opencode_health_check(adj_dir)
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_calls_start_opencode_web_on_failure(self, adj_dir: Path):
-        """When health check fails, it should call start_opencode_web (not restart.sh)."""
-        started = []
-
-        def fake_start(d):
-            started.append(d)
-            return "OpenCode web server started (PID 12345)"
-
-        with patch(
-            "adjutant.lifecycle.control.start_opencode_web",
-            side_effect=fake_start,
-        ):
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await opencode_health_check(adj_dir)
-
-        # The restart was attempted (no PID file → _http_ping returns False → restart)
-        assert len(started) == 1
-        assert started[0] == adj_dir
-        # HTTP polling still fails after restart → returns False
-        assert result is False
-
-    @pytest.mark.asyncio
-    async def test_recovers_after_restart(self, adj_dir: Path):
-        """When start_opencode_web succeeds and HTTP recovers, returns True."""
-        import httpx
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        ping_calls = 0
-
-        async def patched_get(url, **kwargs):
-            nonlocal ping_calls
-            ping_calls += 1
-            if ping_calls <= 1:
-                raise httpx.ConnectError("refused")
-            return mock_response
-
-        with patch(
-            "adjutant.lifecycle.control.start_opencode_web",
-            return_value="started",
-        ):
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                with patch("httpx.AsyncClient") as mock_client_cls:
-                    mock_client = AsyncMock()
-                    mock_client.get = patched_get
-                    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-                    mock_client.__aexit__ = AsyncMock(return_value=False)
-                    mock_client_cls.return_value = mock_client
-
-                    # Write PID file so ping can proceed on retry
-                    (adj_dir / "state" / "opencode_web.pid").write_text("12345")
-                    with patch("adjutant.core.opencode.read_pid_file", return_value=12345):
-                        result = await opencode_health_check(adj_dir)
-
+    async def test_returns_true_when_binary_present(
+        self, adj_dir: Path, mock_opencode: Path
+    ) -> None:
+        """When the opencode binary is on PATH, health check returns True."""
+        result = await opencode_health_check(adj_dir)
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_restart_exception_is_caught(self, adj_dir: Path):
-        """If start_opencode_web raises, the error is caught and logged."""
-        with patch(
-            "adjutant.lifecycle.control.start_opencode_web",
-            side_effect=OSError("disk full"),
+    async def test_returns_false_when_binary_missing(self, adj_dir: Path) -> None:
+        """When the opencode binary is not found, health check returns False."""
+        import adjutant.core.opencode as opencode_mod
+
+        with patch.object(
+            opencode_mod,
+            "_find_opencode",
+            side_effect=opencode_mod.OpenCodeNotFoundError("not found"),
         ):
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                result = await opencode_health_check(adj_dir)
-        # Should not raise — error is caught
+            result = await opencode_health_check(adj_dir)
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_accepts_none_adj_dir(self, mock_opencode: Path) -> None:
+        """adj_dir is optional now that the check doesn't touch state/."""
+        result = await opencode_health_check(None)
+        assert result is True

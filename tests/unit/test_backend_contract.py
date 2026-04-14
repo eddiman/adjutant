@@ -157,11 +157,13 @@ class TestCapabilitiesContract:
     def test_opencode_no_cost_tracking(self) -> None:
         assert get_backend("opencode").capabilities.cost_tracking is False
 
-    def test_opencode_web_server(self) -> None:
-        assert get_backend("opencode").capabilities.web_server is True
+    def test_opencode_no_web_server(self) -> None:
+        # The native `opencode web` server was retired in favor of
+        # adjutant's own web/app — neither backend declares web_server.
+        assert get_backend("opencode").capabilities.web_server is False
 
-    def test_claude_cli_web_server(self) -> None:
-        assert get_backend("claude-cli").capabilities.web_server is True
+    def test_claude_cli_no_web_server(self) -> None:
+        assert get_backend("claude-cli").capabilities.web_server is False
         assert get_backend("claude-cli").capabilities.remote_session is False
 
     @pytest.mark.parametrize("backend_name", BACKENDS)

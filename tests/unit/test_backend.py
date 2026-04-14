@@ -82,7 +82,7 @@ class TestOpenCodeCapabilities:
         assert caps.vision is True
         assert caps.model_listing is True
         assert caps.reaping is True
-        assert caps.web_server is True
+        assert caps.web_server is False
         assert caps.remote_session is False
         assert caps.streaming is True
         assert caps.cost_tracking is False
@@ -95,7 +95,7 @@ class TestClaudeCLICapabilities:
         assert caps.vision is True
         assert caps.model_listing is True
         assert caps.reaping is False
-        assert caps.web_server is True
+        assert caps.web_server is False
         assert caps.remote_session is False
         assert caps.streaming is False
         assert caps.cost_tracking is True

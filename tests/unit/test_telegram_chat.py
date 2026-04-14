@@ -54,13 +54,13 @@ class TestGetModel:
         assert get_model(tmp_path) == "anthropic/claude-opus-4-6"
 
     def test_falls_back_to_default_when_missing(self, tmp_path: Path) -> None:
-        assert get_model(tmp_path) == "anthropic/claude-haiku-4-5"
+        assert get_model(tmp_path) == "cheap"
 
     def test_falls_back_when_file_is_empty(self, tmp_path: Path) -> None:
         state = tmp_path / "state"
         state.mkdir()
         (state / "telegram_model.txt").write_text("   \n")
-        assert get_model(tmp_path) == "anthropic/claude-haiku-4-5"
+        assert get_model(tmp_path) == "cheap"
 
 
 # ---------------------------------------------------------------------------
@@ -225,3 +225,13 @@ class TestRunChat:
         # Verify session_id was passed to backend.run
         call_kwargs = backend.run.call_args[1]
         assert call_kwargs["session_id"] == "existing_sid"
+
+    @pytest.mark.asyncio
+    async def test_passes_variant_for_tier_model(self, tmp_path: Path) -> None:
+        backend = _mock_backend(_llm_result(text="reply", session_id="sid1"))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
+            await run_chat("hi", tmp_path)
+
+        call_kwargs = backend.run.call_args[1]
+        assert call_kwargs["model"] == "anthropic/claude-haiku-4-5"
+        assert call_kwargs["variant"] is None

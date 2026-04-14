@@ -16,6 +16,15 @@ from pathlib import Path
 from typing import Protocol
 
 
+@dataclass(frozen=True)
+class ResolvedModel:
+    """Concrete model selection after tier resolution."""
+
+    model: str
+    variant: str | None = None
+    source: str = "explicit"
+
+
 @dataclass
 class LLMResult:
     """Unified result from any LLM backend invocation."""
@@ -61,6 +70,7 @@ class LLMBackend(Protocol):
         agent: str | None = None,
         workdir: Path | None = None,
         model: str | None = None,
+        variant: str | None = None,
         session_id: str | None = None,
         timeout: float | None = None,
         env: dict[str, str] | None = None,
@@ -74,6 +84,7 @@ class LLMBackend(Protocol):
         agent: str | None = None,
         workdir: Path | None = None,
         model: str | None = None,
+        variant: str | None = None,
         log_path: Path | None = None,
     ) -> None: ...
 

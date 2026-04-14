@@ -1,13 +1,11 @@
 """Tests for src/adjutant/messaging/telegram/listener.py
 
-Focus on unit-testable helpers: _load_offset, _save_offset, _poll_once,
-_watchdog_check_backend_service.
+Focus on unit-testable helpers: _load_offset, _save_offset, _poll_once.
 The main() polling loop is integration-level and not covered here.
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -17,7 +15,6 @@ from adjutant.messaging.telegram.listener import (
     _load_offset,
     _poll_once,
     _save_offset,
-    _watchdog_check_backend_service,
 )
 
 
@@ -155,165 +152,7 @@ class TestPollOnce:
         )
 
 
-# ---------------------------------------------------------------------------
-# _watchdog_check_backend_service
-# ---------------------------------------------------------------------------
-
-
-class TestWatchdogCheckBackendService:
-    """Test the backend service watchdog."""
-
-    @pytest.mark.asyncio
-    async def test_restarts_when_pid_file_missing(self, tmp_path: Path) -> None:
-        """No PID file → watchdog starts the backend service."""
-        adj = tmp_path / ".adjutant"
-        adj.mkdir()
-        (adj / "state").mkdir()
-
-        started = []
-
-        def fake_start(d):
-            started.append(d)
-            return "Backend service started (PID 12345)"
-
-        with patch(
-            "adjutant.lifecycle.control.start_backend_service",
-            side_effect=fake_start,
-        ):
-            await _watchdog_check_backend_service(adj)
-
-        assert len(started) == 1
-        assert started[0] == adj
-
-    @pytest.mark.asyncio
-    async def test_restarts_when_pid_is_stale(self, tmp_path: Path) -> None:
-        """PID file exists but process is dead → watchdog restarts."""
-        adj = tmp_path / ".adjutant"
-        adj.mkdir()
-        state = adj / "state"
-        state.mkdir()
-        pid_file = state / "opencode_web.pid"
-        pid_file.write_text("99999999")  # Almost certainly dead
-
-        started = []
-
-        def fake_start(d):
-            started.append(d)
-            return "OpenCode web server started (PID 12345)"
-
-        with (
-            patch("adjutant.core.process.read_pid_file", return_value=None),
-            patch(
-                "adjutant.lifecycle.control.start_backend_service",
-                side_effect=fake_start,
-            ),
-        ):
-            await _watchdog_check_backend_service(adj)
-
-        assert len(started) == 1
-        # Stale PID file should be removed
-        assert not pid_file.exists()
-
-    @pytest.mark.asyncio
-    async def test_does_nothing_when_process_alive(self, tmp_path: Path) -> None:
-        """PID file exists and process is alive → watchdog does nothing."""
-        adj = tmp_path / ".adjutant"
-        adj.mkdir()
-        state = adj / "state"
-        state.mkdir()
-        pid_file = state / "opencode_web.pid"
-        pid_file.write_text(str(os.getpid()))  # Use our own PID — definitely alive
-
-        started = []
-
-        def fake_start(d):
-            started.append(d)
-            return "started"
-
-        with (
-            patch("adjutant.core.process.read_pid_file", return_value=os.getpid()),
-            patch(
-                "adjutant.lifecycle.control.start_backend_service",
-                side_effect=fake_start,
-            ),
-        ):
-            await _watchdog_check_backend_service(adj)
-
-        assert len(started) == 0  # No restart attempted
-
-    @pytest.mark.asyncio
-    async def test_restarts_cloudcli_when_pid_stale(self, tmp_path: Path) -> None:
-        """CloudCLI PID file exists but process is dead → watchdog restarts."""
-        adj = tmp_path / ".adjutant"
-        adj.mkdir()
-        state = adj / "state"
-        state.mkdir()
-        # Write config so backend resolves to claude-cli
-        import yaml
-
-        (adj / "adjutant.yaml").write_text(yaml.dump({"llm": {"backend": "claude-cli"}}))
-        pid_file = state / "cloudcli_web.pid"
-        pid_file.write_text("99999999")  # Almost certainly dead
-
-        started = []
-
-        def fake_start(d):
-            started.append(d)
-            return "CloudCLI web server started (PID 12345)"
-
-        with (
-            patch("adjutant.core.process.read_pid_file", return_value=None),
-            patch(
-                "adjutant.lifecycle.control.start_backend_service",
-                side_effect=fake_start,
-            ),
-        ):
-            await _watchdog_check_backend_service(adj)
-
-        assert len(started) == 1
-        assert not pid_file.exists()
-
-    @pytest.mark.asyncio
-    async def test_cloudcli_does_nothing_when_alive(self, tmp_path: Path) -> None:
-        """CloudCLI PID file exists and process alive → watchdog does nothing."""
-        adj = tmp_path / ".adjutant"
-        adj.mkdir()
-        state = adj / "state"
-        state.mkdir()
-        import yaml
-
-        (adj / "adjutant.yaml").write_text(yaml.dump({"llm": {"backend": "claude-cli"}}))
-        pid_file = state / "cloudcli_web.pid"
-        pid_file.write_text(str(os.getpid()))
-
-        started = []
-
-        def fake_start(d):
-            started.append(d)
-            return "started"
-
-        with (
-            patch("adjutant.core.process.read_pid_file", return_value=os.getpid()),
-            patch(
-                "adjutant.lifecycle.control.start_backend_service",
-                side_effect=fake_start,
-            ),
-        ):
-            await _watchdog_check_backend_service(adj)
-
-        assert len(started) == 0
-
-    @pytest.mark.asyncio
-    async def test_exception_does_not_propagate(self, tmp_path: Path) -> None:
-        """Errors in watchdog should be catchable by the caller."""
-        adj = tmp_path / ".adjutant"
-        adj.mkdir()
-        (adj / "state").mkdir()
-
-        with patch(
-            "adjutant.lifecycle.control.start_backend_service",
-            side_effect=OSError("disk full"),
-        ):
-            # The watchdog itself raises — caller (listener loop) catches it
-            with pytest.raises(OSError, match="disk full"):
-                await _watchdog_check_backend_service(adj)
+# NOTE: _watchdog_check_backend_service used to live here and was tested
+# extensively. It was removed when the native `opencode web` / `cloudcli`
+# web servers were retired in favor of adjutant's own web/app — there is
+# no longer a backend web service for the listener to watchdog.

@@ -247,10 +247,6 @@ class TestStartup:
             lambda d: "Telegram listener started (PID 12345)",
         )
         monkeypatch.setattr(
-            "adjutant.lifecycle.control.start_opencode_web",
-            lambda d: "OpenCode web server started (PID 99999)",
-        )
-        monkeypatch.setattr(
             "adjutant.lifecycle.control._sync_schedule_crontab",
             lambda d: "Crontab synced (0 jobs)",
         )
@@ -281,10 +277,6 @@ class TestStartup:
         monkeypatch.setattr("adjutant.lifecycle.control._send_notify", lambda d, t: None)
         monkeypatch.setattr(
             "adjutant.lifecycle.control._start_telegram_service",
-            lambda d: "started",
-        )
-        monkeypatch.setattr(
-            "adjutant.lifecycle.control.start_opencode_web",
             lambda d: "started",
         )
         monkeypatch.setattr(

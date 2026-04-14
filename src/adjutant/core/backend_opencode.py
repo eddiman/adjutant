@@ -48,7 +48,9 @@ class OpenCodeBackend:
             vision=True,
             model_listing=True,
             reaping=True,
-            web_server=True,
+            # web_server is False since the native `opencode web` server
+            # was retired in favor of adjutant's own web/app.
+            web_server=False,
             remote_session=False,
             streaming=True,
             cost_tracking=False,
@@ -61,6 +63,7 @@ class OpenCodeBackend:
         agent: str | None = None,
         workdir: Path | None = None,
         model: str | None = None,
+        variant: str | None = None,
         session_id: str | None = None,
         timeout: float | None = None,
         env: dict[str, str] | None = None,
@@ -75,6 +78,8 @@ class OpenCodeBackend:
         args += ["--format", "json"]
         if model:
             args += ["--model", self.resolve_alias(model)]
+        if variant:
+            args += ["--variant", variant]
         if session_id:
             args += ["--session", session_id]
         if files:
@@ -104,7 +109,7 @@ class OpenCodeBackend:
         adj_log(
             "backend",
             f"[opencode] run completed in {elapsed:.1f}s"
-            f" | model={model} agent={agent}"
+            f" | model={model} variant={variant} agent={agent}"
             f" | error_type={result.error_type}",
         )
         return result
@@ -116,6 +121,7 @@ class OpenCodeBackend:
         agent: str | None = None,
         workdir: Path | None = None,
         model: str | None = None,
+        variant: str | None = None,
         log_path: Path | None = None,
     ) -> None:
         try:
@@ -131,6 +137,8 @@ class OpenCodeBackend:
         args += ["--format", "json"]
         if model:
             args += ["--model", self.resolve_alias(model)]
+        if variant:
+            args += ["--variant", variant]
         args.append(prompt)
 
         log_fh = open(log_path, "a") if log_path else None  # noqa: SIM115
@@ -168,8 +176,7 @@ class OpenCodeBackend:
 
         adj_log(
             "backend",
-            f"[opencode] run_sync completed in {elapsed:.1f}s"
-            f" | returncode={result.returncode}",
+            f"[opencode] run_sync completed in {elapsed:.1f}s | returncode={result.returncode}",
         )
         return result.returncode
 

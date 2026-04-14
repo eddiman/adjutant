@@ -1,14 +1,15 @@
 """OpenCode invocation wrapper — run, reap, health check.
 
-Replaces bash opencode.sh:
 - opencode_run(): Invoke opencode with timeout + per-invocation orphan cleanup
 - opencode_reap(): Periodic cleanup of orphaned language-server processes
-- opencode_health_check(): Two-stage probe (HTTP ping + API call) with restart
+- opencode_health_check(): Verify the binary is callable
 
 Key contract:
   - opencode_run snapshots language-server PIDs before/after, kills orphans
   - asyncio.wait_for wraps proc.communicate() (NOT create_subprocess_exec)
-  - Reaper has 3 kill rules: orphan, stranded under web, RSS runaway
+  - Reaper has 2 kill rules: orphan, RSS runaway
+    (The `stranded under web server` rule was removed when the native
+    `opencode web` server was retired in favor of adjutant's own web/app.)
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from pathlib import Path
 import psutil
 
 from adjutant.core.logging import adj_log
-from adjutant.core.process import pid_is_alive, read_pid_file
+from adjutant.core.process import pid_is_alive
 
 
 @dataclass
@@ -167,22 +168,23 @@ async def opencode_run(
 async def opencode_reap(adj_dir: Path | None = None) -> int:
     """Kill orphaned language-server processes.
 
-    Matches bash opencode_reap() from opencode.sh — three kill rules:
+    Two kill rules:
       (a) Orphaned: parent is PID 1 or parent process is gone
-      (b) Stranded: parent is the opencode web server PID
-      (c) RSS runaway: exceeds memory threshold regardless of parentage
+      (b) RSS runaway: exceeds memory threshold regardless of parentage
+
+    (The `stranded under web server` rule was removed when the native
+    `opencode web` server was retired — language servers now only leak
+    on genuine orphan or memory runaway.)
 
     Args:
-        adj_dir: Adjutant root directory. Defaults to $ADJ_DIR.
+        adj_dir: Adjutant root directory. Defaults to $ADJ_DIR. Currently
+                 unused but kept in the signature for API compatibility.
 
     Returns:
         Number of processes reaped.
     """
     if adj_dir is None:
         adj_dir = Path(os.environ.get("ADJ_DIR", Path.home() / ".adjutant"))
-
-    web_pid_file = adj_dir / "state" / "opencode_web.pid"
-    web_pid = read_pid_file(web_pid_file)
 
     rss_limit_kb = int(os.environ.get("OPENCODE_LANGSERVER_RSS_LIMIT_KB", "524288"))
 
@@ -199,7 +201,7 @@ async def opencode_reap(adj_dir: Path | None = None) -> int:
                 mem_info = proc.info["memory_info"]
                 rss_kb = (mem_info.rss if mem_info else 0) // 1024
 
-                # Rule (c): RSS runaway
+                # Rule (b): RSS runaway
                 if rss_kb > rss_limit_kb:
                     targets.append((proc.info["pid"], "rss"))
                     continue
@@ -209,10 +211,6 @@ async def opencode_reap(adj_dir: Path | None = None) -> int:
                 if is_orphan:
                     targets.append((proc.info["pid"], "orphan"))
                     continue
-
-                # Rule (b): Stranded under web server
-                if web_pid is not None and ppid == web_pid:
-                    targets.append((proc.info["pid"], "stranded"))
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
         return targets
@@ -244,72 +242,24 @@ async def opencode_reap(adj_dir: Path | None = None) -> int:
 
 
 async def opencode_health_check(adj_dir: Path | None = None) -> bool:
-    """Two-stage health probe with restart-and-retry on failure.
+    """Verify the opencode binary is callable.
 
-    Matches bash opencode_health_check() from opencode.sh:
-    - Stage 1: HTTP ping to opencode web server root path
-    - Stage 2: Real API call with cheapest model
-    - On failure: restart opencode web, wait up to 20s for recovery
+    Previously this was a two-stage probe that checked an HTTP endpoint on
+    the native `opencode web` server and restarted it on failure. The
+    `opencode web` lifecycle has been retired — adjutant's own `web/app`
+    is now the remote access UI — so this is now a simple binary
+    availability check.
 
     Args:
-        adj_dir: Adjutant root directory. Defaults to $ADJ_DIR.
+        adj_dir: Adjutant root directory. Accepted for signature
+                 compatibility with the LLMBackend protocol; unused.
 
     Returns:
-        True if healthy (or recovered). False if unrecoverable.
+        True if the opencode binary can be located, False otherwise.
     """
-    if adj_dir is None:
-        adj_dir = Path(os.environ.get("ADJ_DIR", Path.home() / ".adjutant"))
-
-    port = int(os.environ.get("OPENCODE_WEB_PORT", "4096"))
-    base_url = f"http://localhost:{port}/"
-
-    async def _http_ping() -> bool:
-        """Stage 1: HTTP ping."""
-        pid_file = adj_dir / "state" / "opencode_web.pid"
-        if not read_pid_file(pid_file):
-            return False
-        try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(base_url)
-                return resp.status_code == 200
-        except Exception:  # noqa: BLE001 — probe returns False on any error
-            return False
-
-    async def _api_probe() -> bool:
-        """Stage 2: Real API call with cheapest model."""
-        try:
-            result = await opencode_run(
-                ["run", "--model", "anthropic/claude-haiku-4-5", "--format", "json", "ping"],
-                timeout=8,
-            )
-            # Accept exit 0 OR any JSON with "type" key
-            return result.returncode == 0 or '"type"' in result.stdout
-        except OpenCodeNotFoundError:
-            return False
-
-    # Try probe
-    if await _http_ping() and await _api_probe():
-        return True
-
-    adj_log("opencode", "Health check failed — restarting opencode web server")
-
-    # Restart via Python lifecycle control (replaces deleted restart.sh)
+    _ = adj_dir  # unused — kept for protocol compatibility
     try:
-        from adjutant.lifecycle.control import start_opencode_web
-
-        result = await asyncio.to_thread(start_opencode_web, adj_dir)
-        adj_log("opencode", f"Health check restart: {result}")
-    except Exception as exc:
-        adj_log("opencode", f"Health check restart error: {exc}")
-
-    # Wait up to 20s for recovery via HTTP polling
-    for _ in range(20):
-        await asyncio.sleep(1.0)
-        if await _http_ping():
-            adj_log("opencode", "Health check recovered after restart")
-            return True
-
-    adj_log("opencode", "Health check failed — could not recover after restart")
-    return False
+        _find_opencode()
+        return True
+    except OpenCodeNotFoundError:
+        return False
