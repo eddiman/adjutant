@@ -323,6 +323,91 @@ class TestRestart:
         assert "Restart complete" in result
         assert "Startup complete" in result
 
+    def test_startup_sends_post_restart_reply_when_pending_file_exists(self, adj, monkeypatch):
+        sent: list[tuple[str, int | None]] = []
+        (adj / "state" / "restart_notify.json").write_text('{"reply_to_message_id": 42}')
+
+        monkeypatch.setattr("adjutant.lifecycle.control._send_notify", lambda d, t: None)
+        monkeypatch.setattr(
+            "adjutant.lifecycle.control._start_telegram_service",
+            lambda d: "Telegram listener started (PID 12345)",
+        )
+        monkeypatch.setattr(
+            "adjutant.lifecycle.control._sync_schedule_crontab",
+            lambda d: "Crontab synced (0 jobs)",
+        )
+        monkeypatch.setattr("adjutant.lifecycle.control._pgrep_first", lambda p: None)
+        monkeypatch.setattr(
+            "adjutant.observability.status.get_status",
+            lambda d: "Adjutant is up and running.",
+        )
+
+        def _fake_require(path):
+            return ("bot-token", "999")
+
+        def _fake_send(message, reply_to=None, *, bot_token, chat_id):
+            sent.append((message, reply_to))
+
+        with (
+            patch("adjutant.core.env.require_telegram_credentials", side_effect=_fake_require),
+            patch("adjutant.messaging.telegram.send.msg_send_text", side_effect=_fake_send),
+        ):
+            result = startup(adj, interactive=False)
+
+        assert (adj / "state" / "restart_notify.json").exists() is False
+        assert sent == [("I'm back online and keeping an eye on things.", 42)]
+        assert "Post-restart Telegram reply sent" in result
+
+    def test_startup_reports_invalid_post_restart_marker(self, adj, monkeypatch):
+        (adj / "state" / "restart_notify.json").write_text("not-json")
+
+        monkeypatch.setattr("adjutant.lifecycle.control._send_notify", lambda d, t: None)
+        monkeypatch.setattr(
+            "adjutant.lifecycle.control._start_telegram_service",
+            lambda d: "Telegram listener started (PID 12345)",
+        )
+        monkeypatch.setattr(
+            "adjutant.lifecycle.control._sync_schedule_crontab",
+            lambda d: "Crontab synced (0 jobs)",
+        )
+        monkeypatch.setattr("adjutant.lifecycle.control._pgrep_first", lambda p: None)
+        monkeypatch.setattr(
+            "adjutant.observability.status.get_status",
+            lambda d: "Adjutant is up and running.",
+        )
+
+        result = startup(adj, interactive=False)
+
+        assert (adj / "state" / "restart_notify.json").exists() is False
+        assert "Post-restart Telegram reply not sent (invalid_marker)" in result
+
+    def test_startup_reports_failed_post_restart_send(self, adj, monkeypatch):
+        (adj / "state" / "restart_notify.json").write_text('{"reply_to_message_id": 42}')
+
+        monkeypatch.setattr("adjutant.lifecycle.control._send_notify", lambda d, t: None)
+        monkeypatch.setattr(
+            "adjutant.lifecycle.control._start_telegram_service",
+            lambda d: "Telegram listener started (PID 12345)",
+        )
+        monkeypatch.setattr(
+            "adjutant.lifecycle.control._sync_schedule_crontab",
+            lambda d: "Crontab synced (0 jobs)",
+        )
+        monkeypatch.setattr("adjutant.lifecycle.control._pgrep_first", lambda p: None)
+        monkeypatch.setattr(
+            "adjutant.observability.status.get_status",
+            lambda d: "Adjutant is up and running.",
+        )
+
+        with patch(
+            "adjutant.core.env.require_telegram_credentials",
+            side_effect=RuntimeError("missing creds"),
+        ):
+            result = startup(adj, interactive=False)
+
+        assert (adj / "state" / "restart_notify.json").exists() is False
+        assert "Post-restart Telegram reply not sent (send_failed)" in result
+
     def test_missing_adj_dir(self, monkeypatch):
         monkeypatch.delenv("ADJ_DIR", raising=False)
         with pytest.raises(RuntimeError):

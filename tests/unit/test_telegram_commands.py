@@ -19,6 +19,7 @@ from adjutant.messaging.telegram.commands import (
     cmd_pause,
     cmd_reflect_confirm,
     cmd_reflect_request,
+    cmd_restart,
     cmd_resume,
     cmd_schedule,
     cmd_screenshot,
@@ -164,6 +165,43 @@ class TestCmdResume:
         mock_clear.assert_called_once_with(tmp_path)
         assert len(sent) == 1
         assert "online" in sent[0].lower() or "back" in sent[0].lower()
+
+
+class TestCmdRestart:
+    @pytest.mark.asyncio
+    async def test_persists_pending_restart_reply_before_spawning(self, tmp_path: Path) -> None:
+        mock_send, sent = _capture_send()
+
+        with (
+            patch("adjutant.messaging.telegram.send.msg_send_text", mock_send),
+            patch("adjutant.messaging.telegram.commands.adj_log") as mock_log,
+            patch("asyncio.sleep", new=AsyncMock()),
+            patch("subprocess.Popen") as mock_popen,
+        ):
+            await cmd_restart(7, tmp_path, bot_token=BOT, chat_id=CHAT)
+
+        pending = tmp_path / "state" / "restart_notify.json"
+        assert pending.exists()
+        assert '"reply_to_message_id": 7' in pending.read_text()
+        mock_popen.assert_called_once()
+        assert any(
+            "Wrote restart reply marker" in str(call.args[1]) for call in mock_log.call_args_list
+        )
+        assert any("restarting" in m.lower() for m in sent)
+
+    @pytest.mark.asyncio
+    async def test_cleans_pending_file_when_spawn_fails(self, tmp_path: Path) -> None:
+        mock_send, sent = _capture_send()
+
+        with (
+            patch("adjutant.messaging.telegram.send.msg_send_text", mock_send),
+            patch("asyncio.sleep", new=AsyncMock()),
+            patch("subprocess.Popen", side_effect=OSError("boom")),
+        ):
+            await cmd_restart(7, tmp_path, bot_token=BOT, chat_id=CHAT)
+
+        assert not (tmp_path / "state" / "restart_notify.json").exists()
+        assert any("restart failed" in m.lower() for m in sent)
 
 
 # ---------------------------------------------------------------------------

@@ -11,12 +11,14 @@ Replaces five bash scripts:
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import shutil
 import signal
 import subprocess
 import time
 from datetime import datetime
+from dataclasses import dataclass
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -67,6 +69,52 @@ def _send_notify(adj_dir: Path, text: str) -> None:
         send_notify(text, adj_dir)
     except Exception:  # noqa: BLE001 — non-fatal, matches bash `|| true`
         pass
+
+
+@dataclass(frozen=True)
+class PostRestartNotificationResult:
+    sent: bool
+    reason: str
+
+
+def _send_post_restart_notification(adj_dir: Path) -> PostRestartNotificationResult:
+    """Send a direct Telegram reply after /restart completes, if requested."""
+    pending = adj_dir / "state" / "restart_notify.json"
+    if not pending.is_file():
+        _adj_log("startup", "No post-restart Telegram reply marker found")
+        return PostRestartNotificationResult(sent=False, reason="missing_marker")
+
+    try:
+        payload = json.loads(pending.read_text())
+    except (OSError, json.JSONDecodeError):
+        _adj_log("startup", f"Invalid post-restart Telegram reply marker: {pending}")
+        pending.unlink(missing_ok=True)
+        return PostRestartNotificationResult(sent=False, reason="invalid_marker")
+
+    reply_to = payload.get("reply_to_message_id")
+    if not isinstance(reply_to, int):
+        _adj_log("startup", f"Post-restart Telegram reply marker missing int reply_to: {pending}")
+        pending.unlink(missing_ok=True)
+        return PostRestartNotificationResult(sent=False, reason="invalid_reply_to")
+
+    try:
+        from adjutant.core.env import require_telegram_credentials
+        from adjutant.messaging.telegram.send import msg_send_text
+
+        bot_token, chat_id = require_telegram_credentials(adj_dir / ".env")
+        msg_send_text(
+            "I'm back online and keeping an eye on things.",
+            reply_to,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        _adj_log("startup", f"Post-restart Telegram reply sent reply_to={reply_to}")
+        return PostRestartNotificationResult(sent=True, reason="sent")
+    except Exception as exc:  # noqa: BLE001 — best-effort startup notification
+        _adj_log("startup", f"Post-restart Telegram reply failed: {exc}")
+        return PostRestartNotificationResult(sent=False, reason="send_failed")
+    finally:
+        pending.unlink(missing_ok=True)
 
 
 def _kill_by_pattern(pattern: str, sig: signal.Signals = signal.SIGTERM) -> None:
@@ -577,6 +625,12 @@ def startup(
         lines.append("Telegram notification sent")
     except Exception:
         lines.append("Failed to send Telegram notification")
+
+    post_restart = _send_post_restart_notification(d)
+    if post_restart.sent:
+        lines.append("Post-restart Telegram reply sent")
+    elif post_restart.reason != "missing_marker":
+        lines.append(f"Post-restart Telegram reply not sent ({post_restart.reason})")
 
     lines += [
         "",

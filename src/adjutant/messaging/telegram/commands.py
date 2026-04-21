@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import os
 import subprocess
 import sys
@@ -27,6 +28,7 @@ from adjutant.core.model import resolve_model_spec
 # ---------------------------------------------------------------------------
 
 _MODEL_TIERS = {"cheap", "medium", "expensive"}
+_RESTART_NOTIFY_FILENAME = "restart_notify.json"
 
 
 async def _fetch_available_models() -> list[str]:
@@ -90,6 +92,15 @@ def _send(message: str, message_id: int, *, bot_token: str, chat_id: str) -> Non
     from adjutant.messaging.telegram.send import msg_send_text
 
     msg_send_text(message, message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+def _write_restart_notify(adj_dir: Path, message_id: int) -> Path:
+    """Persist the original /restart message ID for post-startup notification."""
+    pending = adj_dir / "state" / _RESTART_NOTIFY_FILENAME
+    pending.parent.mkdir(parents=True, exist_ok=True)
+    pending.write_text(json.dumps({"reply_to_message_id": message_id}))
+    adj_log("telegram", f"Wrote restart reply marker: {pending} reply_to={message_id}")
+    return pending
 
 
 async def _run_opencode_prompt(
@@ -448,6 +459,8 @@ async def cmd_restart(
     # Give the Telegram send a moment to flush
     await asyncio.sleep(0.5)
 
+    pending_restart = _write_restart_notify(adj_dir, message_id)
+
     # Spawn a detached process that will:
     #   1. Kill this listener
     #   2. Start a fresh instance
@@ -469,6 +482,8 @@ async def cmd_restart(
             )
         adj_log("telegram", "Detached restart process spawned.")
     except Exception as exc:
+        with contextlib.suppress(OSError):
+            pending_restart.unlink()
         adj_log("telegram", f"cmd_restart: failed to spawn restart process: {exc}")
         _send(
             f"Restart failed: {exc}",
