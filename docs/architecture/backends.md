@@ -73,13 +73,13 @@ Reads `llm.backend` from `adjutant.yaml` (via `load_typed_config()`) and returns
 
 Wraps the existing `core/opencode.py` module. Delegates to `opencode_run()` for async calls and `_find_opencode()` for binary lookup. Parses NDJSON output via `lib/ndjson.py`.
 
-**Capabilities:** vision, model_listing, reaping, web_server, streaming.
+**Capabilities:** vision, model_listing, reaping, streaming.
 
 ### `ClaudeCLIBackend` (`backend_claude_cli.py`)
 
 Invokes `claude -p --output-format json` directly. Parses JSON output via `lib/claude_json.py`. Handles agent prompts by stripping YAML frontmatter from `.opencode/agents/*.md` and passing the body via `--system-prompt-file`.
 
-**Capabilities:** web_server, cost_tracking.
+**Capabilities:** model_listing, cost_tracking.
 
 ---
 
@@ -123,6 +123,8 @@ At startup, `lifecycle/control.py` compares `adjutant.yaml`'s `llm.backend` agai
 3. Clear `state/telegram_session.json`
 4. Update `state/backend.txt`
 5. Log the switch
+
+Backend-native web servers are retired on both backends, so the switch now translates model/session state only.
 
 This is handled by `_detect_backend_change()` and `_handle_backend_switch()`.
 

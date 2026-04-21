@@ -61,6 +61,7 @@ features:
     enabled: false
   vision:
     enabled: false
+    model: "cheap"                    # must be cheap|medium|expensive
   search:
     enabled: false                    # requires BRAVE_API_KEY in .env
   usage_tracking:
@@ -171,17 +172,14 @@ The `.env` file is never `source`d directly — Adjutant uses grep-based extract
 
 ### Backend environment variables
 
-These are optional overrides for backend binary paths and web server configuration. They're set in `.env` or your shell environment, not in `adjutant.yaml`.
+These are optional overrides for backend binary paths. They're set in `.env` or your shell environment, not in `adjutant.yaml`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENCODE_BIN` | auto-detected | Explicit path to the `opencode` binary |
-| `OPENCODE_WEB_PORT` | `4096` | Port for the OpenCode web server |
 | `CLAUDE_CODE_BIN` | auto-detected | Explicit path to the `claude` binary |
-| `CLOUDCLI_BIN` | auto-detected | Explicit path to the `cloudcli` binary |
-| `CLOUDCLI_PORT` | `3001` | Port for the CloudCLI web server (claude-cli backend) |
 
-Adjutant auto-detects binaries from PATH. Only set these if the binary is installed in a non-standard location or you need to override the default port.
+Adjutant auto-detects binaries from PATH. Only set these if the binary is installed in a non-standard location.
 
 ---
 

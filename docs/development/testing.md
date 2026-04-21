@@ -10,7 +10,7 @@ Adjutant uses [pytest](https://pytest.org) as its test framework. Tests are orga
 
 | Tier | Location | Tests | Runtime | Description |
 |------|----------|-------|---------|-------------|
-| Unit | `tests/unit/` | ~1139 | ~75s | Fast, fully mocked, no external calls |
+| Unit | `tests/unit/` | ~1420+ | ~75s | Fast, fully mocked, no external calls |
 | Integration | `tests/integration/` | ~20 | ~5s | Real process spawning, mocked external services |
 
 ---
@@ -70,7 +70,7 @@ All tests must pass. Any failure blocks the release. This is enforced by discipl
 
 ```
 tests/
-└── unit/                    # All tests (~52 files, ~1081 tests)
+└── unit/                    # All tests (~61 files, ~1420+ tests)
     ├── test_lockfiles.py
     ├── test_env.py
     ├── test_paths.py
@@ -90,7 +90,7 @@ tests/
     ├── test_journal_rotate.py
     ├── test_screenshot.py
     ├── test_search.py
-    └── ... (52 files total)
+    └── ... (61 files total)
 ```
 
 ---

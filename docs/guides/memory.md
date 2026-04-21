@@ -6,7 +6,7 @@ Adjutant has persistent long-term memory stored as plain Markdown files. The mem
 
 Memory is stored under `memory/` in the Adjutant directory. Each category has its own file. When you tell Adjutant to remember something, it auto-classifies the content and appends it to the right file with a timestamp.
 
-The agent loads `memory/memory.md` (the index) at startup so it knows what's available. Individual memory files are loaded on demand when relevant to the current conversation.
+The agent loads `memory/memory.md` on demand when a conversation touches past decisions, corrections, preferences, or other memory-backed topics. Individual memory files are then loaded as needed.
 
 ## Directory Structure
 

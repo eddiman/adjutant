@@ -243,22 +243,9 @@ See `portfolio-kb/src/pipeline/analyze.py` for a complete working example of a K
 
 ---
 
-## Web server services
+## Web UI
 
-Each backend has a web server that provides a browser-based UI for remote development:
-
-| Backend | Web server | Binary | Default port | PID file | Health check |
-|---------|-----------|--------|-------------|----------|-------------|
-| `opencode` | OpenCode web | `opencode web --mdns` | 4096 (`OPENCODE_WEB_PORT`) | `state/opencode_web.pid` | HTTP GET `http://localhost:{port}/` |
-| `claude-cli` | CloudCLI | `cloudcli --port {port}` | 3001 (`CLOUDCLI_PORT`) | `state/cloudcli_web.pid` | HTTP GET `http://localhost:{port}/health` |
-
-The web server is managed by `lifecycle/control.py`:
-- **Start**: `start_backend_service()` dispatches to `start_opencode_web()` or `_start_cloudcli_web()` based on the active backend
-- **Stop**: `restart()` and `emergency_kill()` terminate both web servers (handles mid-switch state)
-- **Watchdog**: `listener.py` checks the PID file every ~5 minutes and restarts if dead
-- **Backend switch**: `_handle_backend_switch()` kills the old backend's web server
-
-CloudCLI receives `WORKSPACES_ROOT` (set to `adj_dir`) and `CLAUDE_CLI_PATH` (set to the `claude` binary) as environment variables so it discovers the correct project directory and CLI binary.
+Backend-native web servers are retired on both backends. Adjutant's browser UI is the `web/` app in this monorepo, started with `adjutant web` during development.
 
 ---
 

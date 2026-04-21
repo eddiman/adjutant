@@ -48,7 +48,6 @@ adjutant setup
 2. Restart Adjutant: `adjutant restart`
 
 On restart, Adjutant detects the backend change and automatically:
-- Stops the old backend's service (OpenCode web server or CloudCLI web server)
 - Translates the active model ID to the new backend's format
 - Clears the Telegram session (new backend, new conversation)
 - Records the switch in `state/backend.txt`
@@ -64,7 +63,7 @@ No data is lost. You can switch back at any time.
 | Vision (image analysis) | Yes (native) | Yes (via Read tool image injection) |
 | Dynamic model listing | Yes | Yes |
 | Process reaping | Yes | No (not needed) |
-| Web server (remote access) | Yes (`opencode web`) | Yes (CloudCLI) |
+| Backend-native web server | No | No |
 | Streaming output | Yes | No (single-shot JSON) |
 | Cost tracking per request | No | Yes |
 | Session resume | Yes (`--session`) | Yes (`--resume`) |
@@ -87,30 +86,7 @@ npm install -g @anthropic-ai/claude-code
 claude login
 ```
 
-### 3. Install CloudCLI (web UI)
-
-CloudCLI provides a browser-based web UI for the Claude CLI backend, equivalent to `opencode web` for the OpenCode backend. It starts automatically when the `claude-cli` backend is active.
-
-```bash
-npm install -g @siteboon/claude-code-ui
-```
-
-Verify it's installed:
-
-```bash
-cloudcli version
-```
-
-**Configuration** (optional — defaults work out of the box):
-
-| Environment variable | Default | Description |
-|---------------------|---------|-------------|
-| `CLOUDCLI_PORT` | `3001` | Port for the CloudCLI web server |
-| `CLOUDCLI_BIN` | auto-detected from PATH | Explicit path to the `cloudcli` binary |
-
-Adjutant sets `WORKSPACES_ROOT` and `CLAUDE_CLI_PATH` automatically so CloudCLI sees the correct project directory and Claude binary.
-
-### 4. Configure Adjutant
+### 3. Configure Adjutant
 
 ```yaml
 # adjutant.yaml
@@ -118,7 +94,7 @@ llm:
   backend: "claude-cli"
 ```
 
-### 5. Verify
+### 4. Verify
 
 ```bash
 adjutant doctor
@@ -126,9 +102,9 @@ adjutant doctor
 
 The doctor command checks that the `claude` binary is on PATH, hooks are executable, and the backend is healthy.
 
-### 6. Access the web UI
+### 5. Access the web UI
 
-After `adjutant start`, CloudCLI is available at `http://localhost:3001` (or your configured `CLOUDCLI_PORT`). Access it over VPN or local network to develop on Adjutant remotely from another device.
+Use `adjutant web` to start Adjutant's own web dashboard from the monorepo checkout. Backend-native web servers are retired on both backends.
 
 ---
 

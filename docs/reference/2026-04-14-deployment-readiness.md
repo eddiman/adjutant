@@ -202,6 +202,7 @@ working local install via the published setup or installer path.
      `src/adjutant/messaging/telegram/commands.py`
    - **Action:** Align public command docs to actual shipped handlers, or
      implement the missing commands before release.
+   - **Resolved 2026-04-18:** Aligned the public command surface to the actual Telegram dispatcher and handlers. Removed stale `/models`, `/memory`, and `/news` references from `README.md` and `docs/getting-started/first-message.md`, and documented the shipped `/brief`, `/recall`, and `/digest` commands instead.
 
 2. **Release and install story is not coherent end-to-end**
    - **Files:** `.github/workflows/release.yml`, `src/adjutant/setup/install.py`,
@@ -209,6 +210,7 @@ working local install via the published setup or installer path.
    - **Action:** Pick one supported public install path and document it
      consistently. If the Python installer is the intended story, wire and
      publish it as such. If not, stop presenting it as part of release readiness.
+   - **Resolved 2026-04-18:** Promoted the installer to the canonical public path. Added a repo-root `install.py` entrypoint so a fresh clone or extracted release tarball can run `python3 install.py` directly, updated `src/adjutant/setup/install.py` to create `.venv` and install Adjutant into it before launching the wizard, and rewrote the release body plus getting-started docs to use that single flow consistently.
 
 3. **Shell-based scheduled command execution needs hardening before public ship**
    - **Files:** `src/adjutant/cli.py`,
@@ -217,11 +219,13 @@ working local install via the published setup or installer path.
    - **Action:** Replace shell-string execution with argument-list execution where
      possible, or constrain and validate command generation so no user- or
      config-derived string reaches `shell=True` unsafely.
+   - **Resolved 2026-04-18:** Reworked scheduled-command resolution around structured argv. `schedule.manage.resolve_command_argv()` now parses `script:` entries safely, `schedule.install.run_now()` and `notify_wrap.py` execute argv lists instead of `shell=True`, `adjutant schedule run` now uses the shared runner, and the schedule wizard now installs jobs through the same hardened schedule API. Cron entries still use `/bin/bash -lc`, but only to execute a fully quoted command built from structured argv plus explicit env assignments, not a raw user-derived shell string.
 
 4. **Release gate requires a clearly recorded clean full test run**
    - **Files:** `tests/`, release/testing docs, backend and schedule test paths
    - **Action:** Run the full suite, resolve any failures, and make a clean full
      pass the explicit release gate before tagging.
+   - **Resolved 2026-04-18:** Ran `.venv/bin/pytest tests/ -q` and got `1428 passed, 73 skipped, 1 warning in 8.02s`. Also updated `docs/development/testing.md` to stop advertising the stale lower approximate test counts.
 
 ### P1 — degrades quality
 
@@ -230,22 +234,26 @@ working local install via the published setup or installer path.
      `docs/guides/configuration.md`, `README.md`
    - **Action:** Remove CloudCLI or opencode-web-era references and align docs to
      the current `web/` architecture.
+   - **Resolved 2026-04-18:** Removed backend-native web-server guidance from `docs/guides/backends.md`, `docs/guides/configuration.md`, `docs/guides/troubleshooting.md`, `docs/guides/commands.md`, and `docs/development/backend-guide.md`, and replaced it with the current `adjutant web` / `web/` dashboard architecture where relevant.
 
 2. **Unused runtime dependency likely remains**
    - **Files:** `pyproject.toml`
    - **Action:** Remove `rich` if it is truly unused, or add the missing usage
      intentionally.
+   - **Resolved 2026-04-18:** Removed `rich` from `pyproject.toml` after confirming there are no runtime imports in `src/`.
 
 3. **Private helper imports weaken code boundaries**
    - **Files:** `src/adjutant/capabilities/schedule/install.py`,
      `src/adjutant/capabilities/kb/query.py`
    - **Action:** Promote these helpers to public APIs or stop importing
      underscore-prefixed functions across modules.
+   - **Resolved 2026-04-18:** Promoted `resolve_path()` in `schedule.manage` and `get_kb()` in `kb.run` to public helpers, then updated the importing modules to use the public names instead of underscore-prefixed internals.
 
 4. **Exception swallowing remains high**
    - **Files:** distributed across `src/`
    - **Action:** Review silent-swallow and fallback-default cases, especially
      around config, filesystem, and subprocess branches.
+   - **Status 2026-04-18:** Not addressed in this pass. The release-blocking and release-facing issues above were fixed first; broad exception-audit work remains follow-up debt rather than a blocker for the corrected deployment path.
 
 ### P2 — acceptable to defer
 

@@ -202,7 +202,6 @@ Dependencies:
   jq           OK (jq-1.7)
   python3      OK (Python 3.12.0)
   claude       OK (/opt/homebrew/bin/claude)    # or opencode, depending on llm.backend
-  cloudcli     OK (/opt/homebrew/bin/cloudcli)  # claude-cli backend only
 
 Optional:
   playwright   not installed (needed for screenshot)
@@ -221,6 +220,6 @@ State:
   Listener: Running (PID 12345)
 ```
 
-The backend-specific binaries shown depend on `llm.backend` in `adjutant.yaml`. With `opencode`, doctor checks for the `opencode` binary. With `claude-cli`, it checks for `claude` and `cloudcli`.
+The backend-specific binaries shown depend on `llm.backend` in `adjutant.yaml`. With `opencode`, doctor checks for the `opencode` binary. With `claude-cli`, it checks for `claude`.
 
 If `adjutant doctor` reports missing dependencies or configuration, run `adjutant setup --repair` to fix them interactively.
