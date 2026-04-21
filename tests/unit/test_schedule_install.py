@@ -12,6 +12,7 @@ from adjutant.capabilities.schedule.install import (
     _marker,
     _resolve_path,
     _resolve_command,
+    _resolve_command_argv,
     _read_crontab,
     _write_crontab,
     install_all,
@@ -78,16 +79,29 @@ class TestResolveCommand:
     def test_kb_command(self, tmp_path: Path) -> None:
         entry = {"kb_name": "mydb", "kb_operation": "fetch"}
         result = _resolve_command(entry, tmp_path)
+        argv = _resolve_command_argv(entry, tmp_path)
         assert "adjutant kb run" in result
         assert "mydb" in result
         assert "fetch" in result
+        assert argv[-4:] == ["kb", "run", "mydb", "fetch"]
 
     def test_script_command(self, tmp_path: Path) -> None:
         entry = {"script": "/scripts/run.sh"}
         assert _resolve_command(entry, tmp_path) == "/scripts/run.sh"
+        assert _resolve_command_argv(entry, tmp_path) == ["/scripts/run.sh"]
+
+    def test_multi_part_script_command(self, tmp_path: Path) -> None:
+        entry = {"script": ".venv/bin/python -m adjutant news"}
+        assert _resolve_command_argv(entry, tmp_path) == [
+            str(tmp_path / ".venv/bin/python"),
+            "-m",
+            "adjutant",
+            "news",
+        ]
 
     def test_empty_when_no_command(self, tmp_path: Path) -> None:
         assert _resolve_command({}, tmp_path) == ""
+        assert _resolve_command_argv({}, tmp_path) == []
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +404,7 @@ class TestRunNow:
             rc = run_now(tmp_path, "job1")
         assert rc == 0
         mock_run.assert_called_once()
+        assert mock_run.call_args[0][0] == [str(script)]
 
     def test_raises_when_script_not_found(self, tmp_path: Path) -> None:
         _write_adjutant_yaml(
@@ -399,7 +414,7 @@ class TestRunNow:
         with pytest.raises(ValueError, match="not found"):
             run_now(tmp_path, "job1")
 
-    def test_runs_kb_command_via_shell(self, tmp_path: Path) -> None:
+    def test_runs_kb_command_via_argv(self, tmp_path: Path) -> None:
         _write_adjutant_yaml(
             tmp_path,
             [
@@ -414,9 +429,8 @@ class TestRunNow:
         with patch("subprocess.run", return_value=_make_proc(0)) as mock_run:
             rc = run_now(tmp_path, "job1")
         assert rc == 0
-        # shell=True for kb commands
-        kwargs = mock_run.call_args[1]
-        assert kwargs.get("shell") is True
+        assert mock_run.call_args[0][0][-4:] == ["kb", "run", "mydb", "fetch"]
+        assert "shell" not in mock_run.call_args[1]
 
     def test_raises_when_script_not_executable(self, tmp_path: Path) -> None:
         script = tmp_path / "run.sh"

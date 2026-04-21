@@ -71,48 +71,26 @@ def _add_schedule_to_yaml(
     log: str,
 ) -> None:
     """Append a new schedule entry to adjutant.yaml."""
-    config = adj_dir / "adjutant.yaml"
-    text = config.read_text() if config.is_file() else ""
+    from adjutant.capabilities.schedule.manage import schedule_add
 
-    entry = (
-        f'\n  - name: "{name}"\n'
-        f'    description: "{description}"\n'
-        f'    schedule: "{schedule}"\n'
-        f'    script: "{script}"\n'
-        f'    log: "{log}"\n'
-        f"    enabled: true\n"
+    schedule_add(
+        adj_dir / "adjutant.yaml",
+        name,
+        description,
+        schedule,
+        script,
+        logpath=log,
     )
-
-    if "schedules:" in text:
-        # Append after the schedules: key
-        text = text + entry
-    else:
-        text = text + f"\nschedules:{entry}"
-
-    config.write_text(text)
 
 
 def _install_crontab(adj_dir: Path, name: str, schedule: str, script: str, log: str) -> None:
     """Install a crontab entry for the job."""
-    import subprocess
-
-    # Resolve script path
-    script_path = Path(script)
-    if not script_path.is_absolute():
-        script_path = adj_dir / script
-
-    log_path = Path(log)
-    if not log_path.is_absolute():
-        log_path = adj_dir / log
-
-    cron_line = f"{schedule} {script_path} >> {log_path} 2>&1 # adjutant:{name}"
-
     try:
-        result = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-        existing = result.stdout if result.returncode == 0 else ""
-        new_crontab = existing.rstrip("\n") + "\n" + cron_line + "\n"
-        subprocess.run(["crontab", "-"], input=new_crontab, text=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        from adjutant.capabilities.schedule.install import install_one
+
+        _ = schedule, script, log
+        install_one(adj_dir, name)
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
         raise RuntimeError(f"crontab install failed: {exc}") from exc
 
 

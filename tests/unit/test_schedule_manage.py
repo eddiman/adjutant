@@ -13,6 +13,7 @@ from adjutant.capabilities.schedule.manage import (
     _get_schedules,
     _resolve_path,
     resolve_command,
+    resolve_command_argv,
     _schedule_append,
     schedule_count,
     schedule_exists,
@@ -123,19 +124,32 @@ class TestResolveCommand:
     def test_resolves_script(self, tmp_path: Path) -> None:
         entry = {"script": "/path/to/run.sh"}
         assert resolve_command(entry, tmp_path) == "/path/to/run.sh"
+        assert resolve_command_argv(entry, tmp_path) == ["/path/to/run.sh"]
+
+    def test_resolves_multi_part_script(self, tmp_path: Path) -> None:
+        entry = {"script": ".venv/bin/python -m adjutant news"}
+        assert resolve_command_argv(entry, tmp_path) == [
+            str(tmp_path / ".venv/bin/python"),
+            "-m",
+            "adjutant",
+            "news",
+        ]
 
     def test_resolves_kb_command(self, tmp_path: Path) -> None:
         entry = {"kb_name": "mydb", "kb_operation": "fetch"}
         result = resolve_command(entry, tmp_path)
+        argv = resolve_command_argv(entry, tmp_path)
         # Should use Python CLI: python -m adjutant kb run <name> <op>
         assert "adjutant" in result
         assert "kb" in result
         assert "run" in result
         assert "mydb" in result
         assert "fetch" in result
+        assert argv[-4:] == ["kb", "run", "mydb", "fetch"]
 
     def test_returns_empty_when_no_command(self, tmp_path: Path) -> None:
         assert resolve_command({}, tmp_path) == ""
+        assert resolve_command_argv({}, tmp_path) == []
 
 
 # ---------------------------------------------------------------------------

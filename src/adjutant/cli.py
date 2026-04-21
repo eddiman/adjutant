@@ -1075,26 +1075,22 @@ def schedule_sync_cmd(ctx: click.Context) -> None:
 @click.pass_context
 def schedule_run_cmd(ctx: click.Context, name: str) -> None:
     """Run a scheduled job immediately in the foreground (for testing)."""
-    from pathlib import Path
-
     adj_dir = ctx.obj.get("adj_dir")
     if adj_dir is None:
         click.echo("Adjutant directory not found.", err=True)
         raise SystemExit(1)
 
+    from adjutant.capabilities.schedule.install import run_now
     from adjutant.capabilities.schedule.manage import resolve_command, schedule_get
 
-    config_path = Path(adj_dir) / "adjutant.yaml"
+    config_path = adj_dir / "adjutant.yaml"
     entry = schedule_get(config_path, name)
     if entry is None:
         click.echo(f"ERROR: Scheduled job '{name}' not found.", err=True)
         raise SystemExit(1)
 
-    import subprocess
-
-    cmd = resolve_command(entry, adj_dir)
-    click.echo(f"Running: {cmd}")
-    subprocess.run(cmd, shell=True, check=False)
+    click.echo(f"Running: {resolve_command(entry, adj_dir)}")
+    raise SystemExit(run_now(adj_dir, name))
 
 
 # ---------------------------------------------------------------------------

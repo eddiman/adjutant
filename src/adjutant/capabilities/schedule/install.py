@@ -18,6 +18,8 @@ Backwards compatibility: lines containing ".adjutant" but without
 from __future__ import annotations
 
 import contextlib
+import os
+import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -57,9 +59,9 @@ def _snapshot_path() -> str:
 
 def _resolve_path(p: str, adj_dir: Path) -> str:
     """Absolute path stays as-is; relative is prepended with adj_dir."""
-    from adjutant.capabilities.schedule.manage import _resolve_path as _rp
+    from adjutant.capabilities.schedule.manage import resolve_path
 
-    return _rp(p, adj_dir)
+    return resolve_path(p, adj_dir)
 
 
 def _resolve_command(entry: dict[str, Any], adj_dir: Path) -> str:
@@ -67,6 +69,72 @@ def _resolve_command(entry: dict[str, Any], adj_dir: Path) -> str:
     from adjutant.capabilities.schedule.manage import resolve_command
 
     return resolve_command(entry, adj_dir)
+
+
+def _resolve_command_argv(entry: dict[str, Any], adj_dir: Path) -> list[str]:
+    """Resolve a schedule entry dict to a runnable argv list."""
+    from adjutant.capabilities.schedule.manage import resolve_command_argv
+
+    return resolve_command_argv(entry, adj_dir)
+
+
+def _shell_quote_env_value(value: str) -> str:
+    """Return a shell-safe value for inline VAR=... assignments."""
+    return shlex.quote(value)
+
+
+def _load_env_assignments(adj_dir: Path) -> list[str]:
+    """Load .env as shell-safe KEY=value assignments for cron."""
+    from adjutant.core.env import get_credential
+
+    env_file = adj_dir / ".env"
+    if not env_file.is_file():
+        return []
+
+    assignments: list[str] = []
+    for line in env_file.read_text().splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, _ = stripped.partition("=")
+        key = key.strip()
+        if not key:
+            continue
+        value = get_credential(key, env_file)
+        if value is None:
+            continue
+        assignments.append(f"{key}={_shell_quote_env_value(value)}")
+    return assignments
+
+
+def _cron_shell_command(argv: list[str], log_path: str) -> str:
+    """Build the shell command that cron executes for one job."""
+    command = shlex.join(argv)
+    return f"exec {command} >> {shlex.quote(log_path)} 2>&1"
+
+
+def _job_environment(adj_dir: Path) -> dict[str, str]:
+    """Return the environment for immediate schedule execution."""
+    env = dict(os.environ)
+    env["ADJ_DIR"] = str(adj_dir)
+    env.setdefault("ADJUTANT_HOME", str(adj_dir))
+
+    env_file = adj_dir / ".env"
+    if env_file.is_file():
+        from adjutant.core.env import get_credential
+
+        for line in env_file.read_text().splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, _, _ = stripped.partition("=")
+            key = key.strip()
+            if not key:
+                continue
+            value = get_credential(key, env_file)
+            if value is not None:
+                env[key] = value
+    return env
 
 
 def _read_crontab() -> str:
@@ -145,9 +213,9 @@ def install_one(adj_dir: Path, name: str) -> None:
     notify = entry.get("notify", False)
 
     log_path = _resolve_path(str(log_raw), adj_dir)
-    script_path = _resolve_command(entry, adj_dir)
+    command_argv = _resolve_command_argv(entry, adj_dir)
 
-    if not script_path:
+    if not command_argv:
         raise ValueError(f"Job '{name}' has no runnable script or KB operation configured.")
 
     # Ensure log directory exists
@@ -156,27 +224,25 @@ def install_one(adj_dir: Path, name: str) -> None:
 
     marker = _marker(name)
     path_env = _snapshot_path()
-    env_file = adj_dir / ".env"
+    env_assignments = _load_env_assignments(adj_dir)
 
     if notify:
         wrap_py = adj_dir / "src" / "adjutant" / "capabilities" / "schedule" / "notify_wrap.py"
         venv_py = adj_dir / ".venv" / "bin" / "python"
         python = str(venv_py) if venv_py.exists() else "python3"
-        inner_cmd = f"{python} {wrap_py} {name} {script_path}"
+        inner_argv = [python, str(wrap_py), name, *command_argv]
     else:
-        inner_cmd = script_path
+        inner_argv = command_argv
 
-    if env_file.is_file():
-        cron_line = (
-            f"{sched} PATH={path_env} ADJ_DIR={adj_dir} "
-            f"/bin/bash -c 'set -a; source {env_file}; set +a; "
-            f"exec {inner_cmd} >> {log_path} 2>&1'  {marker}"
-        )
-    else:
-        cron_line = (
-            f"{sched} PATH={path_env} ADJ_DIR={adj_dir} "
-            f"{inner_cmd} >> {log_path} 2>&1  {marker}"
-        )
+    env_prefix = [
+        f"PATH={_shell_quote_env_value(path_env)}",
+        f"ADJ_DIR={_shell_quote_env_value(str(adj_dir))}",
+        f"ADJUTANT_HOME={_shell_quote_env_value(str(adj_dir))}",
+        *env_assignments,
+    ]
+    shell_cmd = _cron_shell_command(inner_argv, log_path)
+
+    cron_line = f"{sched} {' '.join(env_prefix)} /bin/bash -lc {shlex.quote(shell_cmd)}  {marker}"
 
     # Remove any existing entry for this job, then append new one
     existing = _read_crontab()
@@ -216,8 +282,6 @@ def run_now(adj_dir: Path, name: str) -> int:
         ValueError: If the job is not registered, has no command,
             or script is missing/not executable.
     """
-    import os
-
     from adjutant.capabilities.schedule.manage import schedule_exists, schedule_get
 
     config = _config_path(adj_dir)
@@ -226,24 +290,17 @@ def run_now(adj_dir: Path, name: str) -> int:
         raise ValueError(f"Job '{name}' not found in registry.")
 
     entry = schedule_get(config, name)
-    command = _resolve_command(entry or {}, adj_dir)
+    command_argv = _resolve_command_argv(entry or {}, adj_dir)
 
-    if not command:
+    if not command_argv:
         raise ValueError(f"Job '{name}' has no runnable script or KB operation configured.")
 
-    # If the command is a shell string (not a bare file path), run via shell
-    kb_name = (entry or {}).get("kb_name", "") or ""
-    kb_operation = (entry or {}).get("kb_operation", "") or ""
-    if kb_name and kb_operation:
-        env = {**os.environ, "ADJ_DIR": str(adj_dir)}
-        result = subprocess.run(command, shell=True, env=env)
-        return result.returncode
+    command_path = Path(command_argv[0])
+    if command_path.suffix == ".sh":
+        if not command_path.is_file():
+            raise ValueError(f"Script not found: {command_path}")
+        if not os.access(command_path, os.X_OK):
+            raise ValueError(f"Script is not executable: {command_path}")
 
-    script_path = Path(command)
-    if not script_path.is_file():
-        raise ValueError(f"Script not found: {command}")
-    if not os.access(script_path, os.X_OK):
-        raise ValueError(f"Script is not executable: {command}")
-
-    result = subprocess.run(["bash", str(script_path)])
+    result = subprocess.run(command_argv, env=_job_environment(adj_dir), cwd=str(adj_dir))
     return result.returncode

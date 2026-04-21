@@ -57,14 +57,14 @@ def _extract_kb_notify_message(output: str) -> str | None:
 
 def notify_wrap(
     job_name: str,
-    script_path: str,
+    command_argv: list[str],
     adj_dir: Path,
 ) -> int:
     """Run script_path, capture output, send Telegram notification.
 
     Args:
         job_name: Job name (used as notification prefix).
-        script_path: Path to the script to run (or a command string).
+        command_argv: Command argv to execute.
         adj_dir: Adjutant root directory.
 
     Returns:
@@ -76,11 +76,11 @@ def notify_wrap(
     # parse JSON events from stderr while also reading stdout for fallback.
     try:
         result = subprocess.run(
-            script_path,
+            command_argv,
             capture_output=True,
             text=True,
-            shell=True,
             cwd=str(adj_dir),
+            env={**os.environ, "ADJ_DIR": str(adj_dir), "ADJUTANT_HOME": str(adj_dir)},
         )
         script_rc = result.returncode
         stdout = result.stdout
@@ -121,17 +121,15 @@ def notify_wrap(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: notify_wrap.py <job_name> <script_path>"""
+    """CLI entry point: notify_wrap.py <job_name> <command...>"""
     args = argv if argv is not None else sys.argv[1:]
 
     if len(args) < 2:
-        sys.stderr.write("Usage: notify_wrap.py <job_name> <script_path...>\n")
+        sys.stderr.write("Usage: notify_wrap.py <job_name> <command...>\n")
         return 1
 
     job_name = args[0]
-    script_path = " ".join(
-        args[1:]
-    )  # join in case command has spaces (e.g. "python -m adjutant news")
+    command_argv = args[1:]
 
     adj_dir_str = os.environ.get("ADJ_DIR", "").strip()
     if not adj_dir_str:
@@ -140,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
 
     adj_dir = Path(adj_dir_str)
 
-    return notify_wrap(job_name, script_path, adj_dir)
+    return notify_wrap(job_name, command_argv, adj_dir)
 
 
 if __name__ == "__main__":

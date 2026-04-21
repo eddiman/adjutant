@@ -16,6 +16,7 @@ kb_name/kb_operation fields — these are accessed via the raw dict API
 from __future__ import annotations
 
 import re
+import shlex
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -59,15 +60,20 @@ def _get_schedules(data: dict[str, Any]) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_path(p: str, adj_dir: Path) -> str:
+def resolve_path(p: str, adj_dir: Path) -> str:
     """Absolute path stays as-is; relative is prepended with adj_dir."""
     if p.startswith("/"):
         return p
     return str(adj_dir / p)
 
 
-def resolve_command(entry: dict[str, Any], adj_dir: Path) -> str:
-    """Resolve an entry to a runnable command string.
+def _resolve_path(p: str, adj_dir: Path) -> str:
+    """Backward-compatible alias for tests and older call sites."""
+    return resolve_path(p, adj_dir)
+
+
+def resolve_command_argv(entry: dict[str, Any], adj_dir: Path) -> list[str]:
+    """Resolve an entry to a runnable argv list.
 
     Supports:
       - script: <path>
@@ -79,13 +85,25 @@ def resolve_command(entry: dict[str, Any], adj_dir: Path) -> str:
     if kb_name and kb_operation:
         venv_py = adj_dir / ".venv" / "bin" / "python"
         python = str(venv_py) if venv_py.exists() else "python3"
-        return f"{python} -m adjutant kb run {kb_name} {kb_operation}"
+        return [python, "-m", "adjutant", "kb", "run", kb_name, kb_operation]
 
     script = entry.get("script", "") or ""
     if script:
-        return _resolve_path(script, adj_dir)
+        parts = shlex.split(str(script))
+        if not parts:
+            return []
+        if len(parts) == 1:
+            return [resolve_path(parts[0], adj_dir)]
+        first = parts[0]
+        resolved_first = resolve_path(first, adj_dir) if not first.startswith("-") else first
+        return [resolved_first, *parts[1:]]
 
-    return ""
+    return []
+
+
+def resolve_command(entry: dict[str, Any], adj_dir: Path) -> str:
+    """Resolve an entry to a runnable command string."""
+    return shlex.join(resolve_command_argv(entry, adj_dir))
 
 
 # ---------------------------------------------------------------------------

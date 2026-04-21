@@ -106,7 +106,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log"),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            rc = notify_wrap("my-job", "/scripts/run.sh", tmp_path)
+            rc = notify_wrap("my-job", ["/scripts/run.sh"], tmp_path)
         assert rc == 0
 
     def test_returns_zero_on_failure(self, tmp_path: Path) -> None:
@@ -116,7 +116,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log"),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            rc = notify_wrap("my-job", "/scripts/run.sh", tmp_path)
+            rc = notify_wrap("my-job", ["/scripts/run.sh"], tmp_path)
         assert rc == 0
 
     def test_uses_kb_notify_message_when_present(self, tmp_path: Path) -> None:
@@ -131,7 +131,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            notify_wrap("portfolio-fetch", "/run.sh", tmp_path)
+            notify_wrap("portfolio-fetch", ["/run.sh"], tmp_path)
 
         assert log_calls
         assert "Portfolio snapshot updated" in log_calls[0]
@@ -147,7 +147,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            notify_wrap("portfolio-fetch", "/run.sh", tmp_path)
+            notify_wrap("portfolio-fetch", ["/run.sh"], tmp_path)
 
         assert log_calls
         assert "Data fetched OK" in log_calls[0]
@@ -168,7 +168,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            notify_wrap("portfolio-fetch", "/run.sh", tmp_path)
+            notify_wrap("portfolio-fetch", ["/run.sh"], tmp_path)
 
         assert log_calls
         assert "Portfolio snapshot updated" in log_calls[0]
@@ -181,7 +181,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            notify_wrap("portfolio-fetch", "/run.sh", tmp_path)
+            notify_wrap("portfolio-fetch", ["/run.sh"], tmp_path)
         assert "[portfolio-fetch]" in log_calls[0]
 
     def test_failure_message_includes_rc(self, tmp_path: Path) -> None:
@@ -191,7 +191,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            notify_wrap("daily-sync", "/run.sh", tmp_path)
+            notify_wrap("daily-sync", ["/run.sh"], tmp_path)
         assert "[daily-sync]" in log_calls[0]
         assert "ERROR" in log_calls[0]
         assert "rc=2" in log_calls[0]
@@ -205,7 +205,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            notify_wrap("my-job", "/run.sh", tmp_path)
+            notify_wrap("my-job", ["/run.sh"], tmp_path)
         assert "ERROR" in log_calls[0]
         assert "Script crashed" in log_calls[0]
 
@@ -216,7 +216,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            notify_wrap("empty-job", "/run.sh", tmp_path)
+            notify_wrap("empty-job", ["/run.sh"], tmp_path)
         assert "(no output)" in log_calls[0]
 
     def test_handles_subprocess_oserror(self, tmp_path: Path) -> None:
@@ -226,7 +226,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            rc = notify_wrap("bad-job", "/missing.sh", tmp_path)
+            rc = notify_wrap("bad-job", ["/missing.sh"], tmp_path)
         assert rc == 0
         assert "ERROR" in log_calls[0]
 
@@ -240,7 +240,7 @@ class TestNotifyWrap:
                 side_effect=RuntimeError("telegram down"),
             ),
         ):
-            rc = notify_wrap("job1", "/run.sh", tmp_path)
+            rc = notify_wrap("job1", ["/run.sh"], tmp_path)
         assert rc == 0
 
     def test_falls_back_to_first_non_empty_stdout_line(self, tmp_path: Path) -> None:
@@ -252,7 +252,7 @@ class TestNotifyWrap:
             patch("adjutant.core.logging.adj_log", side_effect=lambda c, m: log_calls.append(m)),
             patch("adjutant.messaging.telegram.notify.send_notify"),
         ):
-            notify_wrap("job1", "/run.sh", tmp_path)
+            notify_wrap("job1", ["/run.sh"], tmp_path)
         assert "First actual line" in log_calls[0]
         assert "Second line" not in log_calls[0]
 
@@ -283,4 +283,4 @@ class TestMain:
         ):
             rc = main(["job1", "/scripts/run.sh"])
         assert rc == 0
-        mock_wrap.assert_called_once_with("job1", "/scripts/run.sh", tmp_path)
+        mock_wrap.assert_called_once_with("job1", ["/scripts/run.sh"], tmp_path)

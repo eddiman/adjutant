@@ -84,9 +84,9 @@ class TestAddScheduleToYaml:
         )
 
         content = cfg.read_text()
-        assert 'name: "my-job"' in content
-        assert 'description: "My job"' in content
-        assert 'schedule: "0 8 * * *"' in content
+        assert "name: my-job" in content
+        assert "description: My job" in content
+        assert "schedule: 0 8 * * *" in content
         assert "enabled: true" in content
 
     def test_creates_schedules_section_when_missing(self, tmp_path: Path) -> None:
@@ -99,13 +99,13 @@ class TestAddScheduleToYaml:
 
         content = cfg.read_text()
         assert "schedules:" in content
-        assert 'name: "new-job"' in content
+        assert "name: new-job" in content
 
     def test_creates_config_when_missing(self, tmp_path: Path) -> None:
         _add_schedule_to_yaml(tmp_path, "job1", "Desc", "* * * * *", "/s.sh", "s.log")
         cfg = tmp_path / "adjutant.yaml"
         assert cfg.is_file()
-        assert 'name: "job1"' in cfg.read_text()
+        assert "name: job1" in cfg.read_text()
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +122,15 @@ class TestInstallCrontab:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_result.stdout = ""
+
+        _add_schedule_to_yaml(
+            tmp_path,
+            "test-job",
+            "Test job",
+            "0 8 * * *",
+            str(script),
+            str(log),
+        )
 
         with patch("subprocess.run", return_value=mock_result) as mock_run:
             _install_crontab(tmp_path, "test-job", "0 8 * * *", str(script), str(log))
