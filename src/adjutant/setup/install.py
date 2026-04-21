@@ -10,7 +10,7 @@ What this script does:
 
 Environment variables (all optional):
   ADJUTANT_INSTALL_DIR   Override install path (skips the prompt)
-  ADJUTANT_REPO          Override GitHub owner/repo (default: eddiman/adjutant)
+   ADJUTANT_REPO          Override GitHub owner/repo (default: eddiman/adjutant)
   ADJUTANT_VERSION       Pin a specific release tag (default: latest)
   ADJUTANT_NO_WIZARD     Set to "true" to skip the wizard after install
 """
@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -27,10 +28,21 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-# ---------------------------------------------------------------------------
-# Colour helpers — delegates to wizard.py for NO_COLOR compliance
-# ---------------------------------------------------------------------------
-from adjutant.setup.wizard import BOLD, CYAN, GREEN, RED, RESET, YELLOW  # noqa: E402
+
+def _use_color() -> bool:
+    return sys.stderr.isatty() and not os.environ.get("NO_COLOR")
+
+
+def _c(code: str) -> str:
+    return f"\033[{code}m" if _use_color() else ""
+
+
+BOLD = _c("1")
+CYAN = _c("36")
+GREEN = _c("32")
+RED = _c("31")
+RESET = _c("0")
+YELLOW = _c("33")
 
 
 def info(msg: str) -> None:
@@ -95,14 +107,14 @@ def check_prerequisites() -> None:
         else:
             warn("  Install with: sudo apt-get install jq")
 
-    # LLM backend
-    from adjutant.core.backend import get_backend
-
-    backend = get_backend()
-    if backend.find_binary():
-        ok(f"{backend.name} found")
+    opencode_bin = shutil.which("opencode")
+    claude_bin = shutil.which("claude")
+    if opencode_bin:
+        ok(f"opencode found ({opencode_bin})")
+    elif claude_bin:
+        ok(f"claude found ({claude_bin})")
     else:
-        warn(f"{backend.name} not found — required for LLM calls")
+        warn("Neither opencode nor claude found — one LLM backend is required")
         failed = True
 
     if failed:
@@ -218,6 +230,33 @@ def download_and_extract(version: str, install_dir: Path) -> None:
         ok(f"Extracted to {install_dir}")
 
 
+def bootstrap_runtime(install_dir: Path) -> None:
+    """Create a venv and install Adjutant into it."""
+    pyproject = install_dir / "pyproject.toml"
+    if not pyproject.is_file():
+        die(f"pyproject.toml not found in {install_dir}. The extraction may have failed.")
+
+    venv_dir = install_dir / ".venv"
+    python = venv_dir / "bin" / "python"
+    pip = venv_dir / "bin" / "pip"
+
+    info("Creating virtual environment...")
+    try:
+        subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
+    except subprocess.CalledProcessError as exc:
+        die(f"Could not create virtual environment: {exc}")
+    ok(f"Virtual environment ready at {venv_dir}")
+
+    info("Installing Adjutant into the virtual environment...")
+    try:
+        subprocess.run(
+            [str(pip), "install", "-e", str(install_dir)], check=True, cwd=str(install_dir)
+        )
+    except subprocess.CalledProcessError as exc:
+        die(f"Could not install Adjutant dependencies: {exc}")
+    ok(f"Installed Adjutant into {python}")
+
+
 # ---------------------------------------------------------------------------
 # Wizard launcher
 # ---------------------------------------------------------------------------
@@ -269,10 +308,12 @@ def main() -> None:
 
     download_and_extract(version, install_dir)
     print("", file=sys.stderr)
+    bootstrap_runtime(install_dir)
+    print("", file=sys.stderr)
 
     if os.environ.get("ADJUTANT_NO_WIZARD") == "true":
         ok(f"Adjutant {version} installed to {install_dir}")
-        info(f"Run {BOLD}adjutant setup{RESET} to complete setup.")
+        info(f"Run {BOLD}{install_dir / 'adjutant'} setup{RESET} to complete setup.")
     else:
         run_wizard(install_dir)
 

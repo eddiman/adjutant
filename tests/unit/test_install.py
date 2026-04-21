@@ -33,9 +33,9 @@ class TestCheckPrerequisites:
             # Should not raise or exit
             check_prerequisites()
 
-    def test_dies_when_opencode_missing(self) -> None:
+    def test_dies_when_no_backend_present(self) -> None:
         def which_side(cmd):
-            if cmd == "opencode":
+            if cmd in {"opencode", "claude"}:
                 return None
             return "/usr/bin/cmd"
 

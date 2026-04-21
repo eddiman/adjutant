@@ -92,22 +92,18 @@ jobs:
             ## Install
 
             ```bash
-            git clone https://github.com/${{ github.repository }}.git /path/to/adjutant
-            cd /path/to/adjutant
-            python3 -m venv .venv
-            .venv/bin/pip install -e .
-            .venv/bin/adjutant setup
-            ```
-
-            Or download the tarball:
-
-            ```bash
             curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.version.outputs.tarball }} -o adjutant.tar.gz
             tar xzf adjutant.tar.gz
             cd adjutant-${{ steps.version.outputs.tag }}
-            python3 -m venv .venv
-            .venv/bin/pip install -e .
-            .venv/bin/adjutant setup
+            python3 install.py
+            ```
+
+            Or install from a clone:
+
+            ```bash
+            git clone https://github.com/${{ github.repository }}.git /path/to/adjutant
+            cd /path/to/adjutant
+            python3 install.py
             ```
 
             ## What's included

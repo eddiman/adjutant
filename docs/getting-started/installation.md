@@ -21,23 +21,31 @@ claude --version
 
 ## Install
 
-Clone the repository to any location you like — Adjutant can live anywhere:
+From a release tarball or a clone, run the installer from the repo root:
 
 ```bash
 git clone https://github.com/eddiman/adjutant.git /path/to/adjutant
 cd /path/to/adjutant
-python3 -m venv .venv
-.venv/bin/pip install -e .
+python3 install.py
 ```
 
-This installs the `adjutant` CLI entry point into `.venv/bin/adjutant`. Add it to your shell profile (adjust the path to match where you cloned):
+For release assets, download and extract the tarball first, then run the same command:
 
 ```bash
-echo 'alias adjutant="/path/to/adjutant/.venv/bin/adjutant"' >> ~/.zshrc
+curl -fsSL https://github.com/eddiman/adjutant/releases/latest/download/adjutant-vX.Y.Z.tar.gz -o adjutant.tar.gz
+tar xzf adjutant.tar.gz
+cd adjutant-vX.Y.Z
+python3 install.py
+```
+
+This creates `.venv`, installs Adjutant into it, and launches the setup wizard. Add the generated CLI shim to your shell profile (adjust the path to match where you installed):
+
+```bash
+echo 'alias adjutant="/path/to/adjutant/adjutant"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-The setup wizard will ask for the install path and write it to `adjutant.yaml`. Adjutant resolves its own location from that file — no hardcoded paths required.
+Adjutant resolves its own location from the install directory marker and config — no hardcoded paths required.
 
 ## Auto-start on boot (macOS)
 

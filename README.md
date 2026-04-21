@@ -21,12 +21,10 @@ Supports two LLM backends: [OpenCode](https://opencode.ai) and [Claude Code CLI]
 ```bash
 git clone https://github.com/eddiman/adjutant.git
 cd adjutant
-python3 -m venv .venv
-.venv/bin/pip install -e .
-.venv/bin/adjutant setup
+python3 install.py
 ```
 
-The setup wizard checks prerequisites, configures your LLM backend, prompts for Telegram credentials, and sets up identity files.
+The installer downloads or bootstraps the runtime, creates `.venv`, installs Adjutant, and launches the setup wizard.
 
 **Requirements**: Python 3.11+, [OpenCode](https://opencode.ai) or [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code), Telegram bot token
 
@@ -67,16 +65,16 @@ adjutant doctor      # Health check
 |---------|-------------|
 | `/status` | Current state, scheduled jobs, last autonomous cycle |
 | `/pulse` | Quick project scan across all KBs |
+| `/brief` | Morning brief across all KBs |
 | `/reflect` | Deep reflection (requires `/confirm`) |
 | `/model` | Show or switch the active model |
-| `/models` | List available models |
 | `/kb list` | List knowledge bases |
 | `/kb <name> <question>` | Query a knowledge base |
 | `/search <query>` | Web search via Brave API |
 | `/screenshot <url>` | Take a full-page screenshot |
 | `/remember <text>` | Store a memory entry |
-| `/memory [query]` | Search or show memory index |
-| `/news` | Run news briefing |
+| `/recall [query]` | Search memory or show the index |
+| `/digest` | Create a memory digest from recent journal entries |
 | `/schedule list` | List scheduled jobs |
 | `/pause` / `/resume` | Pause/resume processing |
 | `/help` | List all commands |
@@ -119,7 +117,7 @@ adjutant/
 
 Full docs at [eddiman.github.io/adjutant](https://eddiman.github.io/adjutant/) — or browse `docs/` locally:
 
-- [Getting Started](docs/getting-started/installation.md)
+- [Getting Started](docs/guides/getting-started.md)
 - [Commands](docs/guides/commands.md)
 - [Backends](docs/guides/backends.md)
 - [Knowledge Bases](docs/guides/knowledge-bases.md)

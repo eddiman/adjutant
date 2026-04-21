@@ -24,7 +24,7 @@ Open Telegram and send a message to your bot. Try these:
 |---------|-------------|
 | `/status` | Adjutant replies with its current operational state |
 | `/help` | Lists all available slash commands |
-| `/models` | Shows available LLM models |
+| `/model` | Shows the current tier and available tier mappings |
 | `What time is it?` | A natural language question routed to the LLM backend |
 
 That's it. Adjutant is running.
