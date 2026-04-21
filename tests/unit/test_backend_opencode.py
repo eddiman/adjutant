@@ -32,6 +32,30 @@ class TestOpenCodeBackend:
         assert "--variant" in args
         assert "xhigh" in args
 
+    @pytest.mark.asyncio
+    async def test_run_places_prompt_before_file_attachments(self) -> None:
+        backend = OpenCodeBackend()
+        with patch(
+            "adjutant.core.backend_opencode.opencode_run",
+            new=AsyncMock(
+                return_value=OpenCodeResult(
+                    stdout='{"type":"text","part":{"text":"OK"}}', stderr="", returncode=0
+                )
+            ),
+        ) as mock_run:
+            await backend.run(
+                "describe this image",
+                model="github-copilot/gpt-5.4",
+                variant="medium",
+                files=[Path("/tmp/photo.jpg")],
+            )
+
+        args = mock_run.await_args.args[0]
+        prompt_index = args.index("describe this image")
+        file_flag_index = args.index("-f")
+        assert prompt_index < file_flag_index
+        assert args[file_flag_index + 1] == "/tmp/photo.jpg"
+
     def test_run_detached_passes_variant_to_opencode(self, tmp_path: Path) -> None:
         backend = OpenCodeBackend()
         with (

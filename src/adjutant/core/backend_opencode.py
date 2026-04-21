@@ -82,10 +82,10 @@ class OpenCodeBackend:
             args += ["--variant", variant]
         if session_id:
             args += ["--session", session_id]
+        args.append(prompt)
         if files:
             for f in files:
                 args += ["-f", str(f)]
-        args.append(prompt)
 
         start = time.monotonic()
         try:
