@@ -45,7 +45,7 @@ class KBRunError(Exception):
     """Raised when the operation script exits non-zero."""
 
 
-def _get_kb(adj_dir: Path, kb_name: str) -> dict[str, str]:
+def get_kb(adj_dir: Path, kb_name: str) -> dict[str, str]:
     """Return the registry entry for kb_name or raise KBNotFoundError.
 
     Delegates to the canonical registry parser in manage.py and converts
@@ -60,6 +60,11 @@ def _get_kb(adj_dir: Path, kb_name: str) -> dict[str, str]:
         raise KBNotFoundError(str(exc)) from exc
 
     return entry.as_dict()
+
+
+def _get_kb(adj_dir: Path, kb_name: str) -> dict[str, str]:
+    """Backward-compatible alias for older call sites and tests."""
+    return get_kb(adj_dir, kb_name)
 
 
 _VALID_OPERATION = re.compile(r"^[a-z][a-z0-9_-]*$")
@@ -144,7 +149,7 @@ def get_operation_script(adj_dir: Path, kb_name: str, operation: str) -> Path:
             "Use lowercase letters, digits, hyphens, or underscores."
         )
 
-    entry = _get_kb(adj_dir, kb_name)
+    entry = get_kb(adj_dir, kb_name)
     kb_path_str = entry.get("path", "")
     if not kb_path_str:
         raise KBNotFoundError(f"KB '{kb_name}' has no path in registry.")
@@ -232,7 +237,7 @@ def kb_run(
             "Use lowercase letters, digits, hyphens, or underscores."
         )
 
-    entry = _get_kb(adj_dir, kb_name)
+    entry = get_kb(adj_dir, kb_name)
     kb_path_str = entry.get("path", "")
     if not kb_path_str:
         raise KBNotFoundError(f"KB '{kb_name}' has no path in registry.")

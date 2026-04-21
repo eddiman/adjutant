@@ -160,10 +160,10 @@ async def kb_query(
     Raises:
         KBQueryError: If KB not found or query fails.
     """
-    from adjutant.capabilities.kb.run import KBNotFoundError, _get_kb
+    from adjutant.capabilities.kb.run import KBNotFoundError, get_kb
 
     try:
-        entry = _get_kb(adj_dir, kb_name)
+        entry = get_kb(adj_dir, kb_name)
     except KBNotFoundError as exc:
         raise KBQueryError(str(exc)) from exc
 
@@ -251,10 +251,10 @@ def kb_write(
     Raises:
         KBQueryError: If KB not found or instruction fails validation.
     """
-    from adjutant.capabilities.kb.run import KBNotFoundError, _get_kb
+    from adjutant.capabilities.kb.run import KBNotFoundError, get_kb
 
     try:
-        entry = _get_kb(adj_dir, kb_name)
+        entry = get_kb(adj_dir, kb_name)
     except KBNotFoundError as exc:
         raise KBQueryError(str(exc)) from exc
 
