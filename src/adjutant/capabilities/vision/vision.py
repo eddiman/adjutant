@@ -2,14 +2,13 @@
 
 Replaces: scripts/capabilities/vision/vision.sh
 
-Passes one or more image files to an LLM via opencode run --file and returns
-the plain-text analysis. Used by screenshot.py for auto-captioning and by
-the Telegram backend for handling received photos.
+Passes one or more image files to the active LLM backend and returns the
+plain-text analysis. Used by screenshot.py for auto-captioning and by the
+Telegram backend for handling received photos.
 
 Model resolution order:
-  1. features.vision.model from adjutant.yaml
-  2. state/telegram_model.txt (session model set by /model command)
-  3. anthropic/claude-haiku-4-5 (hardcoded fallback)
+  1. features.vision.model from adjutant.yaml (must be cheap|medium|expensive)
+  2. cheap (default tier)
 
 Output: plain-text vision analysis, or an informative error message.
 """
@@ -27,41 +26,39 @@ from adjutant.core.model import resolve_model_spec
 # Model resolution
 # ---------------------------------------------------------------------------
 
-_FALLBACK_MODEL = "anthropic/claude-haiku-4-5"
+_DEFAULT_VISION_TIER = "cheap"
 _DEFAULT_PROMPT = "Describe what you see in this image. Be concise and informative."
 _DEFAULT_PROMPT_MULTI = "Describe what you see in these images. Be concise and informative."
 _VISION_TIMEOUT = 240  # seconds — matches chat timeout
+_VISION_TIERS = frozenset({"cheap", "medium", "expensive"})
 
 
 def _get_vision_model_from_config(adj_dir: Path) -> str:
-    """Read features.vision.model from adjutant.yaml. Returns '' if missing."""
+    """Read features.vision.model from adjutant.yaml."""
     try:
         from adjutant.core.config import load_typed_config
 
         config = load_typed_config(adj_dir / "adjutant.yaml")
         model = config.features.vision.model
-        return model.strip() if model else ""
-    except Exception:  # noqa: BLE001 — fallback to default model
-        return ""
-
-
-def _get_session_model(adj_dir: Path) -> str:
-    """Read the current session model from state/telegram_model.txt."""
-    model_file = adj_dir / "state" / "telegram_model.txt"
-    if model_file.is_file():
-        return model_file.read_text().strip()
-    return ""
+        return model.strip() if model else _DEFAULT_VISION_TIER
+    except Exception:  # noqa: BLE001 — fallback to default tier
+        return _DEFAULT_VISION_TIER
 
 
 def resolve_vision_model(adj_dir: Path) -> str:
-    """Resolve the vision model using the priority chain."""
-    model = _get_vision_model_from_config(adj_dir)
-    if model:
-        return model
-    model = _get_session_model(adj_dir)
-    if model:
-        return model
-    return _FALLBACK_MODEL
+    """Resolve the configured vision model tier."""
+    model = _get_vision_model_from_config(adj_dir).strip()
+    return model or _DEFAULT_VISION_TIER
+
+
+def _validate_vision_model_setting(model: str) -> str | None:
+    """Validate the configured vision model tier."""
+    if model in _VISION_TIERS:
+        return None
+    return (
+        "Vision is configured with an invalid model tier. "
+        "Set `features.vision.model` to `cheap`, `medium`, or `expensive`."
+    )
 
 
 def resolve_vision_model_spec(adj_dir: Path, model: str | None = None):
@@ -72,7 +69,7 @@ def resolve_vision_model_spec(adj_dir: Path, model: str | None = None):
         model or resolve_vision_model(adj_dir),
         adj_dir / "state",
         load_config(adj_dir / "adjutant.yaml"),
-        default_to_chat=True,
+        default_to_chat=False,
     )
 
 
@@ -119,6 +116,12 @@ def run_vision_multi(
         if not img.is_file():
             raise FileNotFoundError(f"Image file not found: {image_path}")
 
+    if model is None:
+        config_model = resolve_vision_model(adj_dir)
+        config_error = _validate_vision_model_setting(config_model)
+        if config_error:
+            return config_error
+
     resolved = resolve_vision_model_spec(adj_dir, model)
 
     if len(image_paths) == 1:
@@ -133,6 +136,9 @@ def run_vision_multi(
         )
 
     backend = get_backend()
+    if not backend.capabilities.vision:
+        return f"The current backend (`{backend.name}`) doesn't support vision."
+
     files = [Path(p) for p in image_paths]
     result = asyncio.run(
         backend.run(
@@ -145,7 +151,10 @@ def run_vision_multi(
     )
 
     if result.error_type == "vision_unsupported":
-        return result.text
+        return (
+            f"The configured vision model `{resolved.model}` doesn't support image analysis. "
+            "Switch `features.vision.model` to a tier backed by a vision-capable model."
+        )
 
     if result.timed_out:
         label = image_paths[0] if len(image_paths) == 1 else f"{len(image_paths)} images"
@@ -154,9 +163,24 @@ def run_vision_multi(
 
     if result.error_type == "model_not_found":
         return (
-            "The selected model doesn't support vision. "
-            "Try switching to claude-haiku-4-5 with /model anthropic/claude-haiku-4-5."
+            f"The configured vision model `{resolved.model}` isn't available. "
+            "Update your tier mapping or switch `features.vision.model` to `cheap`, "
+            "`medium`, or `expensive`."
         )
+
+    if result.error_type == "auth_failure":
+        return "Vision failed because the LLM backend is not authenticated."
+
+    if result.error_type == "rate_limited":
+        return "Vision is temporarily rate-limited. Try again in a moment."
+
+    if result.error_type == "permission_denied":
+        return "Vision failed because the backend denied access to the image file."
+
+    if result.error_type in {"context_overflow", "parse_error", "error"}:
+        if result.text.strip():
+            return result.text.strip()
+        return "Vision analysis failed due to a backend error. Try again."
 
     reply = result.text.strip()
 

@@ -103,9 +103,7 @@ class FeatureConfig(BaseModel):
 class FeaturesConfig(BaseModel):
     news: FeatureConfig = Field(default_factory=FeatureConfig)
     screenshot: FeatureConfig = Field(default_factory=FeatureConfig)
-    vision: FeatureConfig = Field(
-        default_factory=lambda: FeatureConfig(model="opencode-go/Kimi-K2.5")
-    )
+    vision: FeatureConfig = Field(default_factory=lambda: FeatureConfig(model="cheap"))
     search: FeatureConfig = Field(default_factory=FeatureConfig)
     usage_tracking: FeatureConfig = Field(default_factory=FeatureConfig)
 

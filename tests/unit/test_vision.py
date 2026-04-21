@@ -10,7 +10,7 @@ import pytest
 
 from adjutant.core.backend import LLMResult
 from adjutant.capabilities.vision.vision import (
-    _FALLBACK_MODEL,
+    _DEFAULT_VISION_TIER,
     resolve_vision_model,
     run_vision,
     run_vision_multi,
@@ -37,57 +37,26 @@ class TestResolveVisionModel:
     def test_returns_config_model_when_set(self, tmp_path: Path) -> None:
         with patch(
             "adjutant.capabilities.vision.vision._get_vision_model_from_config",
-            return_value="anthropic/claude-opus-4",
+            return_value="medium",
         ):
             model = resolve_vision_model(tmp_path)
-        assert model == "anthropic/claude-opus-4"
+        assert model == "medium"
 
-    def test_falls_back_to_session_model(self, tmp_path: Path) -> None:
-        state_dir = tmp_path / "state"
-        state_dir.mkdir()
-        (state_dir / "telegram_model.txt").write_text("openai/gpt-4o\n")
+    def test_falls_back_to_default_tier_when_config_missing(self, tmp_path: Path) -> None:
         with patch(
             "adjutant.capabilities.vision.vision._get_vision_model_from_config",
             return_value="",
         ):
             model = resolve_vision_model(tmp_path)
-        assert model == "openai/gpt-4o"
+        assert model == _DEFAULT_VISION_TIER
 
-    def test_falls_back_to_hardcoded_fallback(self, tmp_path: Path) -> None:
-        with (
-            patch(
-                "adjutant.capabilities.vision.vision._get_vision_model_from_config",
-                return_value="",
-            ),
-            patch(
-                "adjutant.capabilities.vision.vision._get_session_model",
-                return_value="",
-            ),
-        ):
-            model = resolve_vision_model(tmp_path)
-        assert model == _FALLBACK_MODEL
-
-    def test_config_model_takes_priority_over_session(self, tmp_path: Path) -> None:
-        state_dir = tmp_path / "state"
-        state_dir.mkdir()
-        (state_dir / "telegram_model.txt").write_text("session-model\n")
+    def test_strips_config_model(self, tmp_path: Path) -> None:
         with patch(
             "adjutant.capabilities.vision.vision._get_vision_model_from_config",
-            return_value="config-model",
+            return_value="  expensive  ",
         ):
             model = resolve_vision_model(tmp_path)
-        assert model == "config-model"
-
-    def test_session_model_stripped(self, tmp_path: Path) -> None:
-        state_dir = tmp_path / "state"
-        state_dir.mkdir()
-        (state_dir / "telegram_model.txt").write_text("  model-with-spaces  \n")
-        with patch(
-            "adjutant.capabilities.vision.vision._get_vision_model_from_config",
-            return_value="",
-        ):
-            model = resolve_vision_model(tmp_path)
-        assert model == "model-with-spaces"
+        assert model == "expensive"
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +82,7 @@ class TestRunVision:
             patch("adjutant.core.logging.adj_log"),
             patch(
                 "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
-                return_value=MagicMock(model="anthropic/claude-haiku-4-5", variant=None),
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant="medium"),
             ),
         ):
             result = run_vision(str(img), "Describe this image.", tmp_path)
@@ -143,7 +112,7 @@ class TestRunVision:
             patch("adjutant.core.logging.adj_log"),
             patch(
                 "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
-                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant=None),
             ),
         ):
             result = run_vision(str(img), "Describe", tmp_path)
@@ -158,7 +127,7 @@ class TestRunVision:
             patch("adjutant.core.logging.adj_log"),
             patch(
                 "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
-                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant=None),
             ),
         ):
             result = run_vision(str(img), "Describe", tmp_path)
@@ -207,7 +176,7 @@ class TestRunVisionMulti:
             patch("adjutant.core.logging.adj_log"),
             patch(
                 "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
-                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant=None),
             ),
         ):
             result = run_vision_multi([str(img)], "Describe.", tmp_path)
@@ -224,7 +193,7 @@ class TestRunVisionMulti:
             patch("adjutant.core.logging.adj_log"),
             patch(
                 "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
-                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant=None),
             ),
         ):
             result = run_vision_multi([str(img1), str(img2)], "Describe both.", tmp_path)
@@ -243,7 +212,7 @@ class TestRunVisionMulti:
             patch("adjutant.core.logging.adj_log"),
             patch(
                 "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
-                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant=None),
             ),
         ):
             run_vision_multi([str(img1), str(img2), str(img3)], "Describe.", tmp_path)
@@ -260,7 +229,7 @@ class TestRunVisionMulti:
             patch("adjutant.core.logging.adj_log"),
             patch(
                 "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
-                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant=None),
             ),
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
@@ -290,11 +259,36 @@ class TestRunVisionMulti:
             patch("adjutant.core.logging.adj_log"),
             patch(
                 "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
-                return_value=MagicMock(model=_FALLBACK_MODEL, variant=None),
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant=None),
             ),
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
         assert result == ""
+
+    def test_invalid_configured_tier_returns_message(self, tmp_path: Path) -> None:
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake png")
+        with patch(
+            "adjutant.capabilities.vision.vision.resolve_vision_model",
+            return_value="not-a-tier",
+        ):
+            result = run_vision_multi([str(img)], "Describe", tmp_path)
+        assert "cheap" in result and "medium" in result and "expensive" in result
+
+    def test_vision_unsupported_returns_message(self, tmp_path: Path) -> None:
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake png")
+        backend = _mock_backend(_llm_result(error_type="vision_unsupported", text="unsupported"))
+        with (
+            patch("adjutant.core.backend.get_backend", return_value=backend),
+            patch("adjutant.core.logging.adj_log"),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model="github-copilot/gpt-5.4-mini", variant=None),
+            ),
+        ):
+            result = run_vision_multi([str(img)], "Describe", tmp_path)
+        assert "doesn't support image analysis" in result
 
 
 # ---------------------------------------------------------------------------

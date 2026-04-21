@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import time
 from pathlib import Path
@@ -10,8 +11,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from adjutant.messaging.telegram.photos import (
+    _VISION_DISABLED_MESSAGE,
     _photo_dedup_cleanup,
     _photo_is_duplicate,
+    tg_handle_photo,
     tg_download_photo,
 )
 
@@ -156,3 +159,89 @@ class TestTgDownloadPhoto:
                 result = tg_download_photo("fid", bot_token=BOT, adj_dir=tmp_path)
 
         assert result is None
+
+
+class TestTgHandlePhoto:
+    @pytest.mark.asyncio
+    async def test_returns_disabled_message_when_vision_feature_off(self, tmp_path: Path) -> None:
+        sent: list[str] = []
+
+        class _Config:
+            def is_feature_enabled(self, feature: str) -> bool:
+                return False
+
+        def _fake_send(msg, reply_to=None, *, bot_token, chat_id):
+            sent.append(msg)
+
+        with (
+            patch("adjutant.core.config.load_typed_config", return_value=_Config()),
+            patch("adjutant.messaging.telegram.send.msg_send_text", _fake_send),
+            patch("adjutant.messaging.telegram.send.msg_react"),
+        ):
+            await tg_handle_photo(
+                "999",
+                42,
+                "file123",
+                "",
+                bot_token=BOT,
+                chat_id="999",
+                adj_dir=tmp_path,
+            )
+
+        assert sent == [_VISION_DISABLED_MESSAGE]
+        assert not (tmp_path / "photos").exists()
+
+    @pytest.mark.asyncio
+    async def test_sends_model_error_reply_from_vision(self, tmp_path: Path) -> None:
+        sent: list[str] = []
+        tasks: list[asyncio.Task[None]] = []
+
+        class _Config:
+            def is_feature_enabled(self, feature: str) -> bool:
+                return True
+
+        photo_path = tmp_path / "photos" / "saved.jpg"
+        photo_path.parent.mkdir(parents=True)
+        photo_path.write_bytes(b"img")
+        original_create_task = asyncio.create_task
+
+        async def _fake_to_thread(func, /, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        def _fake_send(msg, reply_to=None, *, bot_token, chat_id):
+            sent.append(msg)
+
+        def _capture_task(coro):
+            task = original_create_task(coro)
+            tasks.append(task)
+            return task
+
+        with (
+            patch("adjutant.core.config.load_typed_config", return_value=_Config()),
+            patch("asyncio.to_thread", side_effect=_fake_to_thread),
+            patch("asyncio.create_task", side_effect=_capture_task),
+            patch("adjutant.messaging.telegram.photos.tg_download_photo", return_value=photo_path),
+            patch(
+                "adjutant.capabilities.vision.vision.run_vision",
+                return_value="The configured vision model `github-copilot/gpt-5.4-mini` isn't available.",
+            ),
+            patch("adjutant.messaging.telegram.send.msg_send_text", _fake_send),
+            patch("adjutant.messaging.telegram.send.msg_react"),
+            patch("adjutant.messaging.telegram.send.msg_typing_start"),
+            patch("adjutant.messaging.telegram.send.msg_typing_stop"),
+            patch("adjutant.messaging.telegram.chat.run_chat", new=AsyncMock()),
+        ):
+            await tg_handle_photo(
+                "999",
+                42,
+                "file123",
+                "",
+                bot_token=BOT,
+                chat_id="999",
+                adj_dir=tmp_path,
+            )
+            await asyncio.gather(*tasks)
+
+        assert sent == [
+            "The configured vision model `github-copilot/gpt-5.4-mini` isn't available."
+        ]

@@ -50,7 +50,7 @@ features:
     enabled: false
   vision:
     enabled: false
-    model: "opencode-go/Kimi-K2.5"     # specific model or leave unset to inherit session model
+    model: "cheap"                     # must be cheap|medium|expensive
   search:
     enabled: false                     # requires BRAVE_API_KEY in .env
   usage_tracking:

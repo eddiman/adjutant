@@ -21,6 +21,12 @@ from adjutant.core.logging import adj_log
 if TYPE_CHECKING:
     from pathlib import Path
 
+
+_VISION_DISABLED_MESSAGE = (
+    "Vision is turned off in your config (`features.vision.enabled: false`), "
+    "so I can't analyze photos right now."
+)
+
 # ---------------------------------------------------------------------------
 # Deduplication helpers
 # ---------------------------------------------------------------------------
@@ -178,8 +184,24 @@ async def tg_handle_photo(
         msg_typing_start,
         msg_typing_stop,
     )
+    from adjutant.core.config import load_typed_config
 
     adj_log("telegram", f"Photo received msg={message_id} file_id={file_id}")
+
+    try:
+        config = load_typed_config(adj_dir / "adjutant.yaml")
+    except Exception:  # noqa: BLE001 — fail closed
+        config = None
+
+    if config is None or not config.is_feature_enabled("vision"):
+        msg_send_text(
+            _VISION_DISABLED_MESSAGE,
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        adj_log("telegram", f"Photo rejected because vision is disabled msg={message_id}")
+        return
 
     # Deduplication
     dedup_dir = adj_dir / "state" / "photo_dedup"
