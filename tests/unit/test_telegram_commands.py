@@ -297,6 +297,20 @@ class TestCmdModel:
         state = tmp_path / "state"
         state.mkdir()
         (state / "telegram_model.txt").write_text("medium")
+        (tmp_path / "adjutant.yaml").write_text(
+            "messaging:\n"
+            "  telegram:\n"
+            "    default_model: cheap\n"
+            "llm:\n"
+            "  models:\n"
+            "    cheap: openai/gpt-5.4-mini\n"
+            "    medium: openai/gpt-5.4\n"
+            "    expensive: openai/o3\n"
+            "  reasoning_effort:\n"
+            "    cheap: low\n"
+            "    medium: medium\n"
+            "    expensive: high\n"
+        )
 
         with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
             await cmd_model("", 1, tmp_path, bot_token=BOT, chat_id=CHAT)
@@ -304,10 +318,35 @@ class TestCmdModel:
         assert len(sent) == 1
         assert "current tier" in sent[0].lower()
         assert "available tiers" in sent[0].lower()
-        assert "reasoning" in sent[0].lower()
-        assert "`cheap`" in sent[0]
-        assert "`medium`" in sent[0]
-        assert "`expensive`" in sent[0]
+        assert "thinking" in sent[0].lower()
+        assert "`medium` -> `openai/gpt-5.4` (thinking: `medium`)" in sent[0]
+        assert "`cheap` -> `openai/gpt-5.4-mini` (thinking: `low`)" in sent[0]
+        assert "`expensive` -> `openai/o3` (thinking: `high`)" in sent[0]
+
+    @pytest.mark.asyncio
+    async def test_warns_when_model_config_is_invalid(self, tmp_path: Path) -> None:
+        mock_send, sent = _capture_send()
+        state = tmp_path / "state"
+        state.mkdir()
+        (state / "telegram_model.txt").write_text("medium")
+        (tmp_path / "adjutant.yaml").write_text(
+            "llm:\n"
+            "  models:\n"
+            "    cheap: openai/gpt-5.4-mini\n"
+            "    medium: openai/gpt-5.4\n"
+            "    expensive: openai/o3\n"
+            "  reasoning_effort:\n"
+            "    cheap: low\n"
+            "    medium: medium\n"
+            "    expensive: [high\n"
+        )
+
+        with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
+            await cmd_model("", 1, tmp_path, bot_token=BOT, chat_id=CHAT)
+
+        assert len(sent) == 1
+        assert "could not be parsed" in sent[0].lower()
+        assert "`medium` -> `anthropic/claude-sonnet-4-6` (thinking: `default`)" in sent[0]
 
     @pytest.mark.asyncio
     async def test_switches_to_tier_name_without_model_lookup(self, tmp_path: Path) -> None:

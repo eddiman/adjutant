@@ -19,6 +19,9 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 from adjutant.core.logging import adj_log
 from adjutant.core.model import resolve_model_spec
@@ -45,27 +48,54 @@ async def _fetch_available_models() -> list[str]:
         return []
 
 
-def _get_default_model(adj_dir: Path) -> str:
-    """Read the configured default Telegram model/tier."""
-    from adjutant.core.config import load_config
+def _load_model_config(adj_dir: Path) -> tuple[dict[str, Any], str | None]:
+    """Load adjutant.yaml for /model display, preserving parse failures."""
+    config_path = adj_dir / "adjutant.yaml"
+    if not config_path.is_file():
+        return {}, None
 
-    config = load_config(adj_dir / "adjutant.yaml")
+    try:
+        with open(config_path) as f:
+            data = yaml.safe_load(f) or {}
+    except yaml.YAMLError:
+        return (
+            {},
+            "Warning: `adjutant.yaml` could not be parsed, so built-in tier defaults are shown.",
+        )
+    except OSError:
+        return {}, None
+
+    if not isinstance(data, dict):
+        return (
+            {},
+            "Warning: `adjutant.yaml` must contain a YAML mapping, so built-in tier defaults are shown.",
+        )
+
+    return data, None
+
+
+def _get_default_model(config: dict[str, Any]) -> str:
+    """Read the configured default Telegram model/tier."""
     messaging = config.get("messaging", {})
     telegram = messaging.get("telegram", {})
     configured = str(telegram.get("default_model") or "").strip()
     return configured or "cheap"
 
 
-def _format_tier_mapping(adj_dir: Path) -> str:
-    """Return the configured tier -> model/reasoning mapping."""
-    from adjutant.core.config import load_config
+def _format_model_mapping(model_spec: str, state_dir: Path, config: dict[str, Any]) -> str:
+    """Return a model spec rendered as tier -> model + thinking."""
+    resolved = resolve_model_spec(model_spec, state_dir, config, default_to_chat=True)
+    thinking = resolved.variant or "default"
+    if resolved.source in _MODEL_TIERS:
+        return f"`{resolved.source}` -> `{resolved.model}` (thinking: `{thinking}`)"
+    return f"`{resolved.model}` (thinking: `{thinking}`)"
 
-    config = load_config(adj_dir / "adjutant.yaml")
+
+def _format_tier_mapping(state_dir: Path, config: dict[str, Any]) -> str:
+    """Return the configured tier -> model/thinking mapping."""
     lines: list[str] = []
     for tier in ("cheap", "medium", "expensive"):
-        resolved = resolve_model_spec(tier, adj_dir / "state", config)
-        effort = resolved.variant or "default"
-        lines.append(f"- `{tier}` -> `{resolved.model}` (reasoning: `{effort}`)")
+        lines.append(f"- {_format_model_mapping(tier, state_dir, config)}")
     return "\n".join(lines)
 
 
@@ -662,8 +692,10 @@ async def cmd_model(
 ) -> None:
     """Show or switch the configured model tiers."""
     model_file = adj_dir / "state" / "telegram_model.txt"
+    state_dir = adj_dir / "state"
+    config, config_warning = _load_model_config(adj_dir)
 
-    current_model = _get_default_model(adj_dir)
+    current_model = _get_default_model(config)
     if model_file.is_file():
         raw = model_file.read_text().strip()
         if raw:
@@ -671,12 +703,18 @@ async def cmd_model(
 
     # --- /model (no arg) — show current tier + configured mappings ---
     if not arg:
-        tier_mapping = _format_tier_mapping(adj_dir)
+        tier_mapping = _format_tier_mapping(state_dir, config)
+        current_label = "Current tier" if current_model in _MODEL_TIERS else "Current model"
+        message = (
+            f"{current_label}: {_format_model_mapping(current_model, state_dir, config)}\n\n"
+            f"Available tiers:\n{tier_mapping}\n\n"
+            f"Switch with: `/model cheap`, `/model medium`, or `/model expensive`."
+        )
+        if config_warning:
+            message = f"⚠️ {config_warning}\n\n{message}"
 
         _send(
-            f"Current tier: *{current_model}*\n\n"
-            f"Available tiers:\n{tier_mapping}\n\n"
-            f"Switch with: `/model cheap`, `/model medium`, or `/model expensive`.",
+            message,
             message_id,
             bot_token=bot_token,
             chat_id=chat_id,
@@ -696,7 +734,7 @@ async def cmd_model(
 
     _send(
         "Only the configured tiers are allowed: `cheap`, `medium`, `expensive`.\n\n"
-        "Run `/model` to see which concrete model and reasoning effort each tier uses.",
+        "Run `/model` to see which concrete model and thinking level each tier uses.",
         message_id,
         bot_token=bot_token,
         chat_id=chat_id,
