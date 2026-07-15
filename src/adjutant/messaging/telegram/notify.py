@@ -81,6 +81,11 @@ def send_notify(
         BudgetExceededError: If the daily limit is reached.
         RuntimeError: If credentials are missing.
     """
+    from adjutant.core.lockfiles import is_paused
+
+    if is_paused(adj_dir):
+        return _read_count(adj_dir / "state", today), get_max_per_day(adj_dir)
+
     state_dir = adj_dir / "state"
     max_per_day = get_max_per_day(adj_dir)
     count = _read_count(state_dir, today)

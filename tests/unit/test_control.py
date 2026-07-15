@@ -134,10 +134,24 @@ class TestKillHelpers:
 
 class TestPause:
     def test_creates_paused_lockfile(self, adj):
-        result = pause(adj)
+        with patch("adjutant.capabilities.schedule.install.uninstall_all") as uninstall_all:
+            result = pause(adj)
         assert (adj / "PAUSED").exists()
+        uninstall_all.assert_called_once_with(adj)
         assert "paused" in result.lower()
         assert "resume" in result.lower()
+
+    def test_removes_only_managed_cron_entries(self, adj):
+        with patch("adjutant.capabilities.schedule.install.uninstall_all") as uninstall_all:
+            pause(adj)
+        uninstall_all.assert_called_once_with(adj)
+
+    def test_idempotent(self, adj):
+        with patch("adjutant.capabilities.schedule.install.uninstall_all") as uninstall_all:
+            pause(adj)
+            pause(adj)
+        assert (adj / "PAUSED").exists()
+        assert uninstall_all.call_count == 2
 
     def test_missing_adj_dir(self, monkeypatch):
         monkeypatch.delenv("ADJ_DIR", raising=False)
@@ -153,13 +167,26 @@ class TestPause:
 class TestResume:
     def test_removes_paused_lockfile(self, adj):
         (adj / "PAUSED").touch()
-        result = resume(adj)
+        with patch("adjutant.capabilities.schedule.install.install_all") as install_all:
+            result = resume(adj)
         assert not (adj / "PAUSED").exists()
+        install_all.assert_called_once_with(adj)
         assert "resumed" in result.lower()
 
     def test_idempotent_when_not_paused(self, adj):
-        result = resume(adj)  # file doesn't exist — should not raise
+        with patch("adjutant.capabilities.schedule.install.install_all") as install_all:
+            result = resume(adj)  # file doesn't exist — should not raise
+        install_all.assert_called_once_with(adj)
         assert "resumed" in result.lower()
+
+    def test_does_not_restore_schedules_when_killed(self, adj):
+        (adj / "PAUSED").touch()
+        (adj / "KILLED").touch()
+        with patch("adjutant.capabilities.schedule.install.install_all") as install_all:
+            result = resume(adj)
+        assert not (adj / "PAUSED").exists()
+        install_all.assert_not_called()
+        assert "killed" in result.lower()
 
     def test_missing_adj_dir(self, monkeypatch):
         monkeypatch.delenv("ADJ_DIR", raising=False)
@@ -293,7 +320,9 @@ class TestStartup:
 
     def test_startup_paused_message(self, adj, monkeypatch):
         (adj / "PAUSED").touch()
-        result = self._patched_startup(adj, monkeypatch)
+        with patch("adjutant.capabilities.schedule.install.uninstall_all") as uninstall_all:
+            result = self._patched_startup(adj, monkeypatch)
+        uninstall_all.assert_called_once_with(adj)
         assert "PAUSED" in result or "paused" in result.lower()
 
     def test_missing_adj_dir(self, monkeypatch):

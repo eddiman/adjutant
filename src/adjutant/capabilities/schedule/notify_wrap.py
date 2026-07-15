@@ -70,7 +70,12 @@ def notify_wrap(
     Returns:
         Always 0 (cron must not see failure exit codes).
     """
+    from adjutant.core.lockfiles import is_paused
     from adjutant.core.logging import adj_log
+
+    if is_paused(adj_dir):
+        adj_log("schedule", f"[{job_name}] skipped: Adjutant is paused")
+        return 0
 
     # Run the script, capturing stdout and stderr separately so we can
     # parse JSON events from stderr while also reading stdout for fallback.

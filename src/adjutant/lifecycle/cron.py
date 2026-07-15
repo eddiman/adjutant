@@ -75,6 +75,11 @@ def _notify_completion(adj_dir: Path, action: str, source: str) -> None:
     send_notify.  Best-effort: silently swallows all errors (missing
     heartbeat, budget exceeded, missing credentials, network errors).
     """
+    from adjutant.core.lockfiles import is_paused
+
+    if is_paused(adj_dir):
+        return
+
     try:
         heartbeat_file = adj_dir / "state" / "last_heartbeat.json"
         if not heartbeat_file.is_file():
@@ -119,6 +124,11 @@ def run_cron_prompt(
         except AdjutantDirNotFoundError:
             sys.stderr.write("ERROR: ADJ_DIR not set\n")
             raise SystemExit(1)
+
+    from adjutant.core.lockfiles import is_paused
+
+    if is_paused(adj_dir):
+        raise SystemExit(0)
 
     if not prompt_file.is_file():
         sys.stderr.write(f"ERROR: Prompt file not found at {prompt_file}\n")

@@ -73,13 +73,13 @@ Controls are applied in strict priority order. Higher controls override lower on
 
 | Priority | Control | Mechanism | Scope |
 |----------|---------|-----------|-------|
-| 1 (highest) | **PAUSED** | Filesystem file `$ADJ_DIR/PAUSED` | Stops all three prompts before any work |
+| 1 (highest) | **PAUSED** | Filesystem file `$ADJ_DIR/PAUSED` | Removes managed cron entries, stops autonomous work, and suppresses autonomous notifications |
 | 2 | **dry_run** | `adjutant.yaml debug.dry_run: true` | Runs full logic, suppresses all side effects |
 | 3 | **budget** | `state/notify_count_YYYY-MM-DD.txt` >= `max_per_day` | Blocks `send_notify()` sends only; cycle continues |
 | 4 | **quiet_hours** | `adjutant.yaml notifications.quiet_hours` | Suppresses sends during configured hours |
 | 5 (lowest) | **KILLED** | Filesystem file `$ADJ_DIR/KILLED` | Stops the Telegram listener; does not affect cron |
 
-**Important:** KILLED stops the interactive listener but cron jobs are not affected — pulse and review can still run. To stop everything, use PAUSED (which is checked inside every prompt) or remove the cron jobs.
+**Important:** KILLED is the stronger recovery state: it stops the listener and disables the whole crontab as part of emergency shutdown. PAUSED is the reversible silent state: it removes only Adjutant-managed cron entries and leaves unrelated user cron jobs unchanged.
 
 ---
 

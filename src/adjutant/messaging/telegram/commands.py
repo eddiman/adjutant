@@ -236,9 +236,9 @@ async def cmd_pause(
     chat_id: str,
 ) -> None:
     """Pause adjutant."""
-    from adjutant.core.lockfiles import set_paused
+    from adjutant.lifecycle.control import pause
 
-    set_paused(adj_dir)
+    pause(adj_dir)
     _journal_append(adj_dir, "Paused via Telegram command.")
     _send(
         "Got it, I've paused. Send /resume whenever you want me back.",
@@ -262,9 +262,9 @@ async def cmd_resume(
     chat_id: str,
 ) -> None:
     """Resume adjutant."""
-    from adjutant.core.lockfiles import clear_paused
+    from adjutant.lifecycle.control import resume
 
-    clear_paused(adj_dir)
+    resume(adj_dir)
     _journal_append(adj_dir, "Resumed via Telegram command.")
     _send(
         "I'm back online and keeping an eye on things.",

@@ -164,16 +164,24 @@ def _read_pid(path: Path) -> int | None:
 
 
 def pause(adj_dir: Path | None = None) -> str:
-    """Create the PAUSED lockfile.
+    """Create the PAUSED lockfile and disable managed scheduled jobs.
 
     Returns:
         Human-readable message string.
     """
+    from adjutant.capabilities.schedule.install import uninstall_all
     from adjutant.core.lockfiles import set_paused
 
     d = adj_dir or _adj_dir()
     set_paused(d)
-    return "Adjutant paused. All heartbeats will skip until resumed.\nResume with: adjutant resume"
+    try:
+        uninstall_all(d)
+    except Exception:  # noqa: BLE001 — the lockfile still silences autonomous work
+        return (
+            "Adjutant paused. Managed scheduled jobs could not be disabled; "
+            "the pause lockfile will still silence them.\nResume with: adjutant resume"
+        )
+    return "Adjutant paused. Managed scheduled jobs are disabled.\nResume with: adjutant resume"
 
 
 # ---------------------------------------------------------------------------
@@ -182,16 +190,23 @@ def pause(adj_dir: Path | None = None) -> str:
 
 
 def resume(adj_dir: Path | None = None) -> str:
-    """Remove the PAUSED lockfile.
+    """Remove the PAUSED lockfile and restore enabled scheduled jobs.
 
     Returns:
         Human-readable message string.
     """
-    from adjutant.core.lockfiles import clear_paused
+    from adjutant.capabilities.schedule.install import install_all
+    from adjutant.core.lockfiles import clear_paused, is_killed
 
     d = adj_dir or _adj_dir()
     clear_paused(d)
-    return "Adjutant resumed. Heartbeats will run on next schedule."
+    if is_killed(d):
+        return "Adjutant remains KILLED. Run adjutant startup to recover."
+    try:
+        install_all(d)
+    except Exception:  # noqa: BLE001 — resuming must still clear the lockfile
+        return "Adjutant resumed, but managed scheduled jobs could not be restored."
+    return "Adjutant resumed. Managed scheduled jobs are restored."
 
 
 # ---------------------------------------------------------------------------
@@ -594,8 +609,18 @@ def startup(
         if not tg_pid_file.exists():
             tg_pid_file.write_text(str(sync_pid))
 
-    # Sync schedules to crontab
-    lines.append(_sync_schedule_crontab(d))
+    # A paused system remains silent across restarts: do not restore managed
+    # cron entries until resume explicitly rebuilds them from the registry.
+    if is_paused(d):
+        from adjutant.capabilities.schedule.install import uninstall_all
+
+        try:
+            uninstall_all(d)
+            lines.append("Managed scheduled jobs remain disabled while paused")
+        except Exception:  # noqa: BLE001 — the PAUSED lockfile still blocks notifications
+            lines.append("Could not confirm managed scheduled jobs are disabled while paused")
+    else:
+        lines.append(_sync_schedule_crontab(d))
 
     # Gather status
     lines += ["", "Gathering status..."]

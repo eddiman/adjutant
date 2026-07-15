@@ -100,6 +100,18 @@ class TestExtractKbNotifyMessage:
 
 
 class TestNotifyWrap:
+    def test_skips_scheduled_job_when_paused(self, tmp_path: Path) -> None:
+        (tmp_path / "PAUSED").touch()
+        with (
+            patch("subprocess.run") as mock_run,
+            patch("adjutant.core.logging.adj_log"),
+            patch("adjutant.messaging.telegram.notify.send_notify") as mock_notify,
+        ):
+            rc = notify_wrap("my-job", ["/scripts/run.sh"], tmp_path)
+        assert rc == 0
+        mock_run.assert_not_called()
+        mock_notify.assert_not_called()
+
     def test_returns_zero_on_success(self, tmp_path: Path) -> None:
         with (
             patch("subprocess.run", return_value=_make_proc(0, "All good\n")),

@@ -148,7 +148,7 @@ class TestCmdPause:
     async def test_sets_paused_and_responds(self, tmp_path: Path) -> None:
         mock_send, sent = _capture_send()
         with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
-            with patch("adjutant.core.lockfiles.set_paused") as mock_pause:
+            with patch("adjutant.lifecycle.control.pause") as mock_pause:
                 await cmd_pause(1, tmp_path, bot_token=BOT, chat_id=CHAT)
         mock_pause.assert_called_once_with(tmp_path)
         assert len(sent) == 1
@@ -160,7 +160,7 @@ class TestCmdResume:
     async def test_clears_paused_and_responds(self, tmp_path: Path) -> None:
         mock_send, sent = _capture_send()
         with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
-            with patch("adjutant.core.lockfiles.clear_paused") as mock_clear:
+            with patch("adjutant.lifecycle.control.resume") as mock_clear:
                 await cmd_resume(1, tmp_path, bot_token=BOT, chat_id=CHAT)
         mock_clear.assert_called_once_with(tmp_path)
         assert len(sent) == 1

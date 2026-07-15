@@ -40,6 +40,20 @@ def _mock_backend(returncode: int = 0) -> MagicMock:
 
 
 class TestRunCronPrompt:
+    def test_skips_when_paused(self, tmp_path: Path) -> None:
+        prompt = tmp_path / "pulse.md"
+        prompt.write_text("Do not run")
+        (tmp_path / "PAUSED").touch()
+
+        with (
+            patch("adjutant.lifecycle.cron.get_backend") as mock_backend,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            run_cron_prompt(prompt, adj_dir=tmp_path, action="pulse")
+
+        assert exc_info.value.code == 0
+        mock_backend.assert_not_called()
+
     def test_runs_backend_with_prompt(self, tmp_path: Path) -> None:
         """Should call backend.run_sync with the prompt text."""
         prompt = tmp_path / "pulse.md"
@@ -410,6 +424,19 @@ class TestFormatHeartbeat:
 
 
 class TestNotifyCompletion:
+    def test_silent_when_paused(self, tmp_path: Path) -> None:
+        state_dir = tmp_path / "state"
+        state_dir.mkdir()
+        (tmp_path / "PAUSED").touch()
+        (state_dir / "last_heartbeat.json").write_text(
+            json.dumps({"kbs_checked": [], "issues_found": [], "escalated": False})
+        )
+
+        with patch("adjutant.messaging.telegram.notify.send_notify") as mock_notify:
+            _notify_completion(tmp_path, "pulse", "cron")
+
+        mock_notify.assert_not_called()
+
     def test_sends_notification_on_heartbeat(self, tmp_path: Path) -> None:
         """Should read heartbeat and call send_notify."""
         state_dir = tmp_path / "state"

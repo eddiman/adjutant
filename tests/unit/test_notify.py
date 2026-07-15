@@ -148,6 +148,17 @@ class TestSendNotify:
         assert max_pd == 3
         mock_client.post.assert_called_once()
 
+    def test_suppresses_notification_when_paused(self, tmp_path: Path) -> None:
+        adj_dir, env_path = self._setup(tmp_path)
+        d = date(2024, 1, 1)
+        (adj_dir / "PAUSED").touch()
+
+        with patch("adjutant.messaging.telegram.notify.get_client") as mock_client:
+            count, max_pd = send_notify("hello", adj_dir, env_path=env_path, today=d)
+
+        assert (count, max_pd) == (0, 3)
+        mock_client.assert_not_called()
+
     def test_raises_budget_exceeded_when_at_limit(self, tmp_path: Path) -> None:
         adj_dir, env_path = self._setup(tmp_path, max_per_day=2)
         d = date(2024, 1, 1)

@@ -266,6 +266,19 @@ def uninstall_one(adj_dir: Path, name: str) -> None:
     _write_crontab("\n".join(lines) + "\n" if lines else "")
 
 
+def uninstall_all(adj_dir: Path) -> None:
+    """Remove every Adjutant-managed crontab entry.
+
+    Entries are identified solely by their ``# adjutant:`` marker, so user
+    crontab entries and legacy unmarked lines are preserved. Idempotent.
+    """
+    existing = _read_crontab()
+    lines = [line for line in existing.splitlines() if "# adjutant:" not in line]
+    if len(lines) == len(existing.splitlines()):
+        return
+    _write_crontab("\n".join(lines) + "\n" if lines else "")
+
+
 def run_now(adj_dir: Path, name: str) -> int:
     """Run a job immediately in the foreground.
 

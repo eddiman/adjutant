@@ -33,7 +33,7 @@ Two lockfiles at the root of `ADJ_DIR` control the system's operational state:
 
 | File | Meaning | Effect |
 |------|---------|--------|
-| `ADJ_DIR/PAUSED` | Soft pause | Listener keeps running but drops all incoming messages |
+| `ADJ_DIR/PAUSED` | Silent pause | Removes Adjutant-managed cron entries and suppresses autonomous notifications; status and resume commands remain available |
 | `ADJ_DIR/KILLED` | Hard stop | Listener will not start; all scripts check this before running |
 
 These are plain files — their presence/absence is the entire state. Managed by `src/adjutant/core/lockfiles.py`:
@@ -120,8 +120,8 @@ After a successful pulse or review (exit code 0), `run_cron_prompt()` reads `sta
   adjutant resume ──► OPERATIONAL
 ```
 
-- **OPERATIONAL → PAUSED**: `adjutant pause` or `/pause`. Creates `PAUSED` file. Listener keeps polling but drops messages.
-- **PAUSED → OPERATIONAL**: `adjutant resume` or `/resume`. Removes `PAUSED` file.
+- **OPERATIONAL → PAUSED**: `adjutant pause` or `/pause`. Creates `PAUSED`, removes only `# adjutant:` cron entries, and suppresses autonomous notifications. Status and resume commands remain available.
+- **PAUSED → OPERATIONAL**: `adjutant resume` or `/resume`. Removes `PAUSED` and rebuilds enabled managed cron entries from the schedule registry.
 - **OPERATIONAL → KILLED**: `adjutant kill` or `/kill`. Terminates all processes, creates `KILLED` file, disables cron.
 - **KILLED → OPERATIONAL**: `adjutant startup`. Detects and clears `KILLED` lockfile, restores crontab, then starts the listener fresh. Note: `adjutant start` will refuse if a `KILLED` lockfile is present.
 

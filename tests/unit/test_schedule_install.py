@@ -17,6 +17,7 @@ from adjutant.capabilities.schedule.install import (
     _write_crontab,
     install_all,
     install_one,
+    uninstall_all,
     uninstall_one,
     run_now,
 )
@@ -374,6 +375,32 @@ class TestUninstallOne:
             uninstall_one(tmp_path, "job1")
         written = mock_write.call_args[0][0]
         assert written == ""
+
+
+class TestUninstallAll:
+    def test_removes_only_managed_entries(self, tmp_path: Path) -> None:
+        existing = (
+            "0 9 * * * /run.sh  # adjutant:job1\n"
+            "30 * * * * /user-script.sh\n"
+            "0 10 * * * /other.sh  # adjutant:job2\n"
+        )
+        with (
+            patch("adjutant.capabilities.schedule.install._read_crontab", return_value=existing),
+            patch("adjutant.capabilities.schedule.install._write_crontab") as mock_write,
+        ):
+            uninstall_all(tmp_path)
+        assert mock_write.call_args[0][0] == "30 * * * * /user-script.sh\n"
+
+    def test_is_idempotent_when_no_managed_entries(self, tmp_path: Path) -> None:
+        with (
+            patch(
+                "adjutant.capabilities.schedule.install._read_crontab",
+                return_value="30 * * * * /user-script.sh\n",
+            ),
+            patch("adjutant.capabilities.schedule.install._write_crontab") as mock_write,
+        ):
+            uninstall_all(tmp_path)
+        mock_write.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
