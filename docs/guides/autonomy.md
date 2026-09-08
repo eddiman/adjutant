@@ -31,14 +31,11 @@ Run `adjutant setup`. Step 7 "Autonomy Configuration" asks:
 2. Maximum notifications per day? [3]
 3. Enable quiet hours? [y/N]
 
-If you answer yes to enabling, the wizard writes `heartbeat.enabled: true` to `adjutant.yaml` and enables the `autonomous_pulse` and `autonomous_review` schedule entries (installing their crontab entries). The default schedules are weekdays 9am/5pm for pulse and weekdays 8pm for review.
+If you answer yes to enabling, the wizard enables the `autonomous_pulse` and `autonomous_review` schedule entries (installing their crontab entries). The default schedules are weekdays 9am/5pm for pulse and weekdays 8pm for review.
 
 ### Manually in `adjutant.yaml`
 
 ```yaml
-heartbeat:
-  enabled: true
-
 notifications:
   max_per_day: 3
   quiet_hours:
@@ -47,7 +44,7 @@ notifications:
     end: "07:00"
 ```
 
-Then enable the schedule entries:
+Enable the schedule entries:
 
 ```bash
 adjutant schedule enable autonomous_pulse
@@ -148,24 +145,19 @@ The file is gitignored (covered by `state/`) and lives only on your machine.
 ### Soft pause (recommended)
 
 ```bash
-adjutant pause        # creates ADJ_DIR/PAUSED
-adjutant resume       # removes ADJ_DIR/PAUSED
+adjutant pause        # creates PAUSED and disables managed schedules
+adjutant resume       # removes PAUSED and restores enabled schedules
 ```
 
-Or directly:
+`adjutant pause` creates `PAUSED`, removes only Adjutant-managed (`# adjutant:`) cron entries, and suppresses autonomous notifications. It leaves unrelated user cron entries untouched. `adjutant resume` removes `PAUSED` and rebuilds enabled managed entries from the schedule registry.
 
-```bash
-touch "$ADJ_DIR/PAUSED"   # pause
-rm "$ADJ_DIR/PAUSED"      # resume
-```
-
-When `PAUSED` exists, every autonomous prompt outputs a skip message and stops immediately. Nothing is written to `insights/`, `state/`, or `actions.jsonl`.
+Do not create or remove `PAUSED` manually: that bypasses managed-cron reconciliation. Use `adjutant pause` and `adjutant resume` or their Telegram equivalents.
 
 ### Via Telegram
 
 ```
-/pause    — creates PAUSED
-/resume   — removes PAUSED
+/pause    — creates PAUSED and disables managed schedules
+/resume   — removes PAUSED and restores enabled managed schedules
 /status   — shows current state
 ```
 

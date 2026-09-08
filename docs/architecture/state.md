@@ -95,7 +95,7 @@ Managed by `src/adjutant/core/lockfiles.py`:
 
 ### Post-completion notification
 
-After a successful pulse or review (exit code 0), `run_cron_prompt()` reads `state/last_heartbeat.json` and sends a Telegram notification with a summary of what was found. This is budget-guarded and best-effort — failures are silently swallowed.
+After a successful pulse or review (exit code 0), `run_cron_prompt()` reads `state/last_heartbeat.json` and sends a Telegram notification with a summary of what was found. This is budget-guarded, suppressed while paused, and best-effort — failures are silently swallowed.
 
 ---
 
@@ -157,6 +157,6 @@ This pattern provides:
 
 | Module | What it does |
 |--------|-------------|
-| `control.py` | `pause`, `resume`, `kill`, `startup`. Clears `KILLED` lockfile on startup; creates/removes `PAUSED`. Emergency kill terminates all Adjutant processes by pattern and backs up then wipes crontab. |
+| `control.py` | `pause`, `resume`, `kill`, `startup`. Pause removes only managed cron entries; resume rebuilds enabled entries from the registry. Emergency kill terminates all Adjutant processes by pattern and backs up then wipes crontab. |
 | `cron.py` | Runs pulse and review prompts as subprocesses. Writes active-operation marker before start, clears on finish. Sends Telegram notification on success. |
 | `update.py` | Compares `VERSION` against latest GitHub release, backs up, downloads, rsyncs new files into place. Personal files (`adjutant.yaml`, `.env`, `identity/`, `knowledge_bases/`) are never overwritten. |

@@ -56,9 +56,6 @@ features:
   usage_tracking:
     enabled: false
 
-heartbeat:
-  enabled: false                     # enables the pulse→escalation→review pipeline; then enable schedule entries below
-
 # Scheduled jobs — managed by `adjutant schedule` commands.
 # Each entry is installed as a crontab line: <schedule> <script> >> <log> 2>&1
 # script: relative to ADJ_DIR, or absolute path. Must be executable.
@@ -80,14 +77,14 @@ schedules:
     schedule: "0 9,17 * * 1-5"
     script: ".venv/bin/python -m adjutant pulse"
     log: "state/pulse.log"
-    enabled: false                     # set to true when heartbeat.enabled is true
+    enabled: false
 
   - name: "autonomous_review"
     description: "End-of-day synthesis and review"
     schedule: "0 20 * * 1-5"
     script: ".venv/bin/python -m adjutant review"
     log: "state/review.log"
-    enabled: false                     # set to true when heartbeat.enabled is true
+    enabled: false
 
   - name: "memory_digest"
     description: "Weekly memory compression from journal entries"

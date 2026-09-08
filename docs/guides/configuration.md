@@ -67,9 +67,6 @@ features:
   usage_tracking:
     enabled: false
 
-heartbeat:
-  enabled: false                    # set to true, then enable autonomous_pulse/review in schedules:
-
 # Scheduled jobs — managed by `adjutant schedule` commands
 # Add new jobs with: adjutant schedule add
 # Full docs: docs/guides/schedules.md
@@ -135,9 +132,9 @@ debug:
 
 **`llm.caps`** — Token budget guardrails. These generate usage warnings but do not hard-block requests.
 
-**`heartbeat.enabled`** — Master switch for autonomous pulse and review jobs. Set to `true` to enable, then also enable the corresponding `schedules:` entries: `adjutant schedule enable autonomous_pulse`.
-
 **`schedules:`** — Registry of all scheduled jobs. Each entry maps to one crontab line. `enabled: true` installs the entry; `enabled: false` tracks it in the registry but removes it from crontab. Manage with `adjutant schedule` commands or edit this file and run `adjutant schedule sync`. See [Schedules](schedules.md) for the full guide.
+
+**`heartbeat.enabled`** — Legacy configuration retained for compatibility. It no longer controls scheduled work; use each schedule entry's `enabled` flag instead.
 
 **`notifications.max_per_day`** — Adjutant respects this limit when sending proactive notifications. It will batch and suppress rather than spam.
 

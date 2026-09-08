@@ -173,6 +173,11 @@ def install_all(adj_dir: Path) -> None:
     Idempotent — safe to call repeatedly.
     """
     from adjutant.capabilities.schedule.manage import schedule_list
+    from adjutant.core.lockfiles import is_paused
+
+    if is_paused(adj_dir):
+        uninstall_all(adj_dir)
+        return
 
     config = _config_path(adj_dir)
     for entry in schedule_list(config):
@@ -198,6 +203,12 @@ def install_one(adj_dir: Path, name: str) -> None:
         ValueError: If the job is not registered or has no runnable command.
     """
     from adjutant.capabilities.schedule.manage import schedule_exists, schedule_get
+    from adjutant.core.lockfiles import is_paused
+
+    if is_paused(adj_dir):
+        # Preserve pause's silent guarantee even if a stale entry was restored.
+        uninstall_one(adj_dir, name)
+        return
 
     config = _config_path(adj_dir)
 

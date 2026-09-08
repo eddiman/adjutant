@@ -51,8 +51,8 @@ llm:
 adjutant start       # Start the Telegram listener
 adjutant stop        # Stop the Telegram listener
 adjutant restart     # Restart all services
-adjutant pause       # Soft pause — listener stays up, stops processing
-adjutant resume      # Resume from pause
+adjutant pause       # Silent pause — disable managed cron and autonomous notifications
+adjutant resume      # Resume and restore enabled managed cron entries
 adjutant kill        # Emergency shutdown
 adjutant startup     # Recovery from KILLED state
 adjutant status      # Show current state
@@ -76,7 +76,7 @@ adjutant doctor      # Health check
 | `/recall [query]` | Search memory or show the index |
 | `/digest` | Create a memory digest from recent journal entries |
 | `/schedule list` | List scheduled jobs |
-| `/pause` / `/resume` | Pause/resume processing |
+| `/pause` / `/resume` | Silent pause/resume for autonomous work and managed schedules |
 | `/help` | List all commands |
 
 Any other message is treated as natural language and routed to the LLM backend.

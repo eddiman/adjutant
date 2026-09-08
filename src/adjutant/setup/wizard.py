@@ -52,7 +52,6 @@ class WizardContext:
     features_usage: bool = True
 
     # autonomy
-    heartbeat_enabled: bool = False
     heartbeat_max_per_day: int = 3
 
 

@@ -137,12 +137,12 @@ Accessible via the **Adjutant** link in the sidebar (only shown in Adjutant mode
 **Health checks** — confirms the Adjutant directory is found, config is present, the CLI is executable, and the listener process is alive.
 
 **Quick actions:**
-- Pause / Resume — immediately pause or resume the Telegram listener
+- Pause / Resume — pause or resume autonomous work and managed schedules; pause does not stop the listener
 - Run pulse — trigger a pulse run in the background (same as `adjutant pulse`)
 - Run review — trigger a review run in the background (same as `adjutant review`)
 - Pulse and review run detached; the dashboard shows their progress via `state/active_operation.json`
 
-**Schedules** — lists all scheduled jobs from `adjutant.yaml`. You can toggle them on/off and trigger a manual run from here.
+**Schedules** — lists all scheduled jobs from `adjutant.yaml`. You can toggle them on/off and trigger a manual run from here. Enabling a job while paused records the setting and installs it on resume.
 
 **Identity** — shows short excerpts from `identity/soul.md`, `identity/heart.md`, and `identity/registry.md`.
 

@@ -189,6 +189,23 @@ class TestInstallAll:
         ):
             install_all(tmp_path)
 
+    def test_removes_managed_entries_while_paused(self, tmp_path: Path) -> None:
+        _write_adjutant_yaml(
+            tmp_path,
+            [{"name": "job1", "schedule": "* * * * *", "enabled": True, "script": "/run.sh"}],
+        )
+        (tmp_path / "PAUSED").touch()
+        existing = "* * * * * /run.sh  # adjutant:job1\n30 * * * * /user-script.sh\n"
+        with (
+            patch(
+                "adjutant.capabilities.schedule.install._read_crontab",
+                return_value=existing,
+            ),
+            patch("adjutant.capabilities.schedule.install._write_crontab") as mock_write,
+        ):
+            install_all(tmp_path)
+        assert mock_write.call_args[0][0] == "30 * * * * /user-script.sh\n"
+
 
 # ---------------------------------------------------------------------------
 # install_one
@@ -196,6 +213,33 @@ class TestInstallAll:
 
 
 class TestInstallOne:
+    def test_defers_enabled_job_while_paused(self, tmp_path: Path) -> None:
+        _write_adjutant_yaml(
+            tmp_path,
+            [{"name": "job1", "schedule": "* * * * *", "enabled": True, "script": "/run.sh"}],
+        )
+        (tmp_path / "PAUSED").touch()
+        with patch("adjutant.capabilities.schedule.install._write_crontab") as mock_write:
+            install_one(tmp_path, "job1")
+        mock_write.assert_not_called()
+
+    def test_removes_stale_entry_when_paused(self, tmp_path: Path) -> None:
+        _write_adjutant_yaml(
+            tmp_path,
+            [{"name": "job1", "schedule": "* * * * *", "enabled": True, "script": "/run.sh"}],
+        )
+        (tmp_path / "PAUSED").touch()
+        existing = "* * * * * /run.sh  # adjutant:job1\n30 * * * * /user-script.sh\n"
+        with (
+            patch(
+                "adjutant.capabilities.schedule.install._read_crontab",
+                return_value=existing,
+            ),
+            patch("adjutant.capabilities.schedule.install._write_crontab") as mock_write,
+        ):
+            install_one(tmp_path, "job1")
+        assert mock_write.call_args[0][0] == "30 * * * * /user-script.sh\n"
+
     def test_installs_job(self, tmp_path: Path) -> None:
         _write_adjutant_yaml(
             tmp_path,

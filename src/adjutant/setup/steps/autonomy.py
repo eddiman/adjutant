@@ -38,12 +38,12 @@ WIZARD_HEARTBEAT_MAX_PER_DAY: int = 3
 
 
 def _update_config(adj_dir: Path, *, dry_run: bool = False) -> None:
-    """Write heartbeat.enabled and notifications.max_per_day to adjutant.yaml."""
+    """Write notification settings to adjutant.yaml."""
     config_path = adj_dir / "adjutant.yaml"
     if not config_path.is_file():
         return
     if dry_run:
-        wiz_ok("[DRY RUN] Would write heartbeat config to adjutant.yaml")
+        wiz_ok("[DRY RUN] Would write notification config to adjutant.yaml")
         return
     try:
         import yaml
@@ -52,13 +52,6 @@ def _update_config(adj_dir: Path, *, dry_run: bool = False) -> None:
             data = yaml.safe_load(f)
         if not isinstance(data, dict):
             return
-
-        # heartbeat.enabled
-        heartbeat = data.setdefault("heartbeat", {})
-        if not isinstance(heartbeat, dict):
-            data["heartbeat"] = {"enabled": WIZARD_HEARTBEAT_ENABLED}
-        else:
-            heartbeat["enabled"] = WIZARD_HEARTBEAT_ENABLED
 
         # notifications.max_per_day
         notifications = data.setdefault("notifications", {})
@@ -140,7 +133,7 @@ def _enable_schedules(adj_dir: Path, *, dry_run: bool = False) -> None:
     ]:
         if schedule_exists(config_path, job_name):
             try:
-                schedule_set_enabled(config_path, job_name, True)
+                schedule_set_enabled(config_path, job_name, True, adj_dir)
                 wiz_ok(label)
                 installed += 1
             except Exception:
@@ -194,9 +187,10 @@ def step_autonomy(adj_dir: Path, *, dry_run: bool = False) -> bool:
     if not wiz_confirm("Enable the heartbeat pipeline (pulse + review)?", "N"):
         WIZARD_HEARTBEAT_ENABLED = False
         wiz_info(
-            "Heartbeat disabled — enable later by setting heartbeat.enabled: true in adjutant.yaml"
+            "Heartbeat disabled — enable later with: "
+            "adjutant schedule enable autonomous_pulse"
         )
-        wiz_info("Then run: adjutant schedule enable autonomous_pulse")
+        wiz_info("Then enable the review with: adjutant schedule enable autonomous_review")
         _update_config(adj_dir, dry_run=dry_run)
         print("", file=sys.stderr)
         return True

@@ -32,7 +32,7 @@ cron
  │
  ├─► python -m adjutant pulse          (prompts/pulse.md)
  │       │
- │       ├── reads: PAUSED → skip if exists
+│       ├── PAUSED → no managed entry; stale invocation skips if it exists
  │       ├── reads: adjutant.yaml (dry_run flag)
  │       ├── reads: identity/soul.md, identity/heart.md
  │       ├── reads: knowledge_bases/registry.yaml
@@ -44,7 +44,7 @@ cron
  │
  └─► python -m adjutant review          (prompts/review.md)
          │
-         ├── reads: PAUSED → skip if exists
+          ├── PAUSED → no managed entry; stale invocation skips if it exists
          ├── reads: adjutant.yaml (dry_run flag)
          ├── reads: identity/soul.md, identity/heart.md
          ├── reads: journal/ (recent entries)
@@ -73,11 +73,11 @@ Controls are applied in strict priority order. Higher controls override lower on
 
 | Priority | Control | Mechanism | Scope |
 |----------|---------|-----------|-------|
-| 1 (highest) | **PAUSED** | Filesystem file `$ADJ_DIR/PAUSED` | Removes managed cron entries, stops autonomous work, and suppresses autonomous notifications |
-| 2 | **dry_run** | `adjutant.yaml debug.dry_run: true` | Runs full logic, suppresses all side effects |
-| 3 | **budget** | `state/notify_count_YYYY-MM-DD.txt` >= `max_per_day` | Blocks `send_notify()` sends only; cycle continues |
-| 4 | **quiet_hours** | `adjutant.yaml notifications.quiet_hours` | Suppresses sends during configured hours |
-| 5 (lowest) | **KILLED** | Filesystem file `$ADJ_DIR/KILLED` | Stops the Telegram listener; does not affect cron |
+| 1 (highest) | **KILLED** | Filesystem file `$ADJ_DIR/KILLED` | Emergency stop: terminates services and removes the full crontab until recovery |
+| 2 | **PAUSED** | Filesystem file `$ADJ_DIR/PAUSED` | Removes managed cron entries, stops autonomous work, and suppresses autonomous notifications |
+| 3 | **dry_run** | `adjutant.yaml debug.dry_run: true` | Runs full logic, suppresses all side effects |
+| 4 | **budget** | `state/notify_count_YYYY-MM-DD.txt` >= `max_per_day` | Blocks `send_notify()` sends only; cycle continues |
+| 5 (lowest) | **quiet_hours** | `adjutant.yaml notifications.quiet_hours` | Suppresses sends during configured hours |
 
 **Important:** KILLED is the stronger recovery state: it stops the listener and disables the whole crontab as part of emergency shutdown. PAUSED is the reversible silent state: it removes only Adjutant-managed cron entries and leaves unrelated user cron jobs unchanged.
 
@@ -120,7 +120,7 @@ Controls are applied in strict priority order. Higher controls override lower on
 Knowledge base sub-agents are never given the ability to self-schedule, send notifications, or write outside their own directory. They respond to queries — they do not initiate. This means:
 
 - The notification budget is enforced in one place (`send_notify()`)
-- The PAUSED kill switch is checked in one place (Adjutant's prompts)
+- Pause is enforced in managed-cron installation, cron execution, and notification delivery
 - A compromised KB cannot send spam or trigger excessive activity
 
 ### Adjutant is the sole orchestrator

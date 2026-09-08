@@ -36,7 +36,9 @@ Three jobs are pre-declared in `adjutant.yaml.example`. They are all disabled by
 
 Each job's `script` field in `adjutant.yaml` should point to the virtualenv Python binary and the appropriate CLI command (e.g. `.venv/bin/python -m adjutant pulse`). The setup wizard writes these correctly when you enable the relevant features.
 
-`news_briefing` is enabled when `features.news.enabled: true` (via the setup wizard or manually). `autonomous_pulse` and `autonomous_review` are enabled when `heartbeat.enabled: true`.
+Each schedule's `enabled` flag is the runtime source of truth. Set it with `adjutant schedule enable <name>` or edit `adjutant.yaml` and run `adjutant schedule sync`.
+
+When Adjutant is paused, enabled jobs stay enabled in the registry but their managed crontab entries remain absent. `adjutant resume` restores them from the registry. `adjutant schedule sync` also preserves this paused state.
 
 ---
 
@@ -66,7 +68,7 @@ Common schedule examples shown during the wizard:
 | `0 20 * * 1-5` | Weekdays at 8pm |
 | `0 6 * * *` | Every day at 6am |
 
-The wizard validates the name (uniqueness), warns if the script file doesn't exist or isn't executable (but lets you proceed), and installs the crontab entry immediately on confirmation.
+The wizard validates the name (uniqueness), warns if the script file doesn't exist or isn't executable (but lets you proceed), and installs the managed crontab entry on confirmation unless Adjutant is paused.
 
 ### Manual (edit adjutant.yaml directly)
 
@@ -97,10 +99,10 @@ adjutant schedule sync
 ```bash
 adjutant schedule list              # Table of all jobs: name, enabled, schedule, description
 adjutant schedule add               # Interactive wizard
-adjutant schedule enable <name>     # Enable job → install crontab entry
+adjutant schedule enable <name>     # Enable job → install cron entry, or defer until resume if paused
 adjutant schedule disable <name>    # Disable job → remove crontab entry, keep registry
 adjutant schedule remove <name>     # Remove from registry and crontab (irreversible)
-adjutant schedule sync              # Reconcile crontab with registry (idempotent)
+adjutant schedule sync              # Reconcile crontab with registry; preserves pause (idempotent)
 adjutant schedule run <name>        # Run a job immediately in foreground (for testing)
 adjutant schedule --help            # Show usage
 ```
@@ -164,7 +166,7 @@ schedules:
     kb_name: "my-kb"          # optional alternative to script
     kb_operation: "fetch"     # optional alternative to script
     log: "state/foo.log"      # optional — defaults to state/<name>.log
-    enabled: true             # required — true = installed in crontab
+    enabled: true             # required — true = installed unless Adjutant is paused
 ```
 
 ---
@@ -255,7 +257,7 @@ If the job runs and you receive a Telegram notification, authentication is worki
 
 **Job shows `[not in crontab]` in `adjutant status`**
 
-The registry says the job is enabled but the crontab entry is missing. Fix with:
+The registry says the job is enabled but the crontab entry is missing. If Adjutant is paused, this is expected; resume first. Otherwise, fix with:
 ```bash
 adjutant schedule sync
 ```

@@ -134,6 +134,84 @@ class TestStatusCommand:
 
 
 # ---------------------------------------------------------------------------
+# Schedule commands
+# ---------------------------------------------------------------------------
+
+
+class TestScheduleCommands:
+    @staticmethod
+    def _write_schedule(adj_dir: Path, *, enabled: bool = False) -> None:
+        (adj_dir / "adjutant.yaml").write_text(
+            "schedules:\n"
+            "  - name: job1\n"
+            "    schedule: '* * * * *'\n"
+            "    script: /run.sh\n"
+            f"    enabled: {str(enabled).lower()}\n"
+        )
+
+    def test_enable_passes_adj_dir_for_crontab_install(
+        self, runner: CliRunner, adj_dir: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("ADJ_DIR", str(adj_dir))
+        monkeypatch.chdir(adj_dir)
+        self._write_schedule(adj_dir)
+        with patch("adjutant.capabilities.schedule.install.install_one") as install_one:
+            result = runner.invoke(main, ["schedule", "enable", "job1"], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "enabled: true" in (adj_dir / "adjutant.yaml").read_text()
+        install_one.assert_called_once_with(adj_dir, "job1")
+
+    def test_enable_while_paused_defers_crontab_install(
+        self, runner: CliRunner, adj_dir: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("ADJ_DIR", str(adj_dir))
+        monkeypatch.chdir(adj_dir)
+        self._write_schedule(adj_dir)
+        (adj_dir / "PAUSED").touch()
+        with patch("adjutant.capabilities.schedule.install.uninstall_one") as uninstall_one:
+            result = runner.invoke(main, ["schedule", "enable", "job1"], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "will be restored on resume" in result.output
+        uninstall_one.assert_called_once_with(adj_dir, "job1")
+
+    def test_disable_passes_adj_dir_for_crontab_removal(
+        self, runner: CliRunner, adj_dir: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("ADJ_DIR", str(adj_dir))
+        monkeypatch.chdir(adj_dir)
+        self._write_schedule(adj_dir, enabled=True)
+        with patch("adjutant.capabilities.schedule.install.uninstall_one") as uninstall_one:
+            result = runner.invoke(main, ["schedule", "disable", "job1"], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "enabled: false" in (adj_dir / "adjutant.yaml").read_text()
+        uninstall_one.assert_called_once_with(adj_dir, "job1")
+
+    def test_remove_passes_adj_dir_for_crontab_removal(
+        self, runner: CliRunner, adj_dir: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("ADJ_DIR", str(adj_dir))
+        monkeypatch.chdir(adj_dir)
+        self._write_schedule(adj_dir, enabled=True)
+        with patch("adjutant.capabilities.schedule.install.uninstall_one") as uninstall_one:
+            result = runner.invoke(main, ["schedule", "remove", "job1"], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "job1" not in (adj_dir / "adjutant.yaml").read_text()
+        uninstall_one.assert_called_once_with(adj_dir, "job1")
+
+    def test_sync_while_paused_reports_managed_entries_disabled(
+        self, runner: CliRunner, adj_dir: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("ADJ_DIR", str(adj_dir))
+        monkeypatch.chdir(adj_dir)
+        (adj_dir / "PAUSED").touch()
+        with patch("adjutant.capabilities.schedule.install.install_all") as install_all:
+            result = runner.invoke(main, ["schedule", "sync"], catch_exceptions=False)
+        assert result.exit_code == 0
+        assert "managed crontab entries remain disabled" in result.output
+        install_all.assert_called_once_with(adj_dir)
+
+
+# ---------------------------------------------------------------------------
 # Doctor command (functional test)
 # ---------------------------------------------------------------------------
 

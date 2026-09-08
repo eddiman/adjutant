@@ -23,8 +23,8 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 
 | Command | What it does |
 |---------|-------------|
-| `/pause` | Soft pause — Adjutant stops processing new messages. The listener stays running so it can be resumed without a restart |
-| `/resume` | Resumes from a pause |
+| `/pause` | Silent pause — removes Adjutant-managed cron entries and suppresses autonomous notifications; control commands remain available |
+| `/resume` | Resumes from a pause and restores enabled managed cron entries from the schedule registry |
 | `/restart` | Restarts all services |
 | `/kill` | Emergency shutdown — kills all processes, removes cron jobs, and sets a KILLED lockfile. Requires `adjutant startup` to recover (see [Lifecycle](lifecycle.md)) |
 
@@ -41,7 +41,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | `/kb write <name> <instruction>` | Writes to a read-write knowledge base. The sub-agent performs the requested update within the KB's sandbox. Only works for KBs with `access: read-write`. |
 | `/schedule` | Lists all registered scheduled jobs with enabled/disabled status and schedule |
 | `/schedule run <name>` | Runs a scheduled job immediately. Output is sent to chat. |
-| `/schedule enable <name>` | Enables a job and installs its crontab entry |
+| `/schedule enable <name>` | Enables a job and installs its crontab entry, or defers it until resume if paused |
 | `/schedule disable <name>` | Disables a job and removes its crontab entry (keeps the registry entry) |
 
 ### Memory
@@ -91,8 +91,8 @@ adjutant status       # Show system status (OPERATIONAL/PAUSED/KILLED)
 ### Lifecycle control
 
 ```bash
-adjutant pause        # Pause Adjutant (soft stop — listener stays running)
-adjutant resume       # Resume from pause
+adjutant pause        # Silent pause — disable managed cron and autonomous notifications
+adjutant resume       # Resume and restore enabled managed cron entries
 adjutant kill         # Emergency shutdown (hard stop — requires startup to recover)
 adjutant startup      # Full startup, or recovery from KILLED state
 adjutant update       # Self-update to the latest release
@@ -143,10 +143,10 @@ adjutant kb remove <name>             # Unregister a KB (files are NOT deleted)
 ```bash
 adjutant schedule list              # List all jobs: name, enabled, schedule, description
 adjutant schedule add               # Interactive wizard to register a new scheduled job
-adjutant schedule enable <name>     # Enable job → install crontab entry
+adjutant schedule enable <name>     # Enable job → install cron entry, or defer until resume if paused
 adjutant schedule disable <name>    # Disable job → remove crontab entry, keep registry
 adjutant schedule remove <name>     # Remove from registry and crontab
-adjutant schedule sync              # Reconcile crontab with registry (idempotent)
+adjutant schedule sync              # Reconcile crontab with registry; preserves pause (idempotent)
 adjutant schedule run <name>        # Run a job immediately in foreground (for testing)
 ```
 

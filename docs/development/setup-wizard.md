@@ -18,7 +18,7 @@ src/adjutant/setup/
     ├── messaging.py       # Step 5: Telegram token + chat ID, .env write
     ├── features.py        # Step 6: news_config.json, feature flags in adjutant.yaml
     ├── service.py         # Step 7: chmod, rc-file alias, launchd/systemd/cron
-    ├── autonomy.py        # Step 8: heartbeat.enabled, schedule entries
+    ├── autonomy.py        # Step 8: notification settings, schedule entries
     ├── kb_wizard.py       # KB creation sub-wizard (called from wizard.py)
     └── schedule_wizard.py # Schedule add sub-wizard
 ```
@@ -108,4 +108,4 @@ The KB creation wizard (`kb_wizard.py`) is invoked from the main wizard as an op
 
 ### Schedule wizard sub-wizard
 
-`schedule_wizard.py` prompts for name, description, script path or KB operation, schedule, and log file. It calls `schedule_append()` from `capabilities/schedule/manage.py` to register the job, then `schedule_install()` to install the crontab entry.
+`schedule_wizard.py` prompts for name, description, script path or KB operation, schedule, and log file. It registers the job through `schedule_add()`, which installs its managed crontab entry unless Adjutant is paused; paused jobs are restored on resume.

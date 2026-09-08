@@ -11,7 +11,7 @@ Adjutant has three possible states:
 | State | What it means | How to enter | How to exit |
 |-------|--------------|-------------|------------|
 | **RUNNING** | Listener is active and polling for messages | `adjutant start` | `adjutant stop`, `adjutant pause`, or `adjutant kill` |
-| **PAUSED** | Listener is running but ignores all messages; `PAUSED` lockfile exists | `adjutant pause` or `/pause` | `adjutant resume` or `/resume` |
+| **PAUSED** | Silent autonomous state; managed cron entries are removed and autonomous notifications are suppressed | `adjutant pause` or `/pause` | `adjutant resume` or `/resume` |
 | **KILLED** | Hard stop; `KILLED` lockfile exists; nothing will start until explicit recovery | `adjutant kill` or `/kill` | `adjutant startup` (clears lockfile, restores crontab, starts fresh) |
 
 Check the current state at any time:
@@ -78,9 +78,12 @@ adjutant resume
 
 While paused:
 - The listener process continues running and polling
-- All incoming messages are silently dropped
+- Autonomous jobs do not run: only `# adjutant:` crontab entries are removed
+- Autonomous notifications are suppressed, including any stale or in-flight cron completion
 - The `PAUSED` lockfile at `$ADJ_DIR/PAUSED` controls this behaviour
-- `adjutant status` / `/status` will show `PAUSED`
+- Manual control remains available, including `adjutant status`, `/status`, and `/resume`
+
+`adjutant resume` rebuilds enabled managed cron entries from `adjutant.yaml`. Unrelated user crontab entries are never changed by pause or resume. If you enable a schedule while paused, its registry entry is updated and its cron entry is restored on resume.
 
 Both `pause` and `resume` are idempotent — calling them when already in the target state has no effect.
 
@@ -126,7 +129,9 @@ Note: `adjutant start` (without `startup`) will refuse to start if a `KILLED` lo
 | | PAUSED | KILLED |
 |-|--------|--------|
 | Listener still runs | Yes | No |
-| New messages processed | No | No |
+| Manual messages processed | Yes; autonomous notifications remain suppressed | No |
+| Managed cron entries | Removed; restored from enabled registry entries on resume | Entire crontab backed up and removed; recovery restores it |
+| Autonomous notifications | Suppressed | System stopped |
 | Requires explicit recovery | `adjutant resume` | `adjutant startup` (will not auto-recover) |
 | Severity | Low — routine use | High — emergency only |
 

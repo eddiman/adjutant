@@ -92,7 +92,8 @@ Look for `[control] Emergency kill` entries.
 
 1. Verify crontab is installed: `crontab -l`
 2. Check if jobs are enabled: `adjutant schedule list`
-3. Re-sync: `adjutant schedule sync`
+3. Check `adjutant status`: paused Adjutant intentionally has no managed cron entries
+4. Re-sync: `adjutant schedule sync` (resume first if paused)
 
 ### "opencode/claude not found on PATH" in cron
 

@@ -250,7 +250,7 @@ schedules:
     enabled: true
 ```
 
-Then: `adjutant schedule sync`
+Then: `adjutant schedule sync`. If Adjutant is paused, the entry remains deferred until `adjutant resume` restores enabled managed schedules.
 
 See [docs/guides/schedules.md](../guides/schedules.md) for the full guide.
 

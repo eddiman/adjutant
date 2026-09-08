@@ -23,14 +23,14 @@ def _make_config(tmp_path: Path) -> Path:
 
 
 class TestUpdateConfig:
-    def test_writes_heartbeat_enabled(self, tmp_path: Path) -> None:
+    def test_writes_notification_budget_without_heartbeat_switch(self, tmp_path: Path) -> None:
         _make_config(tmp_path)
         autonomy_mod.WIZARD_HEARTBEAT_ENABLED = True
         autonomy_mod.WIZARD_HEARTBEAT_MAX_PER_DAY = 5
         _update_config(tmp_path)
         with open(tmp_path / "adjutant.yaml") as f:
             data = yaml.safe_load(f)
-        assert data["heartbeat"]["enabled"] is True
+        assert "heartbeat" not in data
         assert data["notifications"]["max_per_day"] == 5
 
     def test_dry_run_does_not_write(self, tmp_path: Path) -> None:

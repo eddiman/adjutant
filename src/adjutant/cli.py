@@ -1005,7 +1005,7 @@ def schedule_list_cmd(ctx: click.Context) -> None:
 @click.argument("name")
 @click.pass_context
 def schedule_enable_cmd(ctx: click.Context, name: str) -> None:
-    """Enable a scheduled job (installs crontab entry)."""
+    """Enable a scheduled job (installs it unless paused)."""
     from pathlib import Path
 
     adj_dir = ctx.obj.get("adj_dir")
@@ -1014,9 +1014,13 @@ def schedule_enable_cmd(ctx: click.Context, name: str) -> None:
         raise SystemExit(1)
 
     from adjutant.capabilities.schedule.manage import schedule_set_enabled
+    from adjutant.core.lockfiles import is_paused
 
-    schedule_set_enabled(Path(adj_dir) / "adjutant.yaml", name, True)
-    click.echo(f"Enabled job '{name}' — crontab entry installed.")
+    schedule_set_enabled(Path(adj_dir) / "adjutant.yaml", name, True, Path(adj_dir))
+    if is_paused(adj_dir):
+        click.echo(f"Enabled job '{name}' — crontab entry will be restored on resume.")
+    else:
+        click.echo(f"Enabled job '{name}' — crontab entry installed.")
 
 
 @schedule.command(name="disable")
@@ -1033,7 +1037,7 @@ def schedule_disable_cmd(ctx: click.Context, name: str) -> None:
 
     from adjutant.capabilities.schedule.manage import schedule_set_enabled
 
-    schedule_set_enabled(Path(adj_dir) / "adjutant.yaml", name, False)
+    schedule_set_enabled(Path(adj_dir) / "adjutant.yaml", name, False, Path(adj_dir))
     click.echo(f"Disabled job '{name}' — crontab entry removed.")
 
 
@@ -1051,23 +1055,27 @@ def schedule_remove_cmd(ctx: click.Context, name: str) -> None:
 
     from adjutant.capabilities.schedule.manage import schedule_remove
 
-    schedule_remove(Path(adj_dir) / "adjutant.yaml", name)
+    schedule_remove(Path(adj_dir) / "adjutant.yaml", name, Path(adj_dir))
     click.echo(f"Removed scheduled job '{name}' from registry and crontab.")
 
 
 @schedule.command(name="sync")
 @click.pass_context
 def schedule_sync_cmd(ctx: click.Context) -> None:
-    """Reconcile crontab with adjutant.yaml schedules (idempotent)."""
+    """Reconcile crontab with schedules, preserving a pause (idempotent)."""
     adj_dir = ctx.obj.get("adj_dir")
     if adj_dir is None:
         click.echo("Adjutant directory not found.", err=True)
         raise SystemExit(1)
 
     from adjutant.capabilities.schedule.install import install_all
+    from adjutant.core.lockfiles import is_paused
 
     install_all(adj_dir)
-    click.echo("Crontab reconciled with adjutant.yaml schedules.")
+    if is_paused(adj_dir):
+        click.echo("Adjutant is paused; managed crontab entries remain disabled.")
+    else:
+        click.echo("Crontab reconciled with adjutant.yaml schedules.")
 
 
 @schedule.command(name="run")

@@ -1099,6 +1099,7 @@ async def cmd_schedule(
         schedule_list,
         schedule_set_enabled,
     )
+    from adjutant.core.lockfiles import is_paused
     from adjutant.messaging.telegram.send import (
         msg_react,
         msg_send_text,
@@ -1197,12 +1198,11 @@ async def cmd_schedule(
             schedule_set_enabled(config_path, name, True, adj_dir)
         except Exception as exc:
             adj_log("telegram", f"schedule enable error: {exc}")
-        _send(
-            f"Job *{name}* enabled — crontab entry installed.",
-            message_id,
-            bot_token=bot_token,
-            chat_id=chat_id,
-        )
+        if is_paused(adj_dir):
+            message = f"Job *{name}* enabled — crontab entry will be restored on resume."
+        else:
+            message = f"Job *{name}* enabled — crontab entry installed."
+        _send(message, message_id, bot_token=bot_token, chat_id=chat_id)
         adj_log("telegram", f"Schedule job '{name}' enabled via Telegram")
         return
 
