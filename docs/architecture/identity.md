@@ -30,6 +30,8 @@ The agent definition file lives at `.opencode/agents/adjutant.md`. Both backends
 
 This file specifies which identity files to load, system prompt instructions, and behavioural constraints. It is tracked in the repo (it contains no personal data). The identity files it references are gitignored and personal.
 
+Vision extraction uses a separate tracked definition at `.opencode/agents/vision.md`. It is analysis-only: OpenCode denies all tools through agent frontmatter, while the Claude CLI backend limits that agent to `Read` so it can inspect the supplied image. Its output is evidence for the main agent, not an action result.
+
 ---
 
 ## LLM Backend Integration

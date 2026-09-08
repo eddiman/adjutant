@@ -50,7 +50,9 @@ Before falling through to chat, the dispatcher checks whether the message matche
 
 ### 6. Natural Language Chat
 
-All non-command text is forwarded to `chat.py` as an `asyncio.Task`. If a new message arrives before the previous response is complete, the in-flight task is cancelled before the new one starts. This prevents response pileups and ensures the user's latest message always gets a response.
+All non-command text and photo turns are forwarded as ordered `asyncio.Task` instances. If a new conversational turn arrives before the previous one completes, it waits for the accepted earlier turns. This preserves backend session order, keeps adjacent context available, and avoids retrying an external mutation whose original task was cancelled after the write succeeded.
+
+For photos, the vision model receives an analysis-only prompt. Its output is wrapped as untrusted attachment evidence and passed with the user's caption to the main Adjutant agent. Only the main agent's response is sent to the user. Observable attachment facts remain available to the conversation, while claims in vision text about external actions are not treated as proof.
 
 ---
 

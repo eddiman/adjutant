@@ -19,8 +19,12 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adjutant.core.model import resolve_model_spec
+
+if TYPE_CHECKING:
+    from adjutant.core.backend import ResolvedModel
 
 # ---------------------------------------------------------------------------
 # Model resolution
@@ -61,7 +65,7 @@ def _validate_vision_model_setting(model: str) -> str | None:
     )
 
 
-def resolve_vision_model_spec(adj_dir: Path, model: str | None = None):
+def resolve_vision_model_spec(adj_dir: Path, model: str | None = None) -> ResolvedModel:
     """Resolve the concrete vision model and optional reasoning-effort variant."""
     from adjutant.core.config import load_config
 
@@ -105,7 +109,7 @@ def run_vision_multi(
         ValueError: If image_paths is empty.
         FileNotFoundError: If any path in image_paths does not exist.
     """
-    from adjutant.core.backend import BackendNotFoundError, get_backend
+    from adjutant.core.backend import get_backend
     from adjutant.core.logging import adj_log
 
     if not image_paths:
@@ -132,7 +136,8 @@ def run_vision_multi(
     else:
         adj_log(
             "vision",
-            f"Vision analysis: {len(image_paths)} images using {resolved.model} variant={resolved.variant}",
+            f"Vision analysis: {len(image_paths)} images using {resolved.model} "
+            f"variant={resolved.variant}",
         )
 
     backend = get_backend()
@@ -143,6 +148,8 @@ def run_vision_multi(
     result = asyncio.run(
         backend.run(
             prompt,
+            agent="vision",
+            workdir=adj_dir,
             model=resolved.model,
             variant=resolved.variant,
             files=files,

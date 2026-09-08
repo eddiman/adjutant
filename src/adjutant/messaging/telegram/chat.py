@@ -16,8 +16,8 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from adjutant.core.model import DEFAULT_CHAT_TIER, resolve_model_spec
 from adjutant.core.logging import adj_log
+from adjutant.core.model import DEFAULT_CHAT_TIER, resolve_model_spec
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -123,8 +123,8 @@ def get_session_id(adj_dir: Path, *, model: str | None = None) -> str | None:
     except (TypeError, ValueError):
         age = _DEFAULT_SESSION_TIMEOUT + 1  # force expiry
 
-    # Use configured timeout when adj_dir is available via the session file path
-    timeout = _DEFAULT_SESSION_TIMEOUT
+    session_timeout, _ = _get_config_timeouts(adj_dir)
+    timeout = session_timeout
     if age < timeout:
         return session_id
 
@@ -187,7 +187,6 @@ async def run_chat(message: str, adj_dir: Path) -> str:
         The reply text, or an appropriate error string.
     """
     from adjutant.core.backend import BackendNotFoundError, get_backend
-
     from adjutant.core.config import load_config
 
     model_spec = get_model(adj_dir)
@@ -234,13 +233,13 @@ async def run_chat(message: str, adj_dir: Path) -> str:
 
     reply = result.text
 
-    # Persist / touch session
+    # Persist / touch session. Some backends omit the session ID on a resumed
+    # turn, so the known session still needs its activity timestamp refreshed.
     new_sid = result.session_id
-    if new_sid:
-        if not existing_session:
-            save_session(new_sid, adj_dir, model=f"{resolved.model}|{resolved.variant or ''}")
-        else:
-            touch_session(adj_dir)
+    if existing_session:
+        touch_session(adj_dir)
+    elif new_sid:
+        save_session(new_sid, adj_dir, model=f"{resolved.model}|{resolved.variant or ''}")
 
     if not reply:
         adj_log("telegram", "Chat returned empty reply")

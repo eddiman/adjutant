@@ -9,9 +9,9 @@ Rate limiting:
   - Rolling 60-second window stored in adj_dir/state/rate_limit_window
   - Max 10 messages per minute (configurable via ADJUTANT_RATE_LIMIT_MAX env var)
 
-In-flight job tracking:
-  - Only one chat Task runs at a time per conversation
-  - A newer message cancels the previous in-flight task
+In-flight turn tracking:
+  - Only one conversational turn runs at a time
+  - Newer text and photo turns wait for earlier turns instead of cancelling them
 """
 
 from __future__ import annotations
@@ -25,9 +25,10 @@ from typing import TYPE_CHECKING
 from adjutant.core.logging import adj_log
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
     from pathlib import Path
 
-# In-flight chat tasks: message_id -> asyncio.Task
+# In-flight conversational turns: message_id -> asyncio.Task
 _INFLIGHT: dict[str, asyncio.Task[None]] = {}
 
 _DEFAULT_RATE_LIMIT_WINDOW = 60  # seconds
@@ -108,17 +109,43 @@ def _check_rate_limit(adj_dir: Path) -> bool:
     return True
 
 
-def _cancel_inflight(current_msg_id: str) -> None:
-    """Cancel any in-flight chat task that is not the current message."""
-    to_cancel = [mid for mid in list(_INFLIGHT) if mid != current_msg_id]
-    for mid in to_cancel:
-        task = _INFLIGHT.pop(mid, None)
-        if task and not task.done():
-            task.cancel()
-            adj_log(
-                "messaging",
-                f"Cancelled in-flight job for msg={mid} (superseded by msg={current_msg_id})",
-            )
+async def _wait_for_predecessors(tasks: tuple[asyncio.Task[None], ...]) -> None:
+    """Wait for earlier conversational turns without cancelling them."""
+    for task in tasks:
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if task.cancelled():
+                continue
+            raise
+        except Exception as exc:  # noqa: BLE001 - a failed turn must not block the queue
+            adj_log("messaging", f"Earlier conversational turn failed: {exc}")
+
+
+def _queue_turn(
+    message_id: str,
+    handler: Callable[[], Awaitable[None]],
+) -> asyncio.Task[None]:
+    """Queue a text or photo turn after all conversational work already accepted."""
+    predecessors = tuple(task for task in _INFLIGHT.values() if not task.done())
+    if predecessors:
+        adj_log(
+            "messaging",
+            f"Queued msg={message_id} behind {len(predecessors)} earlier turn(s)",
+        )
+
+    async def _ordered_turn() -> None:
+        try:
+            await _wait_for_predecessors(predecessors)
+            await handler()
+        finally:
+            current = asyncio.current_task()
+            if _INFLIGHT.get(message_id) is current:
+                _INFLIGHT.pop(message_id, None)
+
+    task = asyncio.create_task(_ordered_turn())
+    _INFLIGHT[message_id] = task
+    return task
 
 
 async def dispatch_message(
@@ -299,10 +326,9 @@ async def dispatch_message(
         adj_log("messaging", f"Chat msg={message_id}: {text}")
         msg_id_str = str(message_id)
 
-        _cancel_inflight(msg_id_str)
         msg_react(message_id, bot_token=bot_token, chat_id=chat_id)
 
-        async def _chat_task() -> None:
+        async def _chat_turn() -> None:
             from adjutant.messaging.telegram.chat import run_chat
 
             typing_key = f"chat_{message_id}"
@@ -323,12 +349,18 @@ async def dispatch_message(
             except asyncio.CancelledError:
                 adj_log("messaging", f"Chat task for msg={message_id} was cancelled")
                 raise
+            except Exception as exc:  # noqa: BLE001 - keep listener alive and inform the user
+                msg_send_text(
+                    "I ran into a problem getting a response. Try again in a moment.",
+                    message_id,
+                    bot_token=bot_token,
+                    chat_id=chat_id,
+                )
+                adj_log("messaging", f"Chat task for msg={message_id} failed: {exc}")
             finally:
                 msg_typing_stop(typing_key)
-                _INFLIGHT.pop(msg_id_str, None)
 
-        task = asyncio.create_task(_chat_task())
-        _INFLIGHT[msg_id_str] = task
+        _queue_turn(msg_id_str, _chat_turn)
 
 
 async def dispatch_photo(
@@ -359,12 +391,15 @@ async def dispatch_photo(
         adj_log("messaging", f"Rejected photo from unauthorized sender: {from_id}")
         return
 
-    await tg_handle_photo(
-        from_id,
-        message_id,
-        file_ref,
-        caption,
-        bot_token=bot_token,
-        chat_id=chat_id,
-        adj_dir=adj_dir,
-    )
+    async def _photo_turn() -> None:
+        await tg_handle_photo(
+            from_id,
+            message_id,
+            file_ref,
+            caption,
+            bot_token=bot_token,
+            chat_id=chat_id,
+            adj_dir=adj_dir,
+        )
+
+    _queue_turn(str(message_id), _photo_turn)

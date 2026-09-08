@@ -146,6 +146,24 @@ class TestRunVision:
         assert call_kwargs["model"] == "override-model"
         assert call_kwargs["variant"] is None
 
+    def test_runs_with_analysis_only_agent(self, tmp_path: Path) -> None:
+        img = tmp_path / "image.png"
+        img.write_bytes(b"fake png")
+        backend = _mock_backend(_llm_result(text="observed facts"))
+        with (
+            patch("adjutant.core.backend.get_backend", return_value=backend),
+            patch("adjutant.core.logging.adj_log"),
+            patch(
+                "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+                return_value=MagicMock(model="vision-model", variant=None),
+            ),
+        ):
+            run_vision(str(img), "Analyze", tmp_path)
+
+        call_kwargs = backend.run.call_args[1]
+        assert call_kwargs["agent"] == "vision"
+        assert call_kwargs["workdir"] == tmp_path
+
 
 # ---------------------------------------------------------------------------
 # run_vision_multi

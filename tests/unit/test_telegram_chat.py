@@ -84,6 +84,16 @@ class TestGetSessionId:
         self._write_session(tmp_path, "sess123", age_seconds=SESSION_TIMEOUT + 10)
         assert get_session_id(tmp_path) is None
 
+    def test_uses_configured_session_timeout(self, tmp_path: Path) -> None:
+        self._write_session(tmp_path, "sess123", age_seconds=SESSION_TIMEOUT + 10)
+        (tmp_path / "adjutant.yaml").write_text(
+            "messaging:\n"
+            "  telegram:\n"
+            f"    session_timeout_seconds: {SESSION_TIMEOUT * 2}\n"
+        )
+
+        assert get_session_id(tmp_path) == "sess123"
+
     def test_returns_none_when_no_file(self, tmp_path: Path) -> None:
         assert get_session_id(tmp_path) is None
 
@@ -225,6 +235,27 @@ class TestRunChat:
         # Verify session_id was passed to backend.run
         call_kwargs = backend.run.call_args[1]
         assert call_kwargs["session_id"] == "existing_sid"
+
+    @pytest.mark.asyncio
+    async def test_touches_resumed_session_when_backend_omits_session_id(
+        self, tmp_path: Path
+    ) -> None:
+        state = tmp_path / "state"
+        state.mkdir()
+        old_epoch = int(time.time()) - 60
+        session_data = {
+            "session_id": "existing_sid",
+            "last_message_epoch": old_epoch,
+        }
+        session_file = state / "telegram_session.json"
+        session_file.write_text(json.dumps(session_data))
+
+        backend = _mock_backend(_llm_result(text="reply", session_id=None))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
+            await run_chat("hello", tmp_path)
+
+        refreshed = json.loads(session_file.read_text())
+        assert refreshed["last_message_epoch"] > old_epoch
 
     @pytest.mark.asyncio
     async def test_passes_variant_for_tier_model(self, tmp_path: Path) -> None:

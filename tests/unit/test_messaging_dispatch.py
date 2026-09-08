@@ -13,8 +13,8 @@ import pytest
 from adjutant.messaging.dispatch import (
     _DEFAULT_RATE_LIMIT_WINDOW,
     _INFLIGHT,
-    _cancel_inflight,
     _check_rate_limit,
+    _queue_turn,
     dispatch_message,
     dispatch_photo,
 )
@@ -62,60 +62,66 @@ class TestCheckRateLimit:
 
 
 # ---------------------------------------------------------------------------
-# _cancel_inflight
+# _queue_turn
 # ---------------------------------------------------------------------------
 
 
-class TestCancelInflight:
+class TestQueueTurn:
     def setup_method(self) -> None:
         _INFLIGHT.clear()
 
     def teardown_method(self) -> None:
+        for task in _INFLIGHT.values():
+            task.cancel()
         _INFLIGHT.clear()
 
-    def test_cancels_other_tasks(self) -> None:
-        loop = asyncio.new_event_loop()
-        try:
+    @pytest.mark.asyncio
+    async def test_preserves_adjacent_turn_order_without_cancelling(self) -> None:
+        events: list[str] = []
+        first_started = asyncio.Event()
+        release_first = asyncio.Event()
 
-            async def _slow():
-                await asyncio.sleep(100)
+        async def _first() -> None:
+            events.append("first:start")
+            first_started.set()
+            await release_first.wait()
+            events.append("first:end")
 
-            task_old = loop.create_task(_slow())
-            _INFLIGHT["msg_old"] = task_old
-            _INFLIGHT["msg_new"] = loop.create_task(_slow())
+        async def _second() -> None:
+            events.append("second:start")
 
-            _cancel_inflight("msg_new")
+        first_task = _queue_turn("msg_old", _first)
+        await first_started.wait()
+        second_task = _queue_turn("msg_new", _second)
+        await asyncio.sleep(0)
 
-            # task.cancel() requests cancellation but doesn't settle immediately;
-            # run the loop one step so the task processes the cancellation.
-            loop.run_until_complete(asyncio.sleep(0))
+        assert events == ["first:start"]
+        assert not first_task.cancelled()
+        assert not second_task.done()
 
-            assert task_old.cancelled() or task_old.cancelling() > 0
-            assert "msg_old" not in _INFLIGHT
-        finally:
-            # Clean up remaining tasks
-            for t in list(_INFLIGHT.values()):
-                t.cancel()
-            _INFLIGHT.clear()
-            loop.close()
+        release_first.set()
+        await asyncio.gather(first_task, second_task)
 
-    def test_does_not_cancel_current_task(self) -> None:
-        loop = asyncio.new_event_loop()
-        try:
+        assert events == ["first:start", "first:end", "second:start"]
 
-            async def _slow():
-                await asyncio.sleep(100)
+    @pytest.mark.asyncio
+    async def test_failed_turn_does_not_drop_queued_follow_up(self) -> None:
+        events: list[str] = []
 
-            task_current = loop.create_task(_slow())
-            _INFLIGHT["msg_current"] = task_current
+        async def _first() -> None:
+            events.append("first")
+            raise RuntimeError("failed")
 
-            _cancel_inflight("msg_current")
+        async def _second() -> None:
+            events.append("second")
 
-            assert not task_current.cancelled()
-        finally:
-            task_current.cancel()
-            _INFLIGHT.clear()
-            loop.close()
+        first_task = _queue_turn("msg_old", _first)
+        second_task = _queue_turn("msg_new", _second)
+        results = await asyncio.gather(first_task, second_task, return_exceptions=True)
+
+        assert isinstance(results[0], RuntimeError)
+        assert results[1] is None
+        assert events == ["first", "second"]
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +317,7 @@ class TestDispatchPhoto:
 
     @pytest.mark.asyncio
     async def test_authorized_photo_routes_to_handler(self, tmp_path: Path) -> None:
+        _INFLIGHT.clear()
         handle_called = []
 
         async def mock_handle(
@@ -322,6 +329,8 @@ class TestDispatchPhoto:
             await dispatch_photo(
                 CHAT, 1, "file123", tmp_path, bot_token=BOT, chat_id=CHAT, caption="nice"
             )
+            pending = tuple(_INFLIGHT.values())
+            await asyncio.gather(*pending)
 
         assert len(handle_called) == 1
         assert handle_called[0] == (CHAT, "file123")

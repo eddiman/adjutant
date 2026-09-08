@@ -51,14 +51,18 @@ _TO_OPENCODE: dict[str, str] = {
 _IMAGE_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".gif", ".webp"})
 
 _DEFAULT_ALLOWED_TOOLS = "Read,Glob,Grep,Edit,Write,Bash(*)"
+_VISION_ALLOWED_TOOLS = "Read"
 
 
-def _get_permission_args() -> list[str]:
+def _get_permission_args(agent: str | None = None) -> list[str]:
     """Build permission-related CLI args from config.
 
     Returns either --dangerously-skip-permissions (default "skip" mode)
     or --allowedTools with a whitelist ("allowlist" mode).
     """
+    if agent == "vision":
+        return ["--allowedTools", _VISION_ALLOWED_TOOLS]
+
     try:
         from adjutant.core.config import load_typed_config
 
@@ -161,17 +165,19 @@ class ClaudeCLIBackend:
             args += ["--model", self.resolve_alias(model)]
 
         # Agent prompt via --system-prompt-file
-        tmp_prompt_file = None
+        tmp_prompt_path: Path | None = None
         if agent and workdir:
             agent_file = _resolve_agent_file(agent, workdir)
             if agent_file:
                 body = _extract_prompt_body(agent_file)
-                tmp_prompt_file = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False)
-                tmp_prompt_file.write(body)
-                tmp_prompt_file.close()
-                args += ["--system-prompt-file", tmp_prompt_file.name]
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".md", delete=False
+                ) as prompt_file:
+                    prompt_file.write(body)
+                    tmp_prompt_path = Path(prompt_file.name)
+                args += ["--system-prompt-file", str(tmp_prompt_path)]
 
-        args.extend(_get_permission_args())
+        args.extend(_get_permission_args(agent))
 
         if session_id:
             args += ["--resume", session_id]
@@ -208,10 +214,9 @@ class ClaudeCLIBackend:
                     await proc.wait()
                 timed_out = True
                 stdout_bytes = b""
-                stderr_bytes = b""
         finally:
-            if tmp_prompt_file:
-                Path(tmp_prompt_file.name).unlink(missing_ok=True)
+            if tmp_prompt_path:
+                tmp_prompt_path.unlink(missing_ok=True)
 
         elapsed = time.monotonic() - start
         stdout = stdout_bytes.decode(errors="replace") if stdout_bytes else ""

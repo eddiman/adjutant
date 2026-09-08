@@ -100,6 +100,9 @@ class TestResolveAgentFile:
 
 
 class TestPermissionArgs:
+    def test_vision_agent_is_read_only(self) -> None:
+        assert _get_permission_args("vision") == ["--allowedTools", "Read"]
+
     def test_default_skip(self) -> None:
         with patch(
             "adjutant.core.backend_claude_cli.load_typed_config",

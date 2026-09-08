@@ -298,7 +298,7 @@ class TestKbWriteByPath:
             with pytest.raises(BackendNotFoundError):
                 kb_write_by_path(kb_path, "update issue #1", adj_dir)
 
-    def test_returns_confirmation_message(self, tmp_path: Path) -> None:
+    def test_returns_dispatch_acknowledgement(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
 
@@ -308,6 +308,7 @@ class TestKbWriteByPath:
             msg = kb_write_by_path(kb_path, "Update issue #12: mark complete", adj_dir)
 
         assert "Write dispatched" in msg
+        assert "completion not verified" in msg
         assert "mydb" in msg
         assert "Update issue #12" in msg
 

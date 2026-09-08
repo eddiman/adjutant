@@ -12,7 +12,7 @@ The agent loads `memory/memory.md` on demand when a conversation touches past de
 
 ```
 memory/
-├── memory.md                    # Index -- loaded at startup
+├── memory.md                    # Index -- loaded on demand
 ├── facts/
 │   ├── people.md                # People, roles, preferences
 │   ├── projects.md              # Learned project knowledge

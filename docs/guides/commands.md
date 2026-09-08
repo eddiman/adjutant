@@ -38,7 +38,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | `/kb query <name> <question>` | Queries a specific knowledge base with your question. Example: `/kb query my-project what's the current status?` |
 | `/kb query-all [question]` | Queries ALL registered KBs in parallel and returns combined results. Uses each KB's `query_hint` for targeted questions. Optionally provide a custom question. |
 | `/kb cross-query <kb1,kb2> <question>` | Queries multiple KBs in parallel and synthesizes a cross-domain answer. Example: `/kb cross-query ixda,fagkomite any scheduling conflicts?` |
-| `/kb write <name> <instruction>` | Writes to a read-write knowledge base. The sub-agent performs the requested update within the KB's sandbox. Only works for KBs with `access: read-write`. |
+| `/kb write <name> <instruction>` | Dispatches a write to a read-write knowledge base. The immediate response acknowledges dispatch, not verified completion. Only works for KBs with `access: read-write`. |
 | `/schedule` | Lists all registered scheduled jobs with enabled/disabled status and schedule |
 | `/schedule run <name>` | Runs a scheduled job immediately. Output is sent to chat. |
 | `/schedule enable <name>` | Enables a job and installs its crontab entry, or defers it until resume if paused |
@@ -71,7 +71,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 
 Any message that doesn't start with `/` is treated as a natural language query. Adjutant passes it to the AI agent with your full identity context loaded (`soul.md`, `heart.md`, `registry.md`). You can ask anything — questions about your projects, requests to draft something, queries about knowledge bases.
 
-If a long-running response is in progress when you send a new message, the previous job is cancelled and the new one starts immediately.
+If a response is already in progress when you send another text or photo, Adjutant queues the newer conversational turn. Processing turns in arrival order preserves established context and prevents a cancelled turn from leaving an external action half-observed and then being repeated.
 
 ---
 

@@ -6,7 +6,8 @@ Sends queries to the KB sub-agent via the configured LLM backend with an
 80-second timeout and returns the plain-text answer.
 
 For writes, dispatches the sub-agent as a detached background process and
-returns immediately with a confirmation message (fire-and-forget).
+returns immediately with a dispatch acknowledgement (fire-and-forget). The
+acknowledgement does not prove that the requested write completed.
 
 Usage:
     result = await kb_query("my-kb", "What is the current portfolio value?", adj_dir)
@@ -19,10 +20,14 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from adjutant.core.backend import BackendNotFoundError, get_backend
 from adjutant.core.logging import adj_log
 from adjutant.core.model import resolve_kb_model, resolve_model_spec
+
+if TYPE_CHECKING:
+    from adjutant.core.backend import ResolvedModel
 
 # Keep under the 120 s bash-tool ceiling.
 # health check (~5-20 s) + query timeout must not exceed ~110 s total.
@@ -56,7 +61,7 @@ def _resolve_model(kb_path: Path, adj_dir: Path) -> str:
     return resolve_kb_model(kb_model_raw, state_dir, config)
 
 
-def _resolve_model_with_variant(kb_path: Path, adj_dir: Path):
+def _resolve_model_with_variant(kb_path: Path, adj_dir: Path) -> ResolvedModel:
     """Resolve the model and reasoning-effort variant for a KB."""
     kb_model_raw = _read_kb_model_from_yaml(kb_path)
     state_dir = adj_dir / "state"
@@ -182,7 +187,7 @@ def kb_write_by_path(
     """Dispatch a write operation to a KB sub-agent (fire-and-forget).
 
     Spawns the sub-agent as a detached background process and returns
-    immediately with a confirmation message.  The sub-agent runs without
+    immediately with a dispatch acknowledgement. The sub-agent runs without
     a timeout and logs completion/failure to adjutant.log.
 
     This is synchronous and safe to call from ``asyncio.run()`` (CLI) or
@@ -194,7 +199,7 @@ def kb_write_by_path(
         adj_dir: Adjutant root directory (for model resolution).
 
     Returns:
-        Confirmation message string.
+        Dispatch acknowledgement string. This is not a completion result.
 
     Raises:
         KBQueryError: If the KB directory is missing or instruction is empty.
@@ -227,7 +232,7 @@ def kb_write_by_path(
     preview = instruction[:120]
     if len(instruction) > 120:
         preview += "..."
-    return f"Write dispatched to '{kb_name}': {preview}"
+    return f"Write dispatched to '{kb_name}' (pending; completion not verified): {preview}"
 
 
 def kb_write(
@@ -246,7 +251,7 @@ def kb_write(
         adj_dir: Adjutant root directory.
 
     Returns:
-        Confirmation message string.
+        Dispatch acknowledgement string. This is not a completion result.
 
     Raises:
         KBQueryError: If KB not found or instruction fails validation.
