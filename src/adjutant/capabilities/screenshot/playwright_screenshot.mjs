@@ -22,25 +22,22 @@
  * Prints "OK:<outfile>" or "ERROR:<reason>" to stdout.
  */
 
-// Resolve playwright from known locations
+const { createRequire } = await import('module');
+const require = createRequire(import.meta.url);
 let playwright;
-const candidatePaths = [
-  '/tmp/pwtest/node_modules/playwright',
-];
-for (const p of candidatePaths) {
-  try {
-    const { createRequire } = await import('module');
-    const req = createRequire(import.meta.url);
-    playwright = req(p);
-    break;
-  } catch (_) {}
-}
-if (!playwright) {
-  console.log('ERROR: playwright module not found. Run: cd /tmp/pwtest && npm install playwright');
+try {
+  playwright = require('playwright');
+} catch (_) {
+  console.log('ERROR: Playwright is not installed. Run: npm install playwright && npx playwright install chromium');
   process.exit(1);
 }
 
 const { chromium } = playwright;
+
+if (process.argv[2] === '--check') {
+  console.log(`OK:playwright ${playwright.chromium ? 'available' : 'unavailable'}`);
+  process.exit(0);
+}
 
 // --- Args ---
 const [,, url, outfile] = process.argv;

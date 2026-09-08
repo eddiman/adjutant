@@ -33,24 +33,24 @@ class TestGetVersion:
 
 
 class TestCheckPlaywright:
-    def test_returns_false_when_npx_missing(self) -> None:
+    def test_returns_false_when_node_missing(self) -> None:
         with patch("shutil.which", return_value=None):
             assert _check_playwright() is False
 
     def test_returns_true_when_playwright_available(self) -> None:
         mock_result = MagicMock(returncode=0)
-        with patch("shutil.which", return_value="/usr/bin/npx"):
+        with patch("shutil.which", return_value="/usr/bin/node"):
             with patch("subprocess.run", return_value=mock_result):
                 assert _check_playwright() is True
 
     def test_returns_false_on_nonzero_returncode(self) -> None:
         mock_result = MagicMock(returncode=1)
-        with patch("shutil.which", return_value="/usr/bin/npx"):
+        with patch("shutil.which", return_value="/usr/bin/node"):
             with patch("subprocess.run", return_value=mock_result):
                 assert _check_playwright() is False
 
     def test_returns_false_on_subprocess_exception(self) -> None:
-        with patch("shutil.which", return_value="/usr/bin/npx"):
+        with patch("shutil.which", return_value="/usr/bin/node"):
             with patch("subprocess.run", side_effect=OSError("timeout")):
                 assert _check_playwright() is False
 

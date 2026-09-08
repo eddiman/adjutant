@@ -66,5 +66,8 @@ site/node_modules/
 site/.docusaurus/
 site/build/
 
+# Root JavaScript runtime dependencies (Playwright screenshots)
+node_modules/
+
 # OpenWebUI integration
 integrations/openwebui/__pycache__/

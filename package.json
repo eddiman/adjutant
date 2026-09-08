@@ -1,0 +1,8 @@
+{
+  "name": "adjutant-screenshot-runtime",
+  "private": true,
+  "description": "Node.js runtime dependency for Adjutant screenshots",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}

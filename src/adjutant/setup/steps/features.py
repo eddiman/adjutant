@@ -18,7 +18,7 @@ import json
 import shutil
 import subprocess
 import sys
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 from adjutant.setup.wizard import (
     BOLD,
@@ -31,9 +31,6 @@ from adjutant.setup.wizard import (
     wiz_step,
     wiz_warn,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 # Module-level wizard state
 WIZARD_FEATURES_NEWS: bool = False
@@ -79,11 +76,14 @@ _DEFAULT_NEWS_CONFIG = {
 
 
 def _playwright_available() -> bool:
-    if shutil.which("npx") is None:
+    if shutil.which("node") is None:
         return False
+    pw_script = (
+        Path(__file__).parents[2] / "capabilities" / "screenshot" / "playwright_screenshot.mjs"
+    )
     try:
         result = subprocess.run(
-            ["npx", "playwright", "--version"],
+            ["node", str(pw_script), "--check"],
             capture_output=True,
             text=True,
             timeout=15,
@@ -237,7 +237,8 @@ def step_features(adj_dir: Path, *, dry_run: bool = False) -> bool:
             if wiz_confirm("Enable anyway? (you can install Playwright later)", "N"):
                 WIZARD_FEATURES_SCREENSHOT = True
                 wiz_ok(
-                    "Screenshot enabled (install Playwright with: npx playwright install chromium)"
+                    "Screenshot enabled (install Playwright with: "
+                    "npm install && npx playwright install chromium)"
                 )
             else:
                 WIZARD_FEATURES_SCREENSHOT = False

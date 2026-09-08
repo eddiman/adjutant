@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from adjutant.setup.wizard import (
     DIM,
@@ -60,12 +61,15 @@ def _get_version(cmd: str) -> str:
 
 
 def _check_playwright() -> bool:
-    """Return True if npx playwright is available."""
-    if shutil.which("npx") is None:
+    """Return True when the screenshot helper can load Playwright."""
+    if shutil.which("node") is None:
         return False
+    pw_script = (
+        Path(__file__).parents[2] / "capabilities" / "screenshot" / "playwright_screenshot.mjs"
+    )
     try:
         result = subprocess.run(
-            ["npx", "playwright", "--version"],
+            ["node", str(pw_script), "--check"],
             capture_output=True,
             text=True,
             timeout=15,
@@ -77,9 +81,12 @@ def _check_playwright() -> bool:
 
 def _playwright_version() -> str:
     """Return playwright version string or 'found'."""
+    pw_script = (
+        Path(__file__).parents[2] / "capabilities" / "screenshot" / "playwright_screenshot.mjs"
+    )
     try:
         result = subprocess.run(
-            ["npx", "playwright", "--version"],
+            ["node", str(pw_script), "--check"],
             capture_output=True,
             text=True,
             timeout=15,
@@ -143,7 +150,10 @@ def step_prerequisites() -> bool:
         sys.stderr.write("\r")
         sys.stderr.flush()
         wiz_warn("playwright not found")
-        wiz_info("Needed for /screenshot. Install with: npx playwright install chromium")
+        wiz_info(
+            "Needed for /screenshot. Install with: "
+            "npm install && npx playwright install chromium"
+        )
         result.optdeps_missing.append("playwright")
 
     # bc (used for cost estimation in bash; Python equiv doesn't need it)
