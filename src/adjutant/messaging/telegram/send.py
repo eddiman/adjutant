@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import threading
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from adjutant.core.logging import adj_log
@@ -28,6 +29,22 @@ _TELEGRAM_MAX_LEN = 4000
 
 # Active typing threads: suffix → (Thread, stop_event)
 _TYPING_THREADS: dict[str, tuple[threading.Thread, threading.Event]] = {}
+
+
+@dataclass(frozen=True)
+class TelegramDeliveryReceipt:
+    """Observed outcome of one Telegram ``sendMessage`` request.
+
+    ``delivered`` means Telegram returned ``ok: true``. A network error may
+    leave delivery uncertain because the server could have accepted the
+    request before the client lost the response.
+    """
+
+    delivered: bool
+    message_id: int | None = None
+    used_plain_text_fallback: bool = False
+    uncertain: bool = False
+    error: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +87,7 @@ def msg_send_text(
     *,
     bot_token: str,
     chat_id: str,
-) -> None:
+) -> TelegramDeliveryReceipt:
     """Send a Telegram text message with Markdown parse mode.
 
     Args:
@@ -78,11 +95,15 @@ def msg_send_text(
         reply_to: Optional message ID to reply to.
         bot_token: Telegram bot token.
         chat_id: Target chat ID.
+
+    Returns:
+        A receipt based on Telegram's response. Callers must inspect
+        ``delivered`` before recording successful delivery.
     """
     sanitized = _sanitize(message)
     if not sanitized:
         adj_log("telegram", "msg_send_text: empty message after sanitisation, skipping")
-        return
+        return TelegramDeliveryReceipt(delivered=False, error="empty_message")
 
     payload: dict[str, Any] = {
         "chat_id": chat_id,
@@ -95,7 +116,8 @@ def msg_send_text(
     client = get_client()
     url = _tg_url(bot_token, "sendMessage")
     try:
-        client.post(url, json_data=payload)
+        response = client.post(url, json_data=payload)
+        return _delivery_receipt(response)
     except Exception as exc:
         # Telegram rejects messages with malformed Markdown (HTTP 400 parse
         # entity errors).  Retry without parse_mode so the message always
@@ -105,11 +127,103 @@ def msg_send_text(
             adj_log("telegram", "msg_send_text: Markdown parse error, retrying as plain text")
             plain_payload = {k: v for k, v in payload.items() if k != "parse_mode"}
             try:
-                client.post(url, json_data=plain_payload)
-                return
+                response = client.post(url, json_data=plain_payload)
+                return _delivery_receipt(response, used_plain_text_fallback=True)
             except Exception as exc2:
                 adj_log("telegram", f"msg_send_text plain retry failed: {exc2}")
+                return _failed_delivery_receipt(exc2)
         adj_log("telegram", f"msg_send_text failed: {exc}")
+        return _failed_delivery_receipt(exc)
+
+
+def msg_edit_text(
+    message_id: int,
+    message: str,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> TelegramDeliveryReceipt:
+    """Edit a known Telegram status message and return an explicit receipt."""
+    sanitized = _sanitize(message)
+    if not sanitized:
+        return TelegramDeliveryReceipt(delivered=False, error="empty_message")
+    payload: dict[str, Any] = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": sanitized,
+        "parse_mode": "Markdown",
+    }
+    client = get_client()
+    url = _tg_url(bot_token, "editMessageText")
+    try:
+        response = client.post(url, json_data=payload)
+        receipt = _delivery_receipt(response)
+        if receipt.delivered and receipt.message_id is None:
+            return TelegramDeliveryReceipt(delivered=True, message_id=message_id)
+        return receipt
+    except Exception as exc:
+        error = str(exc)
+        if "message is not modified" in error.lower():
+            return TelegramDeliveryReceipt(delivered=True, message_id=message_id)
+        if "400" in error and "parse" in error.lower():
+            payload.pop("parse_mode", None)
+            try:
+                response = client.post(url, json_data=payload)
+                receipt = _delivery_receipt(response, used_plain_text_fallback=True)
+                if receipt.delivered and receipt.message_id is None:
+                    return TelegramDeliveryReceipt(
+                        delivered=True,
+                        message_id=message_id,
+                        used_plain_text_fallback=True,
+                    )
+                return receipt
+            except Exception as retry_exc:
+                return _failed_delivery_receipt(retry_exc)
+        return _failed_delivery_receipt(exc)
+
+
+def _delivery_receipt(
+    response: object,
+    *,
+    used_plain_text_fallback: bool = False,
+) -> TelegramDeliveryReceipt:
+    """Convert a Telegram API response into an explicit delivery receipt."""
+    if not isinstance(response, dict):
+        return TelegramDeliveryReceipt(
+            delivered=False,
+            used_plain_text_fallback=used_plain_text_fallback,
+            error="invalid_response",
+        )
+    if response.get("ok") is not True:
+        description = response.get("description")
+        return TelegramDeliveryReceipt(
+            delivered=False,
+            used_plain_text_fallback=used_plain_text_fallback,
+            error=str(description) if description else "telegram_rejected",
+        )
+
+    result = response.get("result")
+    message_id: int | None = None
+    if isinstance(result, dict):
+        raw_message_id = result.get("message_id")
+        if isinstance(raw_message_id, int):
+            message_id = raw_message_id
+
+    return TelegramDeliveryReceipt(
+        delivered=True,
+        message_id=message_id,
+        used_plain_text_fallback=used_plain_text_fallback,
+    )
+
+
+def _failed_delivery_receipt(exc: Exception) -> TelegramDeliveryReceipt:
+    """Return a failed receipt and identify network-ambiguous outcomes."""
+    status_code = getattr(exc, "status_code", None)
+    return TelegramDeliveryReceipt(
+        delivered=False,
+        uncertain=status_code is None,
+        error=str(exc),
+    )
 
 
 # ---------------------------------------------------------------------------

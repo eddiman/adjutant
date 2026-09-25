@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -14,11 +13,12 @@ from adjutant.messaging.dispatch import (
     _DEFAULT_RATE_LIMIT_WINDOW,
     _INFLIGHT,
     _check_rate_limit,
+    _log_delivery_receipt,
     _queue_turn,
     dispatch_message,
     dispatch_photo,
 )
-
+from adjutant.messaging.telegram.send import TelegramDeliveryReceipt
 
 BOT = "123:testtoken"
 CHAT = "999"
@@ -122,6 +122,31 @@ class TestQueueTurn:
         assert isinstance(results[0], RuntimeError)
         assert results[1] is None
         assert events == ["first", "second"]
+
+
+class TestDeliveryLogging:
+    def test_logs_confirmed_delivery(self) -> None:
+        receipt = TelegramDeliveryReceipt(delivered=True, message_id=81)
+        with patch("adjutant.messaging.dispatch.adj_log") as mock_log:
+            _log_delivery_receipt("Reply", 42, receipt)
+
+        logged = mock_log.call_args.args[1]
+        assert "delivered" in logged
+        assert "telegram_msg=81" in logged
+
+    def test_does_not_log_failed_delivery_as_sent(self) -> None:
+        receipt = TelegramDeliveryReceipt(
+            delivered=False,
+            uncertain=True,
+            error="network error",
+        )
+        with patch("adjutant.messaging.dispatch.adj_log") as mock_log:
+            _log_delivery_receipt("Reply", 42, receipt)
+
+        logged = mock_log.call_args.args[1]
+        assert "delivery failed" in logged
+        assert "uncertain=True" in logged
+        assert "delivered" not in logged
 
 
 # ---------------------------------------------------------------------------

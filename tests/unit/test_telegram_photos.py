@@ -20,7 +20,6 @@ from adjutant.messaging.telegram.photos import (
     tg_handle_photo,
 )
 
-
 BOT = "123:testtoken"
 
 
@@ -264,8 +263,9 @@ class TestTgHandlePhoto:
                 "I created issue #42."
             )
 
-        async def _fake_chat(message, adj_dir):
+        async def _fake_chat(message, adj_dir, *, correlation_id=None):
             chat_messages.append(message)
+            assert correlation_id == "telegram-42-photo"
             return "Verified receipt record updated."
 
         with (

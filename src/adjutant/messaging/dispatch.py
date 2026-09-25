@@ -169,12 +169,15 @@ async def dispatch_message(
     """
     from adjutant.messaging.telegram.commands import (
         cmd_brief,
+        cmd_cancel_operation,
         cmd_digest,
         cmd_forget,
         cmd_help,
         cmd_kb,
         cmd_kill,
         cmd_model,
+        cmd_operation,
+        cmd_operations,
         cmd_pause,
         cmd_pulse,
         cmd_recall,
@@ -255,6 +258,28 @@ async def dispatch_message(
     # Command dispatch
     if text == "/status":
         await cmd_status(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+    elif text == "/operations":
+        await cmd_operations(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+    elif text == "/operation":
+        await cmd_operation("", message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+    elif text.startswith("/operation "):
+        await cmd_operation(
+            text[len("/operation ") :],
+            message_id,
+            adj_dir,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+    elif text == "/cancel":
+        await cmd_cancel_operation("", message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
+    elif text.startswith("/cancel "):
+        await cmd_cancel_operation(
+            text[len("/cancel ") :],
+            message_id,
+            adj_dir,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
     elif text == "/pause":
         await cmd_pause(message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
     elif text == "/resume":
@@ -334,33 +359,57 @@ async def dispatch_message(
             typing_key = f"chat_{message_id}"
             msg_typing_start(typing_key, bot_token=bot_token, chat_id=chat_id)
             try:
-                reply = await run_chat(text, adj_dir)
+                reply = await run_chat(text, adj_dir, correlation_id=f"telegram-{message_id}")
                 if reply:
-                    msg_send_text(reply, message_id, bot_token=bot_token, chat_id=chat_id)
-                    adj_log("messaging", f"Reply sent for msg={message_id}")
+                    receipt = msg_send_text(
+                        reply,
+                        message_id,
+                        bot_token=bot_token,
+                        chat_id=chat_id,
+                    )
+                    _log_delivery_receipt("Reply", message_id, receipt)
                 else:
-                    msg_send_text(
+                    receipt = msg_send_text(
                         "I ran into a problem getting a response. Try again in a moment.",
                         message_id,
                         bot_token=bot_token,
                         chat_id=chat_id,
                     )
-                    adj_log("messaging", f"Fallback reply sent for msg={message_id}")
+                    _log_delivery_receipt("Fallback reply", message_id, receipt)
             except asyncio.CancelledError:
                 adj_log("messaging", f"Chat task for msg={message_id} was cancelled")
                 raise
             except Exception as exc:  # noqa: BLE001 - keep listener alive and inform the user
-                msg_send_text(
+                receipt = msg_send_text(
                     "I ran into a problem getting a response. Try again in a moment.",
                     message_id,
                     bot_token=bot_token,
                     chat_id=chat_id,
                 )
+                _log_delivery_receipt("Error reply", message_id, receipt)
                 adj_log("messaging", f"Chat task for msg={message_id} failed: {exc}")
             finally:
                 msg_typing_stop(typing_key)
 
         _queue_turn(msg_id_str, _chat_turn)
+
+
+def _log_delivery_receipt(label: str, source_message_id: int, receipt: object) -> None:
+    """Log Telegram delivery only when the API returned an affirmative receipt."""
+    if getattr(receipt, "delivered", False):
+        telegram_message_id = getattr(receipt, "message_id", None)
+        adj_log(
+            "messaging",
+            f"{label} delivered for msg={source_message_id} telegram_msg={telegram_message_id}",
+        )
+        return
+
+    error = getattr(receipt, "error", None) or "missing_delivery_receipt"
+    uncertain = bool(getattr(receipt, "uncertain", False))
+    adj_log(
+        "messaging",
+        f"{label} delivery failed for msg={source_message_id} uncertain={uncertain} error={error}",
+    )
 
 
 async def dispatch_photo(

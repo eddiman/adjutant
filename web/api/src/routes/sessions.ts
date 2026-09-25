@@ -341,7 +341,7 @@ async function scanOpenCodeSessions(binary: string, limit = 500): Promise<CliSes
     execSync(`${binary} session list --format json -n ${limit} > ${tmp}`, {
       timeout: 10000,
       maxBuffer: 10 * 1024 * 1024,
-      shell: true,
+      shell: process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : '/bin/sh',
     });
     raw = fs.readFileSync(tmp, 'utf-8');
   } catch {
@@ -392,7 +392,7 @@ export async function readOpenCodeSessionMessages(binary: string, sessionId: str
     execSync(`${binary} export ${sessionId} > ${tmp}`, {
       timeout: 30000,
       maxBuffer: 10 * 1024 * 1024,
-      shell: true,
+      shell: process.platform === 'win32' ? (process.env.ComSpec ?? 'cmd.exe') : '/bin/sh',
     });
     raw = fs.readFileSync(tmp, 'utf-8');
   } catch {

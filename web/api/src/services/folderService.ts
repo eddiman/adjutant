@@ -82,7 +82,7 @@ class FolderService {
     const existing = await this.readSidecar(absPath);
 
     // Deep merge helper: merge each entry by key instead of replacing whole entries
-    const deepMergeEntries = <T extends Record<string, unknown>>(
+    const deepMergeEntries = <T extends object>(
       base: Record<string, T>,
       patch: Record<string, T> | undefined,
     ): Record<string, T> => {

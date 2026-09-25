@@ -64,6 +64,7 @@ def _build_attachment_message(caption: str, analysis: str) -> str:
         "[END ATTACHMENT TURN]"
     )
 
+
 # ---------------------------------------------------------------------------
 # Deduplication helpers
 # ---------------------------------------------------------------------------
@@ -303,7 +304,11 @@ async def tg_handle_photo(
         try:
             from adjutant.messaging.telegram.chat import run_chat
 
-            reply = await run_chat(_build_attachment_message(caption, vision_reply), adj_dir)
+            reply = await run_chat(
+                _build_attachment_message(caption, vision_reply),
+                adj_dir,
+                correlation_id=f"telegram-{message_id}-photo",
+            )
         except Exception as exc:
             adj_log("telegram", f"Photo chat routing failed for {local_path}: {exc}")
             reply = (

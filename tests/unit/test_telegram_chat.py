@@ -19,7 +19,6 @@ from adjutant.messaging.telegram.chat import (
     touch_session,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -87,9 +86,7 @@ class TestGetSessionId:
     def test_uses_configured_session_timeout(self, tmp_path: Path) -> None:
         self._write_session(tmp_path, "sess123", age_seconds=SESSION_TIMEOUT + 10)
         (tmp_path / "adjutant.yaml").write_text(
-            "messaging:\n"
-            "  telegram:\n"
-            f"    session_timeout_seconds: {SESSION_TIMEOUT * 2}\n"
+            f"messaging:\n  telegram:\n    session_timeout_seconds: {SESSION_TIMEOUT * 2}\n"
         )
 
         assert get_session_id(tmp_path) == "sess123"
@@ -157,8 +154,9 @@ class TestRunChat:
     async def test_returns_reply_on_success(self, tmp_path: Path) -> None:
         backend = _mock_backend(_llm_result(text="hello", session_id="sid1"))
         with patch("adjutant.core.backend.get_backend", return_value=backend):
-            reply = await run_chat("hi", tmp_path)
+            reply = await run_chat("hi", tmp_path, correlation_id="telegram-42")
         assert reply == "hello"
+        assert backend.run.await_args.kwargs["correlation_id"] == "telegram-42"
 
     @pytest.mark.asyncio
     async def test_saves_new_session(self, tmp_path: Path) -> None:
@@ -203,6 +201,22 @@ class TestRunChat:
             reply = await run_chat("hi", tmp_path)
 
         assert "timed out" in reply.lower() or "timeout" in reply.lower()
+
+    @pytest.mark.asyncio
+    async def test_timeout_message_uses_configured_value(self, tmp_path: Path) -> None:
+        (tmp_path / "adjutant.yaml").write_text(
+            "messaging:\n  telegram:\n    chat_timeout_seconds: 615\n"
+        )
+        state = tmp_path / "state"
+        state.mkdir()
+        (state / "telegram_model.txt").write_text("openai/gpt-4")
+
+        backend = _mock_backend(_llm_result(returncode=-1, timed_out=True))
+        with patch("adjutant.core.backend.get_backend", return_value=backend):
+            reply = await run_chat("hi", tmp_path)
+
+        assert "615s" in reply
+        assert backend.run.await_args.kwargs["timeout"] == 615
 
     @pytest.mark.asyncio
     async def test_returns_model_not_found_message(self, tmp_path: Path) -> None:
