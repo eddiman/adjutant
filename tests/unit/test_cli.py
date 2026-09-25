@@ -6,13 +6,17 @@ that Click wiring, lazy imports, and --help output work correctly.
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
-from adjutant.cli import main
+from adjutant.cli import _inline_termination_guard, main
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture()
@@ -40,7 +44,7 @@ def adj_dir(tmp_path: Path) -> Path:
 class TestVersionAndHelp:
     def test_version(self, runner: CliRunner) -> None:
         result = runner.invoke(main, ["--version"])
-        assert result.exit_code == 0
+        assert result.exit_code == 0, result.output
         assert "0.2.0" in result.output
 
     def test_help(self, runner: CliRunner) -> None:
@@ -131,6 +135,71 @@ class TestStatusCommand:
         result = runner.invoke(main, ["status"])
         # Should succeed or show operational status
         assert result.exit_code == 0
+
+
+class TestDurableKbCli:
+    def test_inline_sigterm_guard_restores_handler_after_unwind(self) -> None:
+        previous = object()
+        installed = []
+
+        with (
+            patch("adjutant.cli.signal.getsignal", return_value=previous),
+            patch(
+                "adjutant.cli.signal.signal",
+                side_effect=lambda sig, handler: installed.append((sig, handler)),
+            ),
+            pytest.raises(KeyboardInterrupt, match="SIGTERM"),
+            _inline_termination_guard(),
+        ):
+            installed[-1][1](None, None)
+
+        assert installed[-1][1] is previous
+
+    def test_query_flushes_acceptance_receipt_before_result(
+        self, runner: CliRunner, adj_dir: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("ADJ_DIR", str(adj_dir))
+
+        async def fake_query(_name, _query, _adj_dir, *, receipt_callback=None, **_kwargs):
+            assert receipt_callback is not None
+            receipt_callback(SimpleNamespace(id="op-child"))
+            return "answer"
+
+        with patch("adjutant.capabilities.kb.query.kb_query", side_effect=fake_query):
+            result = runner.invoke(main, ["kb", "query", "notes", "Question?"])
+
+        assert result.exit_code == 0
+        assert result.output.index("accepted_operation_id") < result.output.index("answer")
+        assert "op-child" in result.output
+
+    def test_operation_context_returns_remaining_owned_budget(
+        self, runner: CliRunner, adj_dir: Path, monkeypatch
+    ) -> None:
+        from adjutant.operations.models import OperationState
+        from adjutant.operations.store import OperationStore
+
+        monkeypatch.setenv("ADJ_DIR", str(adj_dir))
+        monkeypatch.setenv("ADJUTANT_HOME", str(adj_dir))
+        store = OperationStore(adj_dir)
+        operation = store.create_operation(kind="prompt", source="test", payload={})
+        claimed = store.claim_next("worker", lease_seconds=60)
+        assert claimed is not None
+        attempt = store.start_attempt(claimed, "worker", runtime_seconds=120)
+        store.transition(
+            operation.id,
+            OperationState.RUNNING,
+            worker_id="worker",
+            lease_seconds=60,
+            expected_attempt_id=attempt.id,
+        )
+
+        result = runner.invoke(main, ["operation-context", operation.id])
+
+        assert result.exit_code == 0, f"{result.output}\n{result.exception!r}"
+        payload = __import__("json").loads(result.output)
+        assert payload["operation_id"] == operation.id
+        assert payload["attempt_id"] == attempt.id
+        assert 100_000 < payload["timeout_ms"] <= 120_000
 
 
 # ---------------------------------------------------------------------------

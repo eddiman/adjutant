@@ -3,15 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import os
-import textwrap
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from adjutant.core.backend import BackendNotFoundError, LLMResult, get_backend
+from adjutant.core.backend import BackendNotFoundError, LLMResult
 from adjutant.core.backend_claude_cli import (
     ClaudeCLIBackend,
     _extract_prompt_body,
@@ -157,12 +155,15 @@ class TestRun:
     @pytest.mark.asyncio
     async def test_basic_run(self, mock_claude: Path) -> None:
         backend = ClaudeCLIBackend()
-        result = await backend.run("hello")
+        result = await backend.run("hello", correlation_id="op-456")
         assert isinstance(result, LLMResult)
         assert result.text == "OK"
         assert result.session_id == "test-uuid-123"
         assert result.returncode == 0
         assert result.timed_out is False
+        assert result.correlation_id == "op-456"
+        assert result.timings is not None
+        assert result.timings.total_seconds >= result.timings.execution_seconds
 
     @pytest.mark.asyncio
     async def test_timeout(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -176,6 +177,24 @@ class TestRun:
 
         backend = ClaudeCLIBackend()
         result = await backend.run("hello", timeout=0.5)
+        assert result.timed_out is True
+        assert result.error_type == "timeout"
+
+    @pytest.mark.asyncio
+    async def test_startup_timeout_is_separate(self) -> None:
+        async def slow_spawn(*args, **kwargs):
+            await asyncio.sleep(10)
+
+        backend = ClaudeCLIBackend()
+        with (
+            patch("adjutant.core.backend_claude_cli._find_claude", return_value="/fake/claude"),
+            patch(
+                "adjutant.core.backend_claude_cli.asyncio.create_subprocess_exec",
+                side_effect=slow_spawn,
+            ),
+        ):
+            result = await backend.run("hello", startup_timeout=0.01, timeout=60)
+
         assert result.timed_out is True
         assert result.error_type == "timeout"
 
@@ -246,9 +265,7 @@ class TestHealthCheck:
     """
 
     @pytest.mark.asyncio
-    async def test_healthy_when_binary_found(
-        self, mock_claude: Path, tmp_path: Path
-    ) -> None:
+    async def test_healthy_when_binary_found(self, mock_claude: Path, tmp_path: Path) -> None:
         backend = ClaudeCLIBackend()
         assert await backend.health_check(tmp_path) is True
 

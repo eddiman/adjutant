@@ -2,12 +2,10 @@
 
 Replaces: scripts/capabilities/kb/query.sh
 
-Sends queries to the KB sub-agent via the configured LLM backend with an
-80-second timeout and returns the plain-text answer.
-
-For writes, dispatches the sub-agent as a detached background process and
-returns immediately with a dispatch acknowledgement (fire-and-forget). The
-acknowledgement does not prove that the requested write completed.
+When durable operations are disabled, queries use the legacy 80-second backend
+timeout and writes use detached execution. When durable operations are enabled,
+standalone work enters the daemon queue and attached children execute inline
+under the parent's persisted deadline.
 
 Usage:
     result = await kb_query("my-kb", "What is the current portfolio value?", adj_dir)
@@ -18,7 +16,9 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import os
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,15 +27,215 @@ from adjutant.core.logging import adj_log
 from adjutant.core.model import resolve_kb_model, resolve_model_spec
 
 if TYPE_CHECKING:
-    from adjutant.core.backend import ResolvedModel
+    from collections.abc import Callable
 
-# Keep under the 120 s bash-tool ceiling.
-# health check (~5-20 s) + query timeout must not exceed ~110 s total.
+    from adjutant.core.backend import ResolvedModel
+    from adjutant.operations.models import Operation
+
+# Legacy non-durable timeout. Durable attached calls use the remaining parent deadline.
 KB_QUERY_TIMEOUT = 80.0  # seconds
 
 
 class KBQueryError(Exception):
     """Raised when the KB query fails fatally."""
+
+
+def _durable_operations_enabled(adj_dir: Path) -> bool:
+    from adjutant.core.config import load_typed_config
+
+    return load_typed_config(adj_dir / "adjutant.yaml").operations.enabled
+
+
+def _parent_operation_id() -> str | None:
+    return os.environ.get("ADJUTANT_PARENT_OPERATION_ID", "").strip() or None
+
+
+def _submit_kb_operation_by_path(
+    kb_path: Path,
+    prompt: str,
+    adj_dir: Path,
+    *,
+    kind: str,
+    parent_id: str | None = None,
+    telegram_chat_id: str | None = None,
+    telegram_message_id: int | None = None,
+) -> Operation:
+    """Create a frozen KB child operation without reading KB content."""
+    from adjutant.core.config import load_typed_config
+    from adjutant.operations.models import SideEffectClass
+    from adjutant.operations.store import OperationStore
+
+    if not kb_path.is_dir():
+        raise KBQueryError(f"KB directory does not exist: {kb_path}")
+    if not prompt.strip():
+        raise KBQueryError("KB operation prompt is empty.")
+    resolved = _resolve_model_with_variant(kb_path, adj_dir)
+    config = load_typed_config(adj_dir / "adjutant.yaml")
+    store = OperationStore(adj_dir)
+    payload = {
+        "prompt": prompt,
+        "kb_name": kb_path.name,
+        "reply_to_message_id": telegram_message_id,
+    }
+    side_effect_class = (
+        SideEffectClass.READ_ONLY if kind == "kb_query" else SideEffectClass.MUTATING
+    )
+    if parent_id:
+        if config.llm.backend == "claude-cli":
+            raise KBQueryError(
+                "Attached durable KB children require the OpenCode ownership hook; "
+                "Claude CLI support remains disabled until its caller-death fixture passes."
+            )
+        parent = store.get_operation(parent_id)
+        if parent is None or parent.current_attempt_id is None or parent.deadline_at is None:
+            raise KBQueryError(
+                f"Parent operation {parent_id} has no active owned attempt or deadline."
+            )
+        reserve = config.operations.timeouts.cancellation_grace_seconds + 5.0
+        deadline_at = min(
+            time.time() + config.operations.timeouts.runtime_seconds,
+            parent.deadline_at - reserve,
+        )
+        if deadline_at <= time.time():
+            raise KBQueryError(
+                f"Parent operation {parent_id} has no remaining budget for a KB child."
+            )
+        operation, _attempt = store.create_inline_operation(
+            kind=kind,
+            source="kb",
+            payload=payload,
+            worker_id=f"inline-kb-{os.getpid()}",
+            lease_seconds=config.operations.timeouts.lease_seconds,
+            parent_id=parent_id,
+            parent_attempt_id=parent.current_attempt_id,
+            deadline_at=deadline_at,
+            backend=config.llm.backend,
+            model=resolved.model,
+            variant=resolved.variant,
+            agent="kb",
+            workdir=str(kb_path),
+            side_effect_class=side_effect_class,
+            origin_session_id=os.environ.get("ADJUTANT_ORIGIN_SESSION_ID") or None,
+            origin_tool_call_id=os.environ.get("ADJUTANT_ORIGIN_TOOL_CALL_ID") or None,
+        )
+        return operation
+    return store.create_operation(
+        kind=kind,
+        source="kb",
+        payload=payload,
+        parent_id=None,
+        telegram_chat_id=telegram_chat_id,
+        telegram_message_id=telegram_message_id,
+        backend=config.llm.backend,
+        model=resolved.model,
+        variant=resolved.variant,
+        agent="kb",
+        workdir=str(kb_path),
+        side_effect_class=side_effect_class,
+    )
+
+
+def kb_submit_query_by_path(
+    kb_path: Path,
+    query: str,
+    adj_dir: Path,
+    *,
+    parent_id: str | None = None,
+    telegram_chat_id: str | None = None,
+    telegram_message_id: int | None = None,
+) -> Operation:
+    """Submit a tracked read-only KB query."""
+    return _submit_kb_operation_by_path(
+        kb_path,
+        query,
+        adj_dir,
+        kind="kb_query",
+        parent_id=parent_id,
+        telegram_chat_id=telegram_chat_id,
+        telegram_message_id=telegram_message_id,
+    )
+
+
+def kb_submit_write_by_path(
+    kb_path: Path,
+    instruction: str,
+    adj_dir: Path,
+    *,
+    parent_id: str | None = None,
+    telegram_chat_id: str | None = None,
+    telegram_message_id: int | None = None,
+) -> Operation:
+    """Submit a tracked KB mutation with an explicit verification request."""
+    verified_prompt = (
+        f"{instruction.strip()}\n\n"
+        "After applying the requested change, read the authoritative target again. "
+        "Report what changed and the concrete evidence that verifies the final state."
+    )
+    return _submit_kb_operation_by_path(
+        kb_path,
+        verified_prompt,
+        adj_dir,
+        kind="kb_write",
+        parent_id=parent_id,
+        telegram_chat_id=telegram_chat_id,
+        telegram_message_id=telegram_message_id,
+    )
+
+
+async def _execute_tracked_inline(operation: Operation, adj_dir: Path) -> str:
+    """Run a child in the submitting CLI process to avoid worker-pool deadlock."""
+    from adjutant.core.config import load_typed_config
+    from adjutant.operations.models import OperationState
+    from adjutant.operations.store import OperationStore
+    from adjutant.operations.worker import OperationWorker
+
+    config = load_typed_config(adj_dir / "adjutant.yaml")
+    store = OperationStore(adj_dir)
+    worker_id = f"inline-kb-{os.getpid()}"
+    claimed = store.get_operation(operation.id)
+    if (
+        claimed is None
+        or claimed.lease_owner != worker_id
+        or claimed.current_attempt_id is None
+        or claimed.execution_mode != "inline"
+    ):
+        raise KBQueryError(f"KB operation {operation.id} no longer has inline ownership.")
+    attempt = store.get_attempt(claimed.current_attempt_id)
+    if attempt is None:
+        raise KBQueryError(f"KB operation {operation.id} has no execution attempt.")
+    remaining = (claimed.deadline_at or time.time()) - time.time()
+    if remaining <= 0:
+        raise KBQueryError(f"KB operation {operation.id} deadline expired before execution.")
+    worker = OperationWorker(
+        adj_dir,
+        store=store,
+        worker_id=worker_id,
+        concurrency=1,
+        lease_seconds=config.operations.timeouts.lease_seconds,
+        startup_seconds=config.operations.timeouts.startup_seconds,
+        connection_seconds=config.operations.timeouts.connection_seconds,
+        runtime_seconds=min(config.operations.timeouts.runtime_seconds, remaining),
+        progress_warning_seconds=config.operations.timeouts.progress_warning_seconds,
+        cancellation_grace_seconds=config.operations.timeouts.cancellation_grace_seconds,
+    )
+    try:
+        completed = await worker.run_claimed(claimed, attempt=attempt)
+    except BaseException:
+        with contextlib.suppress(Exception):
+            store.abandon_attempt(
+                claimed.id,
+                attempt.id,
+                worker_id,
+                reason="inline CLI execution was interrupted",
+            )
+            store.sync_active_snapshot()
+        raise
+    if completed.state is not OperationState.SUCCEEDED:
+        raise KBQueryError(
+            f"KB operation {completed.id} ended as {completed.state.value}: "
+            f"{completed.error_message or completed.error_type or 'unknown error'}"
+        )
+    return completed.result_text or ""
 
 
 def _read_kb_model_from_yaml(kb_path: Path) -> str:
@@ -78,6 +278,7 @@ async def kb_query_by_path(
     adj_dir: Path,
     *,
     timeout: float = KB_QUERY_TIMEOUT,
+    receipt_callback: Callable[[Operation], None] | None = None,
 ) -> str:
     """Query a KB by its directory path.
 
@@ -98,6 +299,22 @@ async def kb_query_by_path(
         raise KBQueryError(f"KB directory does not exist: {kb_path}")
     if not query.strip():
         raise KBQueryError("Query is empty.")
+
+    if _durable_operations_enabled(adj_dir):
+        operation = kb_submit_query_by_path(
+            kb_path,
+            query,
+            adj_dir,
+            parent_id=_parent_operation_id(),
+        )
+        if receipt_callback is not None:
+            receipt_callback(operation)
+        if operation.parent_id:
+            return await _execute_tracked_inline(operation, adj_dir)
+        from adjutant.operations.process import worker_start
+
+        worker_status = worker_start(adj_dir)
+        return f"Query accepted as `{operation.id}`. {worker_status}."
 
     resolved = _resolve_model_with_variant(kb_path, adj_dir)
 
@@ -147,6 +364,7 @@ async def kb_query(
     adj_dir: Path,
     *,
     timeout: float = KB_QUERY_TIMEOUT,
+    receipt_callback: Callable[[Operation], None] | None = None,
 ) -> str:
     """Query a KB by its registered name.
 
@@ -176,19 +394,27 @@ async def kb_query(
     if not kb_path_str:
         raise KBQueryError(f"KB '{kb_name}' has no path in registry.")
 
-    return await kb_query_by_path(Path(kb_path_str), query, adj_dir, timeout=timeout)
+    return await kb_query_by_path(
+        Path(kb_path_str),
+        query,
+        adj_dir,
+        timeout=timeout,
+        receipt_callback=receipt_callback,
+    )
 
 
 def kb_write_by_path(
     kb_path: Path,
     instruction: str,
     adj_dir: Path,
+    *,
+    receipt_callback: Callable[[Operation], None] | None = None,
 ) -> str:
-    """Dispatch a write operation to a KB sub-agent (fire-and-forget).
+    """Submit or execute a write operation through the selected lifecycle.
 
-    Spawns the sub-agent as a detached background process and returns
-    immediately with a dispatch acknowledgement. The sub-agent runs without
-    a timeout and logs completion/failure to adjutant.log.
+    Durable standalone writes enter the daemon queue. Durable attached writes
+    execute inline under their parent's deadline. The rollback path dispatches
+    a detached backend only when durable operations are disabled.
 
     This is synchronous and safe to call from ``asyncio.run()`` (CLI) or
     from an async context via ``await asyncio.to_thread(kb_write_by_path, ...)``.
@@ -199,7 +425,7 @@ def kb_write_by_path(
         adj_dir: Adjutant root directory (for model resolution).
 
     Returns:
-        Dispatch acknowledgement string. This is not a completion result.
+        Acceptance text for standalone work or a verified result for an attached child.
 
     Raises:
         KBQueryError: If the KB directory is missing or instruction is empty.
@@ -209,6 +435,25 @@ def kb_write_by_path(
         raise KBQueryError(f"KB directory does not exist: {kb_path}")
     if not instruction.strip():
         raise KBQueryError("Write instruction is empty.")
+
+    if _durable_operations_enabled(adj_dir):
+        operation = kb_submit_write_by_path(
+            kb_path,
+            instruction,
+            adj_dir,
+            parent_id=_parent_operation_id(),
+        )
+        if receipt_callback is not None:
+            receipt_callback(operation)
+        if operation.parent_id:
+            import asyncio
+
+            result = asyncio.run(_execute_tracked_inline(operation, adj_dir))
+            return f"Write `{operation.id}` completed and verified: {result}"
+        from adjutant.operations.process import worker_start
+
+        worker_status = worker_start(adj_dir)
+        return f"Write accepted as `{operation.id}`. {worker_status}."
 
     resolved = _resolve_model_with_variant(kb_path, adj_dir)
     kb_name = kb_path.name
@@ -239,8 +484,10 @@ def kb_write(
     kb_name: str,
     instruction: str,
     adj_dir: Path,
+    *,
+    receipt_callback: Callable[[Operation], None] | None = None,
 ) -> str:
-    """Dispatch a write operation to a KB by its registered name (fire-and-forget).
+    """Submit a write operation to a KB by its registered name.
 
     Looks up the KB path in knowledge_bases/registry.yaml, then delegates
     to ``kb_write_by_path()``.
@@ -251,7 +498,7 @@ def kb_write(
         adj_dir: Adjutant root directory.
 
     Returns:
-        Dispatch acknowledgement string. This is not a completion result.
+        Acceptance text for standalone work or a verified result for an attached child.
 
     Raises:
         KBQueryError: If KB not found or instruction fails validation.
@@ -266,8 +513,123 @@ def kb_write(
     kb_path_str = entry.get("path", "")
     if not kb_path_str:
         raise KBQueryError(f"KB '{kb_name}' has no path in registry.")
+    if entry.get("access", "read-only") != "read-write":
+        raise KBQueryError(f"KB '{kb_name}' is read-only.")
 
-    return kb_write_by_path(Path(kb_path_str), instruction, adj_dir)
+    return kb_write_by_path(
+        Path(kb_path_str),
+        instruction,
+        adj_dir,
+        receipt_callback=receipt_callback,
+    )
+
+
+def kb_submit_query(
+    kb_name: str,
+    query: str,
+    adj_dir: Path,
+    parent_id: str | None = None,
+    telegram_chat_id: str | None = None,
+    telegram_message_id: int | None = None,
+) -> Operation:
+    """Resolve a registered KB and submit a tracked query."""
+    from adjutant.capabilities.kb.run import KBNotFoundError, get_kb
+
+    try:
+        entry = get_kb(adj_dir, kb_name)
+    except KBNotFoundError as exc:
+        raise KBQueryError(str(exc)) from exc
+    kb_path = entry.get("path", "")
+    if not kb_path:
+        raise KBQueryError(f"KB '{kb_name}' has no path in registry.")
+    return kb_submit_query_by_path(
+        Path(kb_path),
+        query,
+        adj_dir,
+        parent_id=parent_id,
+        telegram_chat_id=telegram_chat_id,
+        telegram_message_id=telegram_message_id,
+    )
+
+
+def kb_submit_write(
+    kb_name: str,
+    instruction: str,
+    adj_dir: Path,
+    parent_id: str | None = None,
+    telegram_chat_id: str | None = None,
+    telegram_message_id: int | None = None,
+) -> Operation:
+    """Resolve a writable registered KB and submit a tracked mutation."""
+    from adjutant.capabilities.kb.run import KBNotFoundError, get_kb
+
+    try:
+        entry = get_kb(adj_dir, kb_name)
+    except KBNotFoundError as exc:
+        raise KBQueryError(str(exc)) from exc
+    kb_path = entry.get("path", "")
+    if not kb_path:
+        raise KBQueryError(f"KB '{kb_name}' has no path in registry.")
+    if entry.get("access", "read-only") != "read-write":
+        raise KBQueryError(f"KB '{kb_name}' is read-only.")
+    return kb_submit_write_by_path(
+        Path(kb_path),
+        instruction,
+        adj_dir,
+        parent_id=parent_id,
+        telegram_chat_id=telegram_chat_id,
+        telegram_message_id=telegram_message_id,
+    )
+
+
+def kb_operation_status(operation_id: str, adj_dir: Path) -> str:
+    """Return an inspectable status for one tracked KB operation."""
+    from adjutant.operations.store import OperationStore
+
+    store = OperationStore(adj_dir)
+    operation = store.get_operation(operation_id)
+    if operation is None:
+        raise KBQueryError(f"Tracked KB operation '{operation_id}' was not found.")
+    if operation.kind not in {"kb_query", "kb_write"}:
+        children = store.list_execution_children(operation.id)
+        if not children:
+            raise KBQueryError(f"Tracked KB operation '{operation_id}' was not found.")
+        lines = [f"{operation.id}: {operation.state.value}; attached KB children:"]
+        lines.extend(f"- {child.id}: {child.kind}, {child.state.value}" for child in children)
+        return "\n".join(lines)
+    detail = f"{operation.id}: {operation.state.value}, attempts={operation.attempt_count}"
+    if operation.parent_id:
+        detail += f", parent={operation.parent_id}"
+    if operation.current_attempt_id:
+        detail += f", attempt={operation.current_attempt_id}"
+    if operation.deadline_at is not None:
+        detail += f", deadline={operation.deadline_at:.3f}"
+    if operation.last_activity_at is not None:
+        detail += f", last_activity={operation.last_activity_at:.3f}"
+    if operation.recovery_status:
+        detail += f", recovery={operation.recovery_status}"
+    if operation.error_type:
+        detail += f", error={operation.error_type}"
+    return detail
+
+
+def kb_operation_result(operation_id: str, adj_dir: Path) -> str:
+    """Return the persisted result after a tracked KB operation completes."""
+    from adjutant.operations.store import OperationStore
+
+    operation = OperationStore(adj_dir).get_operation(operation_id)
+    if operation is None or operation.kind not in {"kb_query", "kb_write"}:
+        raise KBQueryError(f"Tracked KB operation '{operation_id}' was not found.")
+    if not operation.state.terminal:
+        raise KBQueryError(
+            f"KB operation {operation.id} is still {operation.state.value}; no final result yet."
+        )
+    if operation.state.value != "succeeded":
+        raise KBQueryError(
+            f"KB operation {operation.id} ended as {operation.state.value}: "
+            f"{operation.error_message or operation.error_type or 'unknown error'}"
+        )
+    return operation.result_text or ""
 
 
 async def kb_query_all(

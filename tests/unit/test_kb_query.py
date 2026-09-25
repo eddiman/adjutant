@@ -3,24 +3,38 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from adjutant.capabilities.kb.query import (
-    KB_QUERY_TIMEOUT,
     KBQueryError,
     _read_kb_model_from_yaml,
     kb_cross_query,
+    kb_operation_result,
+    kb_operation_status,
     kb_query,
     kb_query_all,
     kb_query_by_path,
+    kb_submit_query,
+    kb_submit_query_by_path,
+    kb_submit_write,
     kb_write,
     kb_write_by_path,
     main,
 )
-from adjutant.core.backend import BackendNotFoundError, LLMResult
+from adjutant.core.backend import (
+    BackendNotFoundError,
+    ExecutionEvent,
+    ExecutionEventType,
+    LLMResult,
+)
+from adjutant.operations.models import OperationState, SideEffectClass
+from adjutant.operations.store import OperationStore
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -176,7 +190,7 @@ class TestKbQuery:
         kb_dir = adj_dir / "knowledge_bases"
         kb_dir.mkdir(parents=True, exist_ok=True)
         (kb_dir / "registry.yaml").write_text(
-            f'knowledge_bases:\n  - name: "{name}"\n    path: "{path}"\n'
+            f'knowledge_bases:\n  - name: "{name}"\n    path: "{path}"\n    access: "read-write"\n'
         )
 
     def test_raises_kb_query_error_when_not_found(self, tmp_path: Path) -> None:
@@ -291,12 +305,14 @@ class TestKbWriteByPath:
         adj_dir = _make_adj_dir(tmp_path)
         kb_path = _make_kb(tmp_path, "mydb")
 
-        with patch(
-            "adjutant.capabilities.kb.query.get_backend",
-            side_effect=BackendNotFoundError("not found"),
+        with (
+            patch(
+                "adjutant.capabilities.kb.query.get_backend",
+                side_effect=BackendNotFoundError("not found"),
+            ),
+            pytest.raises(BackendNotFoundError),
         ):
-            with pytest.raises(BackendNotFoundError):
-                kb_write_by_path(kb_path, "update issue #1", adj_dir)
+            kb_write_by_path(kb_path, "update issue #1", adj_dir)
 
     def test_returns_dispatch_acknowledgement(self, tmp_path: Path) -> None:
         adj_dir = _make_adj_dir(tmp_path)
@@ -354,7 +370,7 @@ class TestKbWrite:
         kb_dir = adj_dir / "knowledge_bases"
         kb_dir.mkdir(parents=True, exist_ok=True)
         (kb_dir / "registry.yaml").write_text(
-            f'knowledge_bases:\n  - name: "{name}"\n    path: "{path}"\n'
+            f'knowledge_bases:\n  - name: "{name}"\n    path: "{path}"\n    access: "read-write"\n'
         )
 
     def test_raises_kb_query_error_when_not_found(self, tmp_path: Path) -> None:
@@ -391,6 +407,208 @@ class TestKbWrite:
             kb_write("broken", "update something", adj_dir)
 
 
+class TestTrackedKbOperations:
+    def _enable_operations(self, adj_dir: Path) -> None:
+        (adj_dir / "adjutant.yaml").write_text(
+            "operations:\n  enabled: true\n"
+            "llm:\n  backend: opencode\n  models:\n"
+            "    cheap: anthropic/claude-haiku-4-5\n"
+            "    medium: anthropic/claude-sonnet-4-6\n"
+            "    expensive: anthropic/claude-opus-4-6\n"
+        )
+
+    def _registry(self, adj_dir: Path, kb_path: Path) -> None:
+        registry = adj_dir / "knowledge_bases" / "registry.yaml"
+        registry.parent.mkdir(parents=True, exist_ok=True)
+        registry.write_text(
+            "knowledge_bases:\n"
+            '  - name: "notes"\n'
+            f'    path: "{kb_path}"\n'
+            '    model: "inherit"\n'
+            '    access: "read-write"\n'
+        )
+
+    def test_query_and_write_freeze_kb_boundary_and_parent(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        self._enable_operations(adj_dir)
+        kb_path = _make_kb(tmp_path, "notes")
+        self._registry(adj_dir, kb_path)
+        store = OperationStore(adj_dir)
+        parent = store.create_operation(
+            kind="telegram_chat",
+            source="test",
+            payload={},
+        )
+        parent = store.claim_operation(parent.id, "parent-worker", lease_seconds=60)
+        assert parent is not None
+        store.start_attempt(parent, "parent-worker", runtime_seconds=1800)
+        parent = store.transition(
+            parent.id,
+            OperationState.RUNNING,
+            worker_id="parent-worker",
+            lease_seconds=60,
+        )
+
+        query = kb_submit_query("notes", "What changed?", adj_dir, parent_id=parent.id)
+        write = kb_submit_write("notes", "Update item 1", adj_dir, parent_id=parent.id)
+
+        assert query.parent_id == parent.id
+        assert query.execution_mode == "inline"
+        assert query.parent_attempt_id == parent.current_attempt_id
+        assert query.current_attempt_id is not None
+        assert query.deadline_at is not None
+        assert query.deadline_at < parent.deadline_at
+        assert query.kind == "kb_query"
+        assert query.side_effect_class is SideEffectClass.READ_ONLY
+        assert query.workdir == str(kb_path)
+        assert query.agent == "kb"
+        assert write.parent_id == parent.id
+        assert write.kind == "kb_write"
+        assert write.side_effect_class is SideEffectClass.MUTATING
+        assert "authoritative target" in write.payload["prompt"]
+        assert "verification" not in query.payload["prompt"].lower()
+
+    def test_enabled_write_uses_durable_submission_not_detached_backend(
+        self, tmp_path: Path
+    ) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        self._enable_operations(adj_dir)
+        kb_path = _make_kb(tmp_path, "notes")
+        self._registry(adj_dir, kb_path)
+
+        with patch(
+            "adjutant.operations.process.worker_start",
+            return_value="Operation worker already running",
+        ):
+            message = kb_write("notes", "Update item 1", adj_dir)
+
+        assert "Write accepted as `op-" in message
+        operations = OperationStore(adj_dir).list_operations()
+        assert len(operations) == 1
+        assert operations[0].kind == "kb_write"
+
+    def test_enabled_standalone_query_stays_on_daemon_queue(self, tmp_path: Path) -> None:
+        import asyncio
+
+        adj_dir = _make_adj_dir(tmp_path)
+        self._enable_operations(adj_dir)
+        kb_path = _make_kb(tmp_path, "notes")
+
+        with patch(
+            "adjutant.operations.process.worker_start",
+            return_value="Operation worker already running",
+        ):
+            message = asyncio.run(kb_query_by_path(kb_path, "Question", adj_dir))
+
+        assert "Query accepted as `op-" in message
+        operation = OperationStore(adj_dir).list_operations()[0]
+        assert operation.state is OperationState.QUEUED
+        assert operation.execution_mode == "daemon"
+        assert operation.current_attempt_id is None
+
+    def test_status_and_result_read_persisted_kb_operation(self, tmp_path: Path) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        self._enable_operations(adj_dir)
+        kb_path = _make_kb(tmp_path, "notes")
+        self._registry(adj_dir, kb_path)
+        operation = kb_submit_query("notes", "Question", adj_dir)
+        store = OperationStore(adj_dir)
+
+        assert "queued" in kb_operation_status(operation.id, adj_dir)
+        with pytest.raises(KBQueryError, match="still queued"):
+            kb_operation_result(operation.id, adj_dir)
+
+        store.claim_operation(operation.id, "worker")
+        store.transition(operation.id, OperationState.RUNNING, worker_id="worker")
+        store.complete_with_deliveries(
+            operation.id,
+            OperationState.SUCCEEDED,
+            result_text="Verified answer",
+        )
+
+        assert kb_operation_result(operation.id, adj_dir) == "Verified answer"
+
+    def test_parent_executes_child_inline_without_worker_pool_wait(self, tmp_path: Path) -> None:
+        import asyncio
+
+        adj_dir = _make_adj_dir(tmp_path)
+        self._enable_operations(adj_dir)
+        kb_path = _make_kb(tmp_path, "notes")
+        store = OperationStore(adj_dir)
+        parent = store.create_operation(
+            kind="telegram_chat",
+            source="test",
+            payload={},
+        )
+        parent = store.claim_operation(parent.id, "parent-worker", lease_seconds=60)
+        assert parent is not None
+        store.start_attempt(parent, "parent-worker", runtime_seconds=1800)
+        parent = store.transition(
+            parent.id,
+            OperationState.RUNNING,
+            worker_id="parent-worker",
+            lease_seconds=60,
+        )
+
+        class FakeBackend:
+            async def execute(self, request):
+                yield ExecutionEvent(type=ExecutionEventType.STARTED)
+                yield ExecutionEvent(
+                    type=ExecutionEventType.COMPLETED,
+                    result=LLMResult(text="Child answer", correlation_id=request.correlation_id),
+                )
+
+        with (
+            patch.dict(os.environ, {"ADJUTANT_PARENT_OPERATION_ID": parent.id}),
+            patch("adjutant.operations.worker.get_backend", return_value=FakeBackend()),
+        ):
+            result = asyncio.run(kb_query_by_path(kb_path, "Question", adj_dir))
+
+        assert result == "Child answer"
+        children = [
+            operation
+            for operation in OperationStore(adj_dir).list_operations()
+            if operation.parent_id == parent.id
+        ]
+        assert len(children) == 1
+        assert children[0].state is OperationState.SUCCEEDED
+        parent_status = kb_operation_status(parent.id, adj_dir)
+        assert "attached KB children" in parent_status
+        assert children[0].id in parent_status
+
+    def test_attached_claude_child_is_gated_until_owned_process_fixture_passes(
+        self, tmp_path: Path
+    ) -> None:
+        adj_dir = _make_adj_dir(tmp_path)
+        self._enable_operations(adj_dir)
+        (adj_dir / "adjutant.yaml").write_text(
+            "operations:\n  enabled: true\n"
+            "llm:\n  backend: claude-cli\n  models:\n"
+            "    cheap: haiku\n    medium: sonnet\n    expensive: opus\n"
+        )
+        kb_path = _make_kb(tmp_path, "notes")
+        store = OperationStore(adj_dir)
+        parent = store.create_operation(kind="telegram_chat", source="test", payload={})
+        claimed = store.claim_next("parent", lease_seconds=60)
+        assert claimed is not None
+        attempt = store.start_attempt(claimed, "parent", runtime_seconds=1800)
+        parent = store.transition(
+            parent.id,
+            OperationState.RUNNING,
+            worker_id="parent",
+            lease_seconds=60,
+            expected_attempt_id=attempt.id,
+        )
+
+        with pytest.raises(KBQueryError, match="Claude CLI support remains disabled"):
+            kb_submit_query_by_path(
+                kb_path,
+                "Question",
+                adj_dir,
+                parent_id=parent.id,
+            )
+
+
 # ---------------------------------------------------------------------------
 # kb_query_all
 # ---------------------------------------------------------------------------
@@ -404,9 +622,9 @@ def _make_registry_multi(adj_dir: Path, kbs: list[tuple[str, str, str]]) -> None
     for name, path, hint in kbs:
         lines.append(f'  - name: "{name}"')
         lines.append(f'    path: "{path}"')
-        lines.append(f'    description: "test kb"')
-        lines.append(f'    model: "inherit"')
-        lines.append(f'    access: "read-only"')
+        lines.append('    description: "test kb"')
+        lines.append('    model: "inherit"')
+        lines.append('    access: "read-only"')
         if hint:
             lines.append(f'    query_hint: "{hint}"')
     (kb_dir / "registry.yaml").write_text("\n".join(lines) + "\n")
@@ -479,7 +697,7 @@ class TestKbQueryAll:
         with patch("adjutant.capabilities.kb.query.get_backend", return_value=backend):
             import asyncio
 
-            result = asyncio.run(kb_query_all(adj_dir, query="My custom question"))
+            asyncio.run(kb_query_all(adj_dir, query="My custom question"))
 
         # Should have used custom query, not the hint
         call_args = backend.run.call_args

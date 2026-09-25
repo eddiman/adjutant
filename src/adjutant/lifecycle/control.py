@@ -17,8 +17,8 @@ import shutil
 import signal
 import subprocess
 import time
-from datetime import datetime
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -224,6 +224,10 @@ def restart(adj_dir: Path | None = None) -> str:
     ts = _timestamp()
     lines: list[str] = [f"Adjutant Restart - {ts}", "", "Stopping services...", ""]
 
+    from adjutant.operations.process import worker_stop
+
+    lines.append(worker_stop(d))
+
     # Stop Telegram listener
     telegram_pid_file = d / "state" / "telegram.pid"
     telegram_pid = _read_pid(telegram_pid_file)
@@ -318,6 +322,12 @@ def emergency_kill(adj_dir: Path | None = None) -> str:
     _kill_by_pattern("telegram_listener.sh", signal.SIGTERM)
     _kill_by_pattern("messaging/telegram/listener.sh", signal.SIGTERM)
     lines.append("Telegram listener terminated")
+
+    # Terminate the durable operation worker after it has persisted cancellation
+    # or lease evidence for its owned work.
+    from adjutant.operations.process import worker_stop
+
+    lines.append(worker_stop(d))
 
     # Terminate registered scheduled jobs
     lines.append("Terminating registered scheduled jobs...")
@@ -590,10 +600,15 @@ def startup(
         except Exception:  # noqa: BLE001
             new_backend = "opencode"
         switch_lines = _handle_backend_switch(d, old_backend, new_backend)
-        lines.extend(f"  {l}" for l in switch_lines)
+        lines.extend(f"  {line}" for line in switch_lines)
 
     # Start services
     lines += ["", "Starting services...", ""]
+
+    # Start durable execution before polling accepts new durable work.
+    from adjutant.operations.process import worker_start
+
+    lines.append(worker_start(d))
 
     # Telegram listener
     lines.append(_start_telegram_service(d))

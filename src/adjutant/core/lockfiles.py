@@ -7,8 +7,8 @@ Two lockfile types:
 Stored as $ADJ_DIR/KILLED and $ADJ_DIR/PAUSED (empty files).
 
 Active operation tracking:
-  - state/active_operation.json — written when a pulse/review starts, removed when done.
-  - Allows any client (adjutant-web, Telegram, CLI) to observe running state.
+  - state/active_operations.json lists durable queued and running work.
+  - state/active_operation.json remains as a rollback fallback for legacy jobs.
 
 Matches bash lockfiles.sh behavior exactly:
   - check_* functions emit stderr messages and return False if locked
@@ -147,13 +147,35 @@ def _pid_alive(pid: int) -> bool:
 
 
 def get_active_operation(adj_dir: Path | None = None) -> dict[str, Any] | None:
-    """Read state/active_operation.json if it exists and is not stale.
+    """Return the newest durable operation or the legacy marker fallback.
 
     Returns the parsed dict, or None if no operation is running.
     A marker is considered stale if started_at is older than 30 minutes
     AND the recorded PID is no longer alive.  Stale markers are removed.
     """
     d = adj_dir or _adj_dir()
+    active = get_active_operations(d)
+    if active:
+        return active[0]
+    return _get_legacy_active_operation(d)
+
+
+def get_active_operations(adj_dir: Path | None = None) -> list[dict[str, Any]]:
+    """Return every queued or running durable operation newest first."""
+    d = adj_dir or _adj_dir()
+    snapshot = d / "state" / "active_operations.json"
+    try:
+        data = json.loads(snapshot.read_text())
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        data = None
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    legacy = _get_legacy_active_operation(d)
+    return [legacy] if legacy is not None else []
+
+
+def _get_legacy_active_operation(d: Path) -> dict[str, Any] | None:
+    """Read and validate the legacy single-operation marker."""
     op_file = d / "state" / "active_operation.json"
     if not op_file.is_file():
         return None

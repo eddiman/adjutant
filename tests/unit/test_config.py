@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-import yaml
+from pydantic import ValidationError
 
 from adjutant.core.config import (
     AdjutantConfig,
@@ -14,6 +14,9 @@ from adjutant.core.config import (
     load_config,
     load_typed_config,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +128,14 @@ class TestAdjutantConfig:
         assert config.instance.name == "adjutant"
         assert config.messaging.backend == "telegram"
         assert config.llm.backend == "opencode"
+        assert config.operations.enabled is False
+        assert config.operations.debug is False
+        assert config.operations.worker_concurrency == 2
+        assert config.operations.timeouts.runtime_seconds == 1800
+
+    def test_operations_debug_can_be_enabled(self) -> None:
+        config = AdjutantConfig.model_validate({"operations": {"debug": True}})
+        assert config.operations.debug is True
 
     def test_load_from_file(self, tmp_path: Path) -> None:
         config_file = tmp_path / "adjutant.yaml"
@@ -254,7 +265,7 @@ class TestAutonomyConfig:
         assert "memory_digest" in config.autonomy.auto_approve
 
     def test_invalid_level_raises(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             AdjutantConfig.model_validate({"autonomy": {"level": 5}})
 
     def test_level_1_valid(self) -> None:
