@@ -76,7 +76,7 @@ For every external create, update, delete, send, or other state-changing action:
 
 For evidence-registration workflows, keep one dedicated record per source artifact. Apply the established record-type label and lifecycle state only to that dedicated record. When registration is complete and no follow-up work remains, use the workflow's terminal state; a work item that merely cites the artifact keeps its task classification and lifecycle.
 
-When delegating a mutation, send one self-contained transactional instruction that requires the sub-agent to resolve the target, search for an equivalent, update or create once, and verify the final state. A message saying a background write was dispatched proves only that it was queued. Report it as pending, not completed, until a later query or another authoritative result verifies the final state.
+When delegating a mutation, send one self-contained transactional instruction that requires the sub-agent to resolve the target, search for an equivalent, update or create once, and verify the final state. A message saying a background write was dispatched proves only that it was queued. A durable acknowledgement is not proof that the requested change completed. Report it as pending, not completed, until a later query or another authoritative result verifies the final state.
 
 ## Screenshot
 
@@ -89,22 +89,24 @@ When asked to search the web or look something up: `bash ./adjutant search "quer
 ## Knowledge Bases
 
 **Single KB:**
-- Read: `bash ./adjutant kb query "<name>" "question"`
-- Write: `bash ./adjutant kb write "<name>" "instruction"`
+- Read: use bash with `ADJUTANT_PARENT_OPERATION_ID=<current-operation-id> ./adjutant kb query "<name>" "question"`
+- Write: use bash with `ADJUTANT_PARENT_OPERATION_ID=<current-operation-id> ./adjutant kb write "<name>" "instruction"`
 
 **Multiple KBs (prefer these when touching 2+ KBs):**
-- All KBs at once: `bash ./adjutant kb query-all` or `bash ./adjutant kb query-all -q "custom question"`
-- Cross-domain synthesis: `bash ./adjutant kb cross-query "question" --kbs name1,name2`
+- All KBs at once: use bash with `ADJUTANT_PARENT_OPERATION_ID=<current-operation-id> ./adjutant kb query-all` or the same prefix before `./adjutant kb query-all -q "custom question"`
+- Cross-domain synthesis: use bash with `ADJUTANT_PARENT_OPERATION_ID=<current-operation-id> ./adjutant kb cross-query "question" --kbs name1,name2`
 
 **When to use which:**
 - User asks about a specific project/topic: use `kb query` with the relevant KB name
 - User asks about overall status, deadlines, or "what's going on": use `kb query-all` (queries all KBs in parallel, much faster than sequential calls)
 - User asks a question that spans multiple domains ("any conflicts between X and Y?"): use `kb cross-query`
-- Any create/update/delete: use `kb write` (fire-and-forget, returns immediately)
+- Any create/update/delete: use `kb write`. With durable operations enabled, it returns a tracked operation ID.
 
 **HARD LIMIT for single-KB calls — one invocation per KB per message.** Each `kb query` call spawns a heavyweight sub-agent process (~60-80 s). Multiple sequential calls WILL timeout the chat session. If you need status from multiple KBs, use `kb query-all` instead of calling `kb query` repeatedly. Batch ALL writes into ONE `kb write` string. Example — WRONG: three separate calls to update issues #12, #24, #40. RIGHT: one call: `./adjutant kb write hopen "Update the following issues: #12 — mark complete, add measurement 3.30x3.70; #24 — add note: height still missing; #40 — mark complete, inventory done."`.
 
-**Read vs write.** Use `kb query` for reads — it blocks and returns the answer. Use `kb write` for any create/update/delete — it dispatches the work to the sub-agent in the background and returns immediately with a dispatch acknowledgement. This means writes don't eat into the chat timeout budget. The acknowledgement is not proof that the requested change completed. Never use `kb query` for writes.
+**Read vs write.** Use `kb query` for reads. Use `kb write` for any create, update, or delete. A durable acknowledgement contains an operation ID and proves that Adjutant accepted the work. It does not prove completion. The final operation result must report the authoritative state read after the mutation. Use `adjutant kb status <operation-id>` and `adjutant kb result <operation-id>` when the caller needs to inspect tracked work. Never use `kb query` for writes.
+
+**Nested durable command form.** Run one standalone KB command with the exact `ADJUTANT_PARENT_OPERATION_ID=<current-operation-id>` prefix. Do not add a pipeline, `&&`, background execution, command substitution, or another command. Adjutant prints a JSON child acceptance receipt before backend work starts. If the shell call ends early, inspect that child ID. If the receipt is unavailable, run `./adjutant kb status <parent-operation-id>` to list attached children. Never repeat a write merely because the shell call timed out. Inspect the child and perform authoritative readback first; a `reconciling` write has an uncertain external outcome.
 
 Create: **always use the CLI** — `./adjutant kb create --quick --name <name> --path <path> --desc "<desc>" [--model inherit] [--access read-write]`. Never use the wizard script directly, never write KB files manually.
 
