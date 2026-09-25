@@ -13,6 +13,9 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | Command | What it does |
 |---------|-------------|
 | `/status` | Shows whether Adjutant is up and running, paused, or killed — plus scheduled jobs, last autonomous cycle, and notification count today |
+| `/operations` | Lists the ten most recent durable operations with their IDs, types, and current states |
+| `/operation <id>` | Shows one operation's state, attempt count, recent observable events, error, and stored result |
+| `/cancel <id>` | Cancels queued work immediately or asks the owning worker to stop running work |
 | `/pulse` | Queries all registered KBs in parallel for a quick status update — current state, blockers, and upcoming deadlines. Uses `kb query-all` internally for ~6x speedup over sequential queries. |
 | `/brief` | Morning brief — compiles deadlines, priorities, and overnight changes from all KBs into a scannable daily summary. Queries all KBs in parallel via `kb query-all`. |
 | `/reflect` | Requests a deep reflection using the medium model (Sonnet). Queries all KBs in parallel in depth and encourages read-write KBs to update stale data. Adjutant will ask for `/confirm` before proceeding |
@@ -38,11 +41,13 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 | `/kb query <name> <question>` | Queries a specific knowledge base with your question. Example: `/kb query my-project what's the current status?` |
 | `/kb query-all [question]` | Queries ALL registered KBs in parallel and returns combined results. Uses each KB's `query_hint` for targeted questions. Optionally provide a custom question. |
 | `/kb cross-query <kb1,kb2> <question>` | Queries multiple KBs in parallel and synthesizes a cross-domain answer. Example: `/kb cross-query ixda,fagkomite any scheduling conflicts?` |
-| `/kb write <name> <instruction>` | Dispatches a write to a read-write knowledge base. The immediate response acknowledges dispatch, not verified completion. Only works for KBs with `access: read-write`. |
+| `/kb write <name> <instruction>` | Submits a tracked write to a read-write knowledge base when durable operations are enabled. The final result includes verification evidence. The immediate operation ID proves acceptance, not completion. |
 | `/schedule` | Lists all registered scheduled jobs with enabled/disabled status and schedule |
 | `/schedule run <name>` | Runs a scheduled job immediately. Output is sent to chat. |
 | `/schedule enable <name>` | Enables a job and installs its crontab entry, or defers it until resume if paused |
 | `/schedule disable <name>` | Disables a job and removes its crontab entry (keeps the registry entry) |
+
+The CLI equivalents `adjutant kb query` and `adjutant kb write` emit `{"accepted_operation_id":"op-..."}` to stderr before an attached child starts its backend. Use `adjutant kb status <id>` to inspect state and `adjutant kb result <id>` to print a successful stored result. Passing a non-KB parent ID to `kb status` lists its attached KB children.
 
 ### Memory
 
@@ -71,7 +76,7 @@ Send these to your Adjutant bot in Telegram. Commands are only accepted from the
 
 Any message that doesn't start with `/` is treated as a natural language query. Adjutant passes it to the AI agent with your full identity context loaded (`soul.md`, `heart.md`, `registry.md`). You can ask anything — questions about your projects, requests to draft something, queries about knowledge bases.
 
-If a response is already in progress when you send another text or photo, Adjutant queues the newer conversational turn. Processing turns in arrival order preserves established context and prevents a cancelled turn from leaving an external action half-observed and then being repeated.
+When `operations.enabled` is false, text and photo turns use the legacy in-process queue. When durable operations are enabled, a natural-language message receives an operation ID after the listener commits it. The separate worker can continue after a listener restart, update the acknowledgement with observable progress, and retry the stored final result. Use `/operation <id>` or `/cancel <id>` while it runs.
 
 ---
 
@@ -130,6 +135,8 @@ adjutant kb create --quick \
   --desc "What this KB is about"      # Quick non-interactive create (--desc, not --description)
 adjutant kb info <name>               # Show details about a KB
 adjutant kb query <name> "question"   # Query a KB
+adjutant kb status <operation-id>     # Inspect tracked KB work
+adjutant kb result <operation-id>     # Print its persisted terminal result
 adjutant kb query-all                 # Query ALL KBs in parallel (uses each KB's query_hint)
 adjutant kb query-all -q "question"   # Query ALL KBs with a custom question
 adjutant kb cross-query "question" \

@@ -147,7 +147,15 @@ elif text.startswith("/datetime "):
     await cmd_datetime(text[len("/datetime "):], message_id, adj_dir, bot_token=bot_token, chat_id=chat_id)
 ```
 
-For long-running commands, use `msg_typing_start()`/`msg_typing_stop()` and run as a background `asyncio.Task`.
+For short commands, call the capability directly. For work that can outlive the listener cycle, submit an operation through `OperationService` or a capability-specific submit function. Return the operation ID after durable acceptance. The operation worker must persist the terminal result and outbound delivery instead of relying on an in-process `asyncio.Task`.
+
+Classify external effects when submitting work:
+
+- `READ_ONLY` work can be queued again after an expired lease.
+- `IDEMPOTENT` work can be retried when the external contract supports the same stable idempotency key.
+- `MUTATING` and `UNKNOWN` work enter reconciliation after uncertain interruption.
+
+Pass `parent_id` when a capability is called from another durable operation. A parent that waits for a child must not retain the worker pool's last available execution slot. KB CLI calls use inline tracked child execution for this reason.
 
 ### Feature Gating
 
