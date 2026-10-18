@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -23,6 +23,9 @@ from adjutant.lifecycle.cron import (
     run_cron_prompt,
     self_assess_cron,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _mock_backend(returncode: int = 0) -> MagicMock:
@@ -40,6 +43,36 @@ def _mock_backend(returncode: int = 0) -> MagicMock:
 
 
 class TestRunCronPrompt:
+    def test_durable_pulse_is_accepted_without_inline_backend(self, tmp_path: Path) -> None:
+        prompt = tmp_path / "pulse.md"
+        prompt.write_text("durable pulse")
+        (tmp_path / "adjutant.yaml").write_text(
+            "operations:\n  enabled: true\n"
+            "messaging:\n  telegram:\n    default_model: cheap\n"
+        )
+
+        with (
+            patch("adjutant.operations.process.worker_start") as start_worker,
+            patch("adjutant.lifecycle.cron.get_backend") as backend,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            run_cron_prompt(
+                prompt,
+                adj_dir=tmp_path,
+                action="pulse",
+                source="adjutant-web",
+            )
+
+        assert exc_info.value.code == 0
+        backend.assert_not_called()
+        start_worker.assert_called_once_with(tmp_path)
+        from adjutant.operations.store import OperationStore
+
+        operation = OperationStore(tmp_path).list_operations()[0]
+        assert operation.kind == "pulse"
+        assert operation.source == "adjutant-web"
+        assert operation.payload["text"] == "durable pulse"
+
     def test_skips_when_paused(self, tmp_path: Path) -> None:
         prompt = tmp_path / "pulse.md"
         prompt.write_text("Do not run")

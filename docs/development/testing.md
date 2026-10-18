@@ -182,3 +182,44 @@ Quick triage workflow:
 # Run with full tracebacks
 .venv/bin/pytest tests/unit/ -v --tb=long
 ```
+
+## Durable operation tests
+
+The operation layer requires failure-boundary tests in addition to normal result tests. Keep these cases covered when changing the worker or delivery code:
+
+- Duplicate Telegram update acceptance returns the original operation and advances the offset monotonically.
+- Concurrent workers claim a queued operation once.
+- Result text and all outbound delivery chunks commit together.
+- A restart delivers a persisted result without invoking the backend again.
+- Expired read-only work can be queued again, while a possible mutation enters reconciliation.
+- Cancellation reaches the running backend task and ends in a terminal state.
+- Runtime timeout persists a terminal result and user-visible delivery.
+- An ambiguous Telegram failure records `uncertain` and follows the bounded retry policy.
+- Long text is delivered in complete chunks instead of being truncated.
+- Inline KB acceptance creates one claimed attempt atomically and is invisible to daemon claims.
+- A child deadline derives from the parent's frozen deadline and restart does not extend either deadline.
+- Expired recovery closes the current attempt, and a late stale completion fails its ownership fence.
+- Parent cancellation reaches execution children without cancelling conversational follow-ups.
+- The OpenCode hook extends recognized standalone KB calls, accepts quoted arguments, rejects compound commands, and leaves unrelated shell timeouts unchanged.
+- CLI receipt output exposes the child ID before inline backend execution returns.
+
+Use fake handlers and fake Telegram senders for deterministic unit tests. Process cleanup, server reconnect, and memory-soak tests belong in integration tests because they require actual subprocess ownership and resource sampling.
+
+### Persistent OpenCode release trial
+
+Run the persistent transport trial with the same installed OpenCode version, model, prompt, and work directory for both samples. Record at least three cold `opencode run` calls and three warm `opencode run --attach` calls. Exclude server startup from the warm per-operation timing, but record startup separately. The release record must include:
+
+- cold and attached durations plus their medians;
+- successful output equivalence;
+- server version, root PID, and root-plus-descendant RSS before and after repeated work;
+- process count after repeated work;
+- recovery after terminating the owned server;
+- native abort and uncertain-disconnect fixture results;
+- soft and hard memory-policy outcomes;
+- KB permission fixtures and proof that KB operation kinds do not use the shared server.
+
+The 2026-09-24 trial on OpenCode 1.18.0 used six identical `openai/gpt-5.6-luna` prompts. Cold durations were 4.595, 7.150, and 4.859 seconds. Attached durations were 2.747, 3.092, and 5.812 seconds. The median fell from 4.859 to 3.092 seconds, a 36.4 percent reduction, and all six results returned `OK`.
+
+The server process tree used 381 MB before model work and 693 MB after five additional attached calls. The five calls completed in 3.190, 4.609, 2.706, 3.815, and 1.923 seconds. One transient RSS sample exposed a disappearing-child accounting race; the sampler now skips that child instead of returning zero for the whole tree. A 600 MB soft limit then stopped the 666 MB idle server cleanly. A forced server death produced a new healthy instance with one root process and 379 MB RSS.
+
+Persistent reuse remains disabled for `kb_query` and `kb_write`. The KB permission and dual-workdir fixtures verify distinct process sessions, no `--attach` argument, external-directory denial, and read-only edit/write/bash denial.

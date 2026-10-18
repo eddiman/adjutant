@@ -18,8 +18,14 @@ result = await backend.run(
     workdir=adj_dir,
     model=model,
     session_id=session_id,
+    correlation_id=operation_id,
 )
 ```
+
+Pass a stable `correlation_id` when the call belongs to a Telegram update or
+tracked operation. Both backend implementations include this identifier in
+their logs and expose it on `LLMResult`. When the caller omits it, the backend
+generates an invocation identifier.
 
 ### Check capabilities before optional features
 
@@ -61,7 +67,20 @@ if result.error_type:
 else:
     # Use result.text as the response
     await msg_send(result.text)
+
+if result.timings:
+    observe(
+        correlation_id=result.correlation_id,
+        spawn=result.timings.spawn_seconds,
+        execution=result.timings.execution_seconds,
+        cleanup=result.timings.cleanup_seconds,
+        parsing=result.timings.parse_seconds,
+        total=result.timings.total_seconds,
+    )
 ```
+
+`timed_out=True` can accompany partial `text`. Preserve that text as operation
+evidence even when the user-facing response reports a timeout.
 
 ### Three invocation modes
 
@@ -70,6 +89,34 @@ else:
 | `await backend.run(...)` | Async — chat, commands, queries, analysis | `LLMResult` |
 | `backend.run_detached(...)` | Fire-and-forget — KB write operations | `None` |
 | `backend.run_sync(...)` | Synchronous — cron jobs | `int` (exit code) |
+
+### Event-producing execution
+
+Durable workers use the typed `ExecutionRequest` and `backend.execute()` interface:
+
+```python
+from adjutant.core.backend import ExecutionEventType, ExecutionRequest
+
+request = ExecutionRequest(
+    prompt=prompt,
+    workdir=adj_dir,
+    model=model,
+    correlation_id=operation_id,
+    startup_timeout=60,
+    connection_timeout=30,
+    timeout=1800,
+)
+
+async for event in backend.execute(request):
+    if event.type is ExecutionEventType.TOOL_FINISHED:
+        persist_public_progress(event.public_message)
+    if event.result is not None:
+        result = event.result
+```
+
+The normalized event types are `started`, `session_started`, `tool_started`, `tool_finished`, `text_delta`, `usage`, `waiting_input`, `completed`, and `failed`. Public progress may use `public_message`; it must not forward hidden reasoning or tool arguments. `run()` remains the compatibility adapter that collects the final event into `LLMResult`.
+
+OpenCode parses NDJSON as it arrives and drains stdout and stderr concurrently. It retains a bounded raw-output head and tail while the semantic parser keeps the complete text result and at most 100 recent raw event objects. Claude CLI currently emits lifecycle events around its collected JSON response.
 
 ---
 
@@ -82,7 +129,22 @@ else:
 2. Call `get_backend()` — it reads the active backend from config
 3. Use `backend.run()` with appropriate parameters
 4. Handle `LLMResult.error_type` for error cases
-5. Check `backend.capabilities.*` before using optional features
+5. Pass the parent operation's correlation ID when one exists
+6. Check `backend.capabilities.*` before using optional features
+
+### Process ownership
+
+OpenCode invocations run in separate process groups. Timeout and Python-task
+cancellation signal only the group created for that invocation, then reap the
+parent and collect partial output. Do not restore process cleanup based on a
+global before-and-after PID scan because concurrent invocations can create
+language servers during the same interval.
+
+Startup timeout and runtime timeout are separate inputs. The operation layer also owns acknowledgement targets, quiet-progress warnings, connection timeout for reconnectable transports, lease expiry, and cancellation grace. Do not collapse these into one deadline because each timeout implies a different recovery action.
+
+Durable workers pass the remaining persisted deadline to `ExecutionRequest.timeout`. OpenCode emits owned-process evidence immediately after `create_subprocess_exec`, and the worker writes that evidence plus session and server IDs to the current attempt as events arrive. Attempt updates must retain the current-attempt fence. A terminal result from a revoked attempt must fail instead of creating a second delivery.
+
+Nested OpenCode KB calls use the repository `tool.execute.before` plugin. Keep the matcher limited to a standalone Adjutant KB command with `ADJUTANT_PARENT_OPERATION_ID`; do not increase the timeout for general shell calls. The plugin asks `adjutant operation-context` for the validated remaining budget and adds the backend session and tool-call IDs to the child environment.
 
 ---
 

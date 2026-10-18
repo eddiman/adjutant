@@ -103,13 +103,13 @@ adjutant setup --repair
 
 ---
 
-## Step 4 — Start the listener
+## Step 4 — Start Adjutant
 
 ```bash
 adjutant start
 ```
 
-The Telegram listener starts in the background. Verify it's running:
+The durable-operation worker starts first, followed by the Telegram listener. Verify Adjutant is running:
 
 ```bash
 adjutant status
@@ -181,7 +181,7 @@ Key plist properties:
 - **`KeepAlive: true`** — unconditional restart on any exit (including clean exit 0)
 - **`ThrottleInterval: 30`** — prevents restart loops faster than every 30 seconds
 - **`ADJ_DIR`** — the listener reads this to find config, state, and identity files
-- The listener does NOT send a startup notification — only `adjutant start` does, so launchd auto-restarts don't spam Telegram
+- The listener does not send a startup notification. The full `adjutant startup` flow sends one, so launchd can restart the listener without sending repeated notifications.
 
 ---
 

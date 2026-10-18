@@ -1,7 +1,7 @@
 """CLI entrypoint — Click-based CLI for Adjutant.
 
 Subcommands:
-  start               — Start the Telegram listener
+  start               — Start all runtime services
   stop                — Stop the Telegram listener
   restart             — Restart all services
   status              — Show operational status
@@ -50,11 +50,32 @@ Subcommands:
 from __future__ import annotations
 
 import contextlib
+import signal
+import sys
+import threading
 from importlib.metadata import version as pkg_version
 
 import click
 
 from adjutant.core.paths import AdjutantDirNotFoundError, init_adj_dir
+
+
+@contextlib.contextmanager
+def _inline_termination_guard():
+    """Turn catchable termination into Python unwinding for inline operation cleanup."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def _terminate(_signum, _frame):
+        raise KeyboardInterrupt("inline operation received SIGTERM")
+
+    signal.signal(signal.SIGTERM, _terminate)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 @click.group()
@@ -69,6 +90,62 @@ def main(ctx: click.Context) -> None:
     except AdjutantDirNotFoundError:
         # Don't fail on --help or version; only fail on actual commands
         ctx.obj["adj_dir"] = None
+
+
+@main.command(name="operation-context", hidden=True)
+@click.argument("operation_id")
+@click.option("--session-id", default=None)
+@click.pass_context
+def operation_context_cmd(
+    ctx: click.Context,
+    operation_id: str,
+    session_id: str | None,
+) -> None:
+    """Return a validated shell budget for one active operation."""
+    import json
+    import time
+
+    from adjutant.operations.models import OperationState
+    from adjutant.operations.store import OperationStore
+
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        raise click.ClickException("Adjutant directory not found.")
+    store = OperationStore(adj_dir)
+    operation = store.get_operation(operation_id)
+    if (
+        operation is None
+        or operation.current_attempt_id is None
+        or operation.deadline_at is None
+        or operation.state
+        not in {
+            OperationState.STARTING,
+            OperationState.RUNNING,
+            OperationState.WAITING_CHILDREN,
+            OperationState.WAITING_INPUT,
+        }
+    ):
+        raise click.ClickException(f"Operation {operation_id} is not actively owned.")
+    attempt = store.get_attempt(operation.current_attempt_id)
+    if attempt is None:
+        raise click.ClickException(f"Operation {operation_id} has no current attempt.")
+    if session_id and attempt.backend_session_id and session_id != attempt.backend_session_id:
+        raise click.ClickException("Backend session does not own this operation.")
+    remaining = operation.deadline_at - time.time() - 1.0
+    if remaining <= 0:
+        raise click.ClickException(f"Operation {operation_id} deadline has expired.")
+    click.echo(
+        json.dumps(
+            {
+                "operation_id": operation.id,
+                "attempt_id": attempt.id,
+                "deadline_at": operation.deadline_at,
+                "timeout_ms": max(1000, int(remaining * 1000)),
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -416,17 +493,30 @@ def kb_query_cmd(
     from adjutant.capabilities.kb.query import KBQueryError, kb_query, kb_query_by_path
     from adjutant.core.backend import BackendNotFoundError
 
+    def receipt(operation: object) -> None:
+        operation_id = vars(operation)["id"]
+        click.echo(f'{{"accepted_operation_id":"{operation_id}"}}', err=True)
+        sys.stderr.flush()
+
     try:
         if kb_path:
             if not query_text:
                 click.echo("ERROR: A query argument is required with --path.", err=True)
                 raise SystemExit(1)
-            answer = asyncio.run(kb_query_by_path(_Path(kb_path), query_text, adj_dir))
+            with _inline_termination_guard():
+                answer = asyncio.run(
+                    kb_query_by_path(
+                        _Path(kb_path), query_text, adj_dir, receipt_callback=receipt
+                    )
+                )
         else:
             if not kb_name or not query_text:
                 click.echo("ERROR: KB_NAME and QUERY_TEXT are required.", err=True)
                 raise SystemExit(1)
-            answer = asyncio.run(kb_query(kb_name, query_text, adj_dir))
+            with _inline_termination_guard():
+                answer = asyncio.run(
+                    kb_query(kb_name, query_text, adj_dir, receipt_callback=receipt)
+                )
 
         click.echo(answer, nl=False)
     except (KBQueryError, BackendNotFoundError) as exc:
@@ -464,20 +554,67 @@ def kb_write_cmd(
     from adjutant.capabilities.kb.query import KBQueryError, kb_write, kb_write_by_path
     from adjutant.core.backend import BackendNotFoundError
 
+    def receipt(operation: object) -> None:
+        operation_id = vars(operation)["id"]
+        click.echo(f'{{"accepted_operation_id":"{operation_id}"}}', err=True)
+        sys.stderr.flush()
+
     try:
         if kb_path:
             if not instruction:
                 click.echo("ERROR: An instruction argument is required with --path.", err=True)
                 raise SystemExit(1)
-            msg = kb_write_by_path(_Path(kb_path), instruction, adj_dir)
+            with _inline_termination_guard():
+                msg = kb_write_by_path(
+                    _Path(kb_path), instruction, adj_dir, receipt_callback=receipt
+                )
         else:
             if not kb_name or not instruction:
                 click.echo("ERROR: KB_NAME and INSTRUCTION are required.", err=True)
                 raise SystemExit(1)
-            msg = kb_write(kb_name, instruction, adj_dir)
+            with _inline_termination_guard():
+                msg = kb_write(
+                    kb_name, instruction, adj_dir, receipt_callback=receipt
+                )
 
         click.echo(msg)
     except (KBQueryError, BackendNotFoundError) as exc:
+        click.echo(f"ERROR: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+
+@kb.command(name="status")
+@click.argument("operation_id")
+@click.pass_context
+def kb_operation_status_cmd(ctx: click.Context, operation_id: str) -> None:
+    """Show a tracked KB operation state."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+    from adjutant.capabilities.kb.query import KBQueryError, kb_operation_status
+
+    try:
+        click.echo(kb_operation_status(operation_id, adj_dir))
+    except KBQueryError as exc:
+        click.echo(f"ERROR: {exc}", err=True)
+        raise SystemExit(1) from exc
+
+
+@kb.command(name="result")
+@click.argument("operation_id")
+@click.pass_context
+def kb_operation_result_cmd(ctx: click.Context, operation_id: str) -> None:
+    """Print the persisted result for a completed KB operation."""
+    adj_dir = ctx.obj.get("adj_dir")
+    if adj_dir is None:
+        click.echo("Adjutant directory not found.", err=True)
+        raise SystemExit(1)
+    from adjutant.capabilities.kb.query import KBQueryError, kb_operation_result
+
+    try:
+        click.echo(kb_operation_result(operation_id, adj_dir), nl=False)
+    except KBQueryError as exc:
         click.echo(f"ERROR: {exc}", err=True)
         raise SystemExit(1) from exc
 
@@ -544,15 +681,15 @@ def kb_cross_query_cmd(ctx: click.Context, question: str, kbs: str) -> None:
 @main.command()
 @click.pass_context
 def start(ctx: click.Context) -> None:
-    """Start the Telegram listener."""
+    """Start all runtime services."""
     adj_dir = ctx.obj.get("adj_dir")
     if adj_dir is None:
         click.echo("Adjutant directory not found. Run setup first.", err=True)
         raise SystemExit(1)
 
-    from adjutant.messaging.telegram.service import listener_start
+    from adjutant.lifecycle.control import start as start_services
 
-    click.echo(listener_start(adj_dir))
+    click.echo(start_services(adj_dir))
 
 
 @main.command()
@@ -684,7 +821,6 @@ def web(port: int, host: str, no_open: bool) -> None:
     import os
     import signal
     import subprocess
-    import sys
     from pathlib import Path
 
     # Walk up from this file to find the project root containing web/api + web/app

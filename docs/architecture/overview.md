@@ -55,7 +55,8 @@ The CLI is a Click application. The `adjutant` script in the repo root is a thin
 
 | Command group | Module |
 |---------------|--------|
-| `start` / `stop` / `restart` | `messaging/telegram/service.py` |
+| `start` / `restart` | `lifecycle/control.py` |
+| `stop` | `messaging/telegram/service.py` |
 | `status` | `observability/status.py` |
 | `pause` / `resume` / `kill` | `lifecycle/control.py` |
 | `startup` | `lifecycle/control.py` |

@@ -41,6 +41,7 @@ const sidebars: SidebarsConfig = {
         'architecture/state',
         'architecture/autonomy',
         'architecture/backends',
+        'architecture/operations',
         'architecture/design-decisions',
       ],
     },

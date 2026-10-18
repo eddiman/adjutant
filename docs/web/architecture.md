@@ -327,7 +327,8 @@ Adjutant directory ($ADJ_DIR)
   ├── adjutant.yaml          → schedules, config
   ├── PAUSED / KILLED         → lifecycle state
   ├── state/
-  │   ├── active_operation.json  → running pulse/review
+  │   ├── active_operations.json → queued/running durable operation list
+  │   ├── active_operation.json  → legacy rollback marker
   │   ├── last_heartbeat.json    → last pulse results
   │   └── adjutant.log           → journal entries
   └── identity/               → soul, heart, registry
@@ -359,14 +360,14 @@ A directory is valid if it contains `adjutant.yaml` or `knowledge_bases/registry
 
 **Pause/resume** are synchronous — the API waits for the `adjutant` CLI to complete and returns the result.
 
-**Pulse/review** are fire-and-forget — the API spawns `adjutant pulse` as a detached process and returns immediately. Adjutant writes `state/active_operation.json` while running. The dashboard polls `/api/adjutant/status` every 3 seconds during an active operation to observe progress. No idle polling occurs.
+**Pulse/review** are accepted durably. The API spawns the short-lived CLI submitter and returns immediately. Adjutant writes `state/active_operations.json` from the operation database. The dashboard derives both button states from the full list and polls `/api/adjutant/status` every 3 seconds while any operation is active. When durable operations are disabled, the API still reads the legacy single marker for rollback compatibility.
 
 ### Dashboard Components
 
 | Component | Data Source | Purpose |
 |-----------|------------|---------|
 | `SystemStatus` | `/status` | Mode, lifecycle state, directory |
-| `QuickActions` | `/status` → `activeOperation` | Trigger and observe pulse/review/pause/resume |
+| `QuickActions` | `/status` → `activeOperations` | Trigger and observe concurrent pulse/review/pause/resume work |
 | `LastPulse` | `/status` → `lastHeartbeat` | Show results from the last pulse or review |
 | `HealthChecks` | `/health` | Directory, config, CLI validation |
 | `SchedulesManager` | `/schedules` | View, toggle, and trigger scheduled jobs |
@@ -378,7 +379,7 @@ A directory is valid if it contains `adjutant.yaml` or `knowledge_bases/registry
 All dashboard state lives in the `useAdjutant()` hook, which is instantiated in `AppContent` (never unmounts). This means dashboard state survives navigation — visit a KB, come back, and the dashboard still shows the same data.
 
 Button states (running/done/error) are derived from Adjutant's filesystem state, not in-memory tracking:
-- `status.activeOperation?.action === 'pulse'` → Pulse button shows "Running..."
+- Any `status.activeOperations` item with `action === 'pulse'` makes the Pulse button show "Running..."
 - No active operation + heartbeat timestamp changed → "Done" for 4 seconds
 - HTTP POST failure → "Failed" for 4 seconds
 

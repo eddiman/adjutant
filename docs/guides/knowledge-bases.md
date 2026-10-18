@@ -2,6 +2,27 @@
 
 How to create, structure, register, and query knowledge bases in Adjutant.
 
+## Tracked operations
+
+When `operations.enabled` is true, single-KB reads and writes create durable operation records. Each record freezes the KB workspace, backend, model, reasoning variant, access intent, parent operation, and side-effect class before execution.
+
+A read is replay-safe and may return to the queue after an expired worker lease. A write is classified as mutating. If its worker disappears after external changes may have begun, the operation enters reconciliation and Adjutant does not replay it automatically.
+
+Use these commands to inspect a CLI-submitted KB operation:
+
+```bash
+adjutant kb status <operation-id>
+adjutant kb result <operation-id>
+```
+
+Telegram uses `/operation <operation-id>` and `/cancel <operation-id>`. The final result is stored before delivery. A KB write prompt requires the sub-agent to read the authoritative target after mutation and report concrete verification evidence.
+
+KB calls made inside a parent agent operation inherit `ADJUTANT_PARENT_OPERATION_ID`. Adjutant atomically accepts and owns the child, writes a JSON acceptance receipt to stderr before backend startup, and executes the child in the submitting CLI process. This avoids a bounded worker pool deadlock where every parent waits while no slot remains for a child.
+
+The child uses the parent's remaining absolute deadline after a cancellation and persistence reserve. OpenCode extends its shell timeout only for the recognized standalone KB command, while the CLI and worker enforce the same deadline independently. If the shell or caller ends after a write may have started, inspect the accepted child with `adjutant kb status <child-id>`. Do not repeat the original write from a timeout alone. A mutating child with uncertain effects enters `reconciling` and requires authoritative readback before any new write.
+
+`adjutant kb status <parent-id>` lists attached KB children, so a parent ID can recover the child ID when partial tool output is unavailable. Child status includes its parent, current attempt, deadline, recent activity, error, and recovery reason.
+
 ---
 
 ## How Adjutant queries a KB
@@ -173,6 +194,8 @@ Set in `kb.yaml`:
 
 Default to `read-write` for active project KBs. The sub-agent won't write unless explicitly told to. Read-write KBs have `edit` and `write` tools permitted in their workspace config (`opencode.json` for OpenCode, `.claude/settings.json` for Claude CLI), while `read-only` KBs have those tools denied — restricting the sub-agent to read operations only. Both backend configs are generated from the same templates during scaffold creation.
 
+The registry access field is also checked before Adjutant accepts a tracked `kb write`. Backend workspace permissions remain the enforcement boundary inside the KB process. Persistent KB workers stay disabled until the isolation fixtures described in the operation plan pass.
+
 ---
 
 ## KB registration
@@ -236,6 +259,11 @@ This causes `adjutant kb run <name> <op>` to run:
 The KB receives its directory via the `KB_DIR` environment variable and the
 process working directory (`cwd`). If the KB registry entry has a `model`
 field, the resolved model ID is passed via the `KB_MODEL` environment variable.
+The KB-local `.venv` must exist and contain the KB's declared dependencies.
+Recreate it after moving or restoring a KB because virtual environments contain
+machine-specific interpreter paths. On an iCloud Drive location where the
+standard library cannot create virtualenv symlinks, use `uv venv --seed .venv`
+and `uv pip install --python .venv/bin/python --link-mode copy -e .`.
 
 **Optional: `cli_flags`**
 

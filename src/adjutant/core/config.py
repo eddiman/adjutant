@@ -151,6 +151,46 @@ class JournalConfig(BaseModel):
     log_rotations: int = 3
 
 
+class OperationTimeoutConfig(BaseModel):
+    acknowledgement_target_seconds: float = 2.0
+    startup_seconds: int = 60
+    connection_seconds: int = 30
+    progress_warning_seconds: int = 90
+    runtime_seconds: int = 1800
+    cancellation_grace_seconds: int = 10
+    lease_seconds: int = 90
+
+
+class OperationRetentionConfig(BaseModel):
+    completed_days: int = 30
+    events_days: int = 14
+    deliveries_days: int = 30
+    backend_sessions_days: int = 30
+
+
+class PersistentOpenCodeConfig(BaseModel):
+    enabled: bool = False
+    idle_timeout_seconds: int = 1200
+    startup_timeout_seconds: int = 30
+    health_interval_seconds: int = 10
+    restart_backoff_seconds: int = 5
+    username: str = "opencode"
+    soft_memory_mb: int | None = None
+    hard_memory_mb: int | None = None
+
+
+class OperationsConfig(BaseModel):
+    enabled: bool = False
+    debug: bool = False
+    worker_concurrency: int = Field(default=2, ge=1, le=16)
+    poll_interval_seconds: float = Field(default=0.5, gt=0)
+    delivery_max_attempts: int = Field(default=8, ge=1)
+    delivery_retry_base_seconds: float = Field(default=2.0, gt=0)
+    timeouts: OperationTimeoutConfig = Field(default_factory=OperationTimeoutConfig)
+    retention: OperationRetentionConfig = Field(default_factory=OperationRetentionConfig)
+    persistent_opencode: PersistentOpenCodeConfig = Field(default_factory=PersistentOpenCodeConfig)
+
+
 class AutonomyConfig(BaseModel):
     """Graduated autonomy control.
 
@@ -201,6 +241,7 @@ class AdjutantConfig(BaseModel):
     notifications: NotificationsConfig = Field(default_factory=NotificationsConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     journal: JournalConfig = Field(default_factory=JournalConfig)
+    operations: OperationsConfig = Field(default_factory=OperationsConfig)
     autonomy: AutonomyConfig = Field(default_factory=AutonomyConfig)
     debug: DebugConfig = Field(default_factory=DebugConfig)
 

@@ -11,9 +11,14 @@ Two backends:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Protocol
+import time
+from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+    from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -34,7 +39,69 @@ class LLMResult:
     error_type: str | None = None
     returncode: int = 0
     timed_out: bool = False
+    timeout_phase: str | None = None
     cost_usd: float | None = None
+    correlation_id: str | None = None
+    timings: ExecutionTimings | None = None
+    server_instance_id: str | None = None
+    reconciliation_status: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionTimings:
+    """Measured execution phases for one backend invocation."""
+
+    spawn_seconds: float = 0.0
+    execution_seconds: float = 0.0
+    cleanup_seconds: float = 0.0
+    parse_seconds: float = 0.0
+    total_seconds: float = 0.0
+
+
+class ExecutionEventType(StrEnum):
+    """Normalized public backend execution events."""
+
+    STARTED = "started"
+    SESSION_STARTED = "session_started"
+    TOOL_STARTED = "tool_started"
+    TOOL_FINISHED = "tool_finished"
+    TEXT_DELTA = "text_delta"
+    USAGE = "usage"
+    WAITING_INPUT = "waiting_input"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True)
+class ExecutionRequest:
+    """Typed request for event-producing backend execution."""
+
+    prompt: str
+    agent: str | None = None
+    workdir: Path | None = None
+    model: str | None = None
+    variant: str | None = None
+    session_id: str | None = None
+    startup_timeout: float | None = None
+    connection_timeout: float | None = None
+    timeout: float | None = None
+    env: dict[str, str] | None = None
+    files: list[Path] | None = None
+    correlation_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ExecutionEvent:
+    """One normalized event safe for orchestration and public progress."""
+
+    type: ExecutionEventType
+    created_at: float = field(default_factory=time.time)
+    text: str | None = None
+    public_message: str | None = None
+    session_id: str | None = None
+    error_type: str | None = None
+    data: dict[str, Any] = field(default_factory=dict)
+    result: LLMResult | None = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +119,9 @@ class BackendCapabilities:
     remote_session: bool = False
     streaming: bool = False
     cost_tracking: bool = False
+    persistent_transport: bool = False
+    reconnect: bool = False
+    native_abort: bool = False
 
 
 class LLMBackend(Protocol):
@@ -72,10 +142,14 @@ class LLMBackend(Protocol):
         model: str | None = None,
         variant: str | None = None,
         session_id: str | None = None,
+        startup_timeout: float | None = None,
         timeout: float | None = None,
         env: dict[str, str] | None = None,
         files: list[Path] | None = None,
+        correlation_id: str | None = None,
     ) -> LLMResult: ...
+
+    def execute(self, request: ExecutionRequest) -> AsyncIterator[ExecutionEvent]: ...
 
     def run_detached(
         self,

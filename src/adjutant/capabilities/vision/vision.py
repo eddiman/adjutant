@@ -82,14 +82,14 @@ def resolve_vision_model_spec(adj_dir: Path, model: str | None = None) -> Resolv
 # ---------------------------------------------------------------------------
 
 
-def run_vision_multi(
+async def run_vision_multi_async(
     image_paths: list[str],
     prompt: str,
     adj_dir: Path,
     *,
     model: str | None = None,
 ) -> str:
-    """Run vision analysis on one or more image files in a single LLM call.
+    """Run vision analysis on the caller's event loop.
 
     All images are passed to one opencode invocation via multiple -f flags so
     the model sees them together with shared context.
@@ -145,16 +145,14 @@ def run_vision_multi(
         return f"The current backend (`{backend.name}`) doesn't support vision."
 
     files = [Path(p) for p in image_paths]
-    result = asyncio.run(
-        backend.run(
-            prompt,
-            agent="vision",
-            workdir=adj_dir,
-            model=resolved.model,
-            variant=resolved.variant,
-            files=files,
-            timeout=_VISION_TIMEOUT,
-        )
+    result = await backend.run(
+        prompt,
+        agent="vision",
+        workdir=adj_dir,
+        model=resolved.model,
+        variant=resolved.variant,
+        files=files,
+        timeout=_VISION_TIMEOUT,
     )
 
     if result.error_type == "vision_unsupported":
@@ -199,6 +197,31 @@ def run_vision_multi(
         label = image_paths[0] if len(image_paths) == 1 else f"{len(image_paths)} images"
         adj_log("vision", f"Vision analysis returned empty reply for {label}")
         return ""
+
+
+def run_vision_multi(
+    image_paths: list[str],
+    prompt: str,
+    adj_dir: Path,
+    *,
+    model: str | None = None,
+) -> str:
+    """Run multi-image vision from a synchronous caller."""
+    return asyncio.run(run_vision_multi_async(image_paths, prompt, adj_dir, model=model))
+
+
+async def run_vision_async(
+    image_path: str,
+    prompt: str,
+    adj_dir: Path,
+    *,
+    model: str | None = None,
+) -> str:
+    """Run single-image vision on the caller's event loop."""
+    if not image_path:
+        raise ValueError("No image path provided.")
+
+    return await run_vision_multi_async([image_path], prompt, adj_dir, model=model)
 
 
 def run_vision(

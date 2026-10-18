@@ -38,6 +38,8 @@ Vision extraction uses a separate tracked definition at `.opencode/agents/vision
 
 Natural language processing and long-running agent tasks use the LLM backend. All AI calls go through `get_backend().run()` (defined in `core/backend.py`) rather than calling `opencode` or `claude` directly.
 
+With durable operations enabled, each accepted natural-language turn runs in an operation-owned backend session. The worker builds bounded context from completed earlier turns. A follow-up that names an operation ID or replies to its Telegram status message depends on that operation and includes its persisted result. An unrelated turn has no dependency and may run concurrently in another session. This prevents two workers from writing one backend session at the same time.
+
 Two backends are supported:
 - **OpenCode** (`opencode`): Uses the OpenCode CLI with an Anthropic API key. Supports vision, streaming, model listing, and process reaping.
 - **Claude Code CLI** (`claude-cli`): Uses the Claude Code CLI with a Claude subscription. Supports cost tracking and model listing.
@@ -48,7 +50,7 @@ The backend is configured in `adjutant.yaml` under `llm.backend`. See [Backend A
 
 Every `opencode run` invocation spawns a `bash-language-server` child process (~400MB RSS). When `opencode` exits, this child survives as an orphan (reparented to PID 1). Without intervention, these accumulate over time.
 
-`core/opencode.py` provides process management to prevent this — it takes a snapshot of `bash-language-server` PIDs before calling `opencode run`, then kills any new ones that appeared after it exits. This is handled internally by `backend_opencode.py`; call sites never interact with `opencode.py` directly.
+`core/opencode.py` gives each invocation its own process group. Timeout and cancellation signal only that owned group. The periodic reaper handles confirmed orphans and processes above the configured memory threshold. This avoids the concurrency race created by global before-and-after PID snapshots.
 
 ---
 

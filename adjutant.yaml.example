@@ -126,6 +126,38 @@ journal:
   log_max_size_kb: 5120                # rotate adjutant.log when it exceeds 5MB
   log_rotations: 3                     # number of compressed log backups to keep
 
+# Durable background operations. Enable after upgrading so Telegram can accept
+# long work quickly, recover it after restart, and retry final delivery.
+operations:
+  enabled: false
+  debug: false                         # show operation IDs and status edits in Telegram
+  worker_concurrency: 2
+  poll_interval_seconds: 0.5
+  delivery_max_attempts: 8
+  delivery_retry_base_seconds: 2.0
+  timeouts:
+    acknowledgement_target_seconds: 2.0
+    startup_seconds: 60
+    connection_seconds: 30
+    progress_warning_seconds: 90
+    runtime_seconds: 1800
+    cancellation_grace_seconds: 10
+    lease_seconds: 90
+  retention:
+    completed_days: 30
+    events_days: 14
+    deliveries_days: 30
+    backend_sessions_days: 30
+  persistent_opencode:
+    enabled: false
+    idle_timeout_seconds: 1200
+    startup_timeout_seconds: 30
+    health_interval_seconds: 10
+    restart_backoff_seconds: 5
+    username: opencode
+    soft_memory_mb: null               # set after measuring this machine
+    hard_memory_mb: null               # set after measuring this machine
+
 debug:
   dry_run: false
   verbose_logging: false

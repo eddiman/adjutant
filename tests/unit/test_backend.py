@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 import pytest
 
 from adjutant.core.backend import (
     BackendCapabilities,
-    BackendNotFoundError,
+    ExecutionTimings,
     LLMResult,
     get_backend,
 )
@@ -23,6 +21,8 @@ class TestLLMResult:
         assert r.returncode == 0
         assert r.timed_out is False
         assert r.cost_usd is None
+        assert r.correlation_id is None
+        assert r.timings is None
 
     def test_all_fields(self):
         r = LLMResult(
@@ -32,12 +32,16 @@ class TestLLMResult:
             returncode=1,
             timed_out=True,
             cost_usd=0.005,
+            correlation_id="op-123",
+            timings=ExecutionTimings(total_seconds=1.25),
         )
         assert r.session_id == "abc"
         assert r.error_type == "model_not_found"
         assert r.returncode == 1
         assert r.timed_out is True
         assert r.cost_usd == 0.005
+        assert r.correlation_id == "op-123"
+        assert r.timings == ExecutionTimings(total_seconds=1.25)
 
 
 class TestBackendCapabilities:
@@ -97,7 +101,7 @@ class TestClaudeCLICapabilities:
         assert caps.reaping is False
         assert caps.web_server is False
         assert caps.remote_session is False
-        assert caps.streaming is False
+        assert caps.streaming is True
         assert caps.cost_tracking is True
 
 

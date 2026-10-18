@@ -2,30 +2,26 @@
 
 from __future__ import annotations
 
-import json
 import os
 import signal
-import subprocess
-from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from adjutant.lifecycle.control import (
-    pause,
-    resume,
-    restart,
-    emergency_kill,
-    startup,
     _adj_dir,
-    _timestamp,
     _kill_by_pattern,
     _kill_pidfile,
-    _pid_alive,
     _pgrep_first,
+    _pid_alive,
     _read_pid,
+    emergency_kill,
+    pause,
+    restart,
+    resume,
+    start,
+    startup,
 )
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -125,6 +121,57 @@ class TestKillHelpers:
         f = tmp_path / "bad.pid"
         f.write_text("not-a-pid")
         _kill_pidfile(f)  # should not raise
+
+
+# ---------------------------------------------------------------------------
+# start
+# ---------------------------------------------------------------------------
+
+
+class TestStart:
+    def test_starts_worker_before_listener(self, adj, monkeypatch):
+        calls = []
+
+        def start_worker(path):
+            calls.append(("worker", path))
+            return "Operation worker started"
+
+        def start_listener(path):
+            calls.append(("listener", path))
+            return "Telegram listener started"
+
+        monkeypatch.setattr("adjutant.operations.process.worker_start", start_worker)
+        monkeypatch.setattr(
+            "adjutant.lifecycle.control._start_telegram_service",
+            start_listener,
+        )
+
+        result = start(adj)
+
+        assert calls == [("worker", adj), ("listener", adj)]
+        assert result == "Operation worker started\nTelegram listener started"
+
+    def test_refuses_to_start_services_while_killed(self, adj, monkeypatch):
+        (adj / "KILLED").touch()
+        start_worker = MagicMock()
+        start_listener = MagicMock()
+        monkeypatch.setattr("adjutant.operations.process.worker_start", start_worker)
+        monkeypatch.setattr(
+            "adjutant.lifecycle.control._start_telegram_service",
+            start_listener,
+        )
+
+        result = start(adj)
+
+        start_worker.assert_not_called()
+        start_listener.assert_not_called()
+        assert "KILLED" in result
+        assert "adjutant startup" in result
+
+    def test_missing_adj_dir(self, monkeypatch):
+        monkeypatch.delenv("ADJ_DIR", raising=False)
+        with pytest.raises(RuntimeError):
+            start()
 
 
 # ---------------------------------------------------------------------------

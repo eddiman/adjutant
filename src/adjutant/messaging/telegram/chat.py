@@ -173,7 +173,12 @@ def touch_session(adj_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def run_chat(message: str, adj_dir: Path) -> str:
+async def run_chat(
+    message: str,
+    adj_dir: Path,
+    *,
+    correlation_id: str | None = None,
+) -> str:
     """Send a message to the LLM backend and return the plain-text reply.
 
     Manages session continuity automatically. Uses the model from
@@ -182,6 +187,7 @@ async def run_chat(message: str, adj_dir: Path) -> str:
     Args:
         message: The user's message text.
         adj_dir: Adjutant root directory.
+        correlation_id: Stable identifier used to join Telegram and backend logs.
 
     Returns:
         The reply text, or an appropriate error string.
@@ -211,19 +217,26 @@ async def run_chat(message: str, adj_dir: Path) -> str:
             variant=resolved.variant,
             session_id=existing_session,
             timeout=chat_timeout,
+            correlation_id=correlation_id,
         )
     except BackendNotFoundError:
         return "LLM backend is not available. Please check your installation."
 
     if result.timed_out:
-        adj_log("telegram", "Chat timed out after 240s")
+        adj_log(
+            "telegram",
+            f"Chat id={result.correlation_id or correlation_id} timed out after {chat_timeout}s",
+        )
         if resolved.model.startswith("anthropic/"):
             return (
-                "Request timed out after 240s. If this keeps happening, you may have hit your "
-                "Anthropic 5-hour usage limit — check usage.anthropic.com. "
+                f"Request timed out after {chat_timeout}s. If this keeps happening, you may "
+                "have hit your Anthropic 5-hour usage limit. Check usage.anthropic.com. "
                 "Otherwise the server may just be slow; try again in a moment."
             )
-        return "Request timed out after 240s — the AI server may be slow. Try again in a moment."
+        return (
+            f"Request timed out after {chat_timeout}s. The AI server may be slow. "
+            "Try again in a moment."
+        )
 
     if result.error_type == "model_not_found":
         return (

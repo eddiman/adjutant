@@ -111,6 +111,36 @@ journal:
   news_retention_days: 14
   log_max_size_kb: 5120               # rotate adjutant.log above 5MB
 
+operations:
+  enabled: false                      # route natural-language Telegram work durably
+  debug: false                        # show operation IDs and status edits in Telegram
+  worker_concurrency: 2               # maximum active operations
+  poll_interval_seconds: 0.5
+  delivery_max_attempts: 8
+  delivery_retry_base_seconds: 2.0
+  timeouts:
+    acknowledgement_target_seconds: 2.0
+    startup_seconds: 60
+    connection_seconds: 30
+    progress_warning_seconds: 90
+    runtime_seconds: 1800             # operation ceiling, separate from legacy chat timeout
+    cancellation_grace_seconds: 10
+    lease_seconds: 90
+  retention:
+    completed_days: 30
+    events_days: 14
+    deliveries_days: 30
+    backend_sessions_days: 30
+  persistent_opencode:
+    enabled: false                    # independent experiment flag
+    idle_timeout_seconds: 1200
+    startup_timeout_seconds: 30
+    health_interval_seconds: 10
+    restart_backoff_seconds: 5
+    username: opencode
+    soft_memory_mb: null
+    hard_memory_mb: null
+
 debug:
   dry_run: false
   verbose_logging: false
@@ -139,6 +169,36 @@ debug:
 **`notifications.max_per_day`** — Adjutant respects this limit when sending proactive notifications. It will batch and suppress rather than spam.
 
 **`journal.log_max_size_kb`** — When `adjutant.log` exceeds this size, `adjutant rotate` will compress and rotate it. Default is 5MB.
+
+**`operations.enabled`** — Starts the supervised operation worker and routes natural-language messages, photos, pulse, review, tracked KB work, and the web dashboard's pulse/review actions through durable acceptance. The listener commits natural-language and photo operations together with the Telegram offset.
+
+**`operations.debug`** — Shows automatic operation-ID acknowledgements and lifecycle status edits in Telegram. It defaults to `false`. The worker still sends `typing` while it runs and delivers the final reply when debug output is disabled. Explicit `/operations` and `/operation <id>` inspection remains available. Restart Adjutant after changing this flag.
+
+**`operations.worker_concurrency`** — Limits active operations in the separate worker process. Conversation-session serialization and explicit dependencies can reduce actual parallelism below this ceiling.
+
+**`operations.timeouts.runtime_seconds`** — Sets the maximum duration for a durable operation. This is separate from the legacy `messaging.telegram.chat_timeout_seconds` used when durable operations are disabled.
+
+**`operations.timeouts.acknowledgement_target_seconds`** — Sets the observation target for committing a Telegram operation and, when debug output is enabled, sending its acknowledgement. Exceeding it produces a timing warning; it does not discard accepted work.
+
+**`operations.timeouts.startup_seconds`** — Limits backend process creation before execution begins. A startup timeout is reported separately from the operation runtime ceiling.
+
+**`operations.timeouts.connection_seconds`** — Limits a connect or reconnect attempt for transports that support attachment. The one-process-per-call transport does not open a separate backend connection.
+
+**`operations.timeouts.progress_warning_seconds`** — Controls when a running operation records and delivers a quiet-progress warning. Quiet work continues; silence alone does not terminate it.
+
+**`operations.timeouts.cancellation_grace_seconds`** — Controls how long the worker waits for cooperative backend cancellation before owned-process cleanup finishes.
+
+**`operations.timeouts.lease_seconds`** — Sets how long a worker owns an operation without renewal. On restart, expired read-only work can be queued again. Work with uncertain external effects enters reconciliation instead of being replayed.
+
+**`operations.delivery_max_attempts`** and **`delivery_retry_base_seconds`** — Control exponential retries for failed or ambiguous Telegram sends. Adjutant stores the complete result before it attempts delivery.
+
+**`operations.retention.*`** — Sets independent ages for terminal operation results, event rows, delivery receipts, and Adjutant-owned OpenCode sessions. Session cleanup uses only session IDs recorded on Adjutant execution attempts. A failed session deletion protects its operation evidence for a later retry.
+
+**`operations.persistent_opencode.enabled`** — Attaches OpenCode operation calls to an authenticated loopback `opencode serve` process. Adjutant records PID creation time before signalling the process, checks `/global/health`, uses the documented session abort endpoint on cancellation, and never replays an uncertain attached execution. This flag is independent from `operations.enabled` so the durable worker can run with one CLI process per call.
+
+**`operations.persistent_opencode.idle_timeout_seconds`** — Stops an unused server after the configured interval. The next operation starts a new owned instance.
+
+**`operations.persistent_opencode.soft_memory_mb`** and **`hard_memory_mb`** — Apply to the server and all descendants. The soft limit drains existing work; new assignments use an isolated CLI process until maintenance stops the drained server. The hard limit may stop the owned process group immediately; affected unknown or mutating operations require reconciliation. Leave the hard limit unset until representative nested-tool workloads establish a safe emergency threshold for the host.
 
 ---
 

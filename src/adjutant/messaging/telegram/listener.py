@@ -7,9 +7,9 @@ Responsibilities (and nothing else):
   2. Acquire single-instance lock (PidLock)
   3. Write own PID into the lock directory
   4. Poll Telegram getUpdates (long-poll, timeout=10s)
-  5. Process ALL updates in each batch (sequentially)
-  6. Advance offset past ALL updates
-  7. Route to dispatch_message / dispatch_photo
+  5. Durably accept natural-language work and its offset in one transaction
+  6. Process control commands and photos sequentially
+  7. Advance offsets only after each update is accepted or handled
   8. Run opencode_reap every 6 cycles (~1 minute)
   9. Release lock and clean up on exit
 
@@ -26,6 +26,7 @@ import asyncio
 import contextlib
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -128,8 +129,22 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
 
     # --- State ---
     offset = _load_offset(adj_dir)
-    last_processed_id = 0
     reap_counter = 0
+    from adjutant.core.config import load_typed_config
+
+    config = load_typed_config(adj_dir / "adjutant.yaml")
+    durable_operations = config.operations.enabled
+    operation_service = None
+    bot_id = bot_token.split(":", maxsplit=1)[0]
+    if durable_operations:
+        from adjutant.operations.service import OperationService
+
+        operation_service = OperationService(adj_dir)
+        legacy_offset = offset
+        offset = operation_service.store.get_telegram_offset(bot_id, default=legacy_offset)
+        if offset < legacy_offset:
+            offset = legacy_offset
+            operation_service.store.advance_telegram_offset(bot_id, offset)
 
     adj_log("telegram", f"Listener started (offset={offset})")
 
@@ -159,34 +174,29 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                 await asyncio.sleep(1)
                 continue
 
-            # Always advance offset past ALL returned updates
-            last_update = updates[-1]
-            last_update_id: int | None = last_update.get("update_id")
-            if last_update_id is not None:
-                new_offset = last_update_id + 1
-                if new_offset != offset:
-                    offset = new_offset
-                    _save_offset(adj_dir, offset)
-
-            from adjutant.messaging.dispatch import dispatch_message, dispatch_photo
+            from adjutant.messaging.dispatch import (
+                _check_rate_limit,
+                dispatch_message,
+                dispatch_photo,
+            )
+            from adjutant.messaging.telegram.send import msg_send_text
 
             # Process ALL updates in the batch sequentially
-            skipped = 0
             for update in updates:
                 update_id: int | None = update.get("update_id")
-
-                # Deduplicate: skip if we already processed this update_id
-                if update_id is not None and update_id <= last_processed_id:
-                    skipped += 1
+                if update_id is None:
                     continue
-                if update_id is not None:
-                    last_processed_id = update_id
+                next_offset = update_id + 1
 
                 message = update.get("message") or {}
                 msg_chat_id = (message.get("chat") or {}).get("id")
                 message_id = message.get("message_id")
 
                 if not msg_chat_id or not message_id:
+                    if operation_service is not None:
+                        operation_service.store.advance_telegram_offset(bot_id, next_offset)
+                    offset = max(offset, next_offset)
+                    _save_offset(adj_dir, offset)
                     continue
 
                 # Photo or text?
@@ -196,32 +206,125 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                     file_id = photo[-1].get("file_id") if photo else None
                     caption = message.get("caption") or ""
                     if file_id:
-                        await dispatch_photo(
-                            str(msg_chat_id),
-                            message_id,
-                            file_id,
-                            adj_dir,
-                            bot_token=bot_token,
-                            chat_id=chat_id,
-                            caption=caption,
-                        )
+                        if operation_service is not None:
+                            if str(msg_chat_id) != str(chat_id):
+                                adj_log("messaging", f"Rejected unauthorized sender: {msg_chat_id}")
+                            elif not _check_rate_limit(adj_dir):
+                                msg_send_text(
+                                    "I'm receiving messages too quickly. Please wait a moment "
+                                    "before sending another.",
+                                    message_id,
+                                    bot_token=bot_token,
+                                    chat_id=chat_id,
+                                )
+                            else:
+                                operation, inserted = operation_service.accept_telegram_photo(
+                                    bot_id=bot_id,
+                                    update_id=update_id,
+                                    next_offset=next_offset,
+                                    chat_id=str(msg_chat_id),
+                                    message_id=message_id,
+                                    file_id=file_id,
+                                    caption=caption,
+                                    thread_id=message.get("message_thread_id"),
+                                    media_group_id=message.get("media_group_id"),
+                                )
+                                if inserted and config.operations.debug:
+                                    receipt = msg_send_text(
+                                        f"Accepted photo as `{operation.id}`.",
+                                        message_id,
+                                        bot_token=bot_token,
+                                        chat_id=chat_id,
+                                    )
+                                    if receipt.delivered and receipt.message_id is not None:
+                                        operation_service.store.set_status_message_id(
+                                            operation.id,
+                                            receipt.message_id,
+                                        )
+                        else:
+                            await dispatch_photo(
+                                str(msg_chat_id),
+                                message_id,
+                                file_id,
+                                adj_dir,
+                                bot_token=bot_token,
+                                chat_id=chat_id,
+                                caption=caption,
+                            )
                 else:
                     text = message.get("text") or ""
                     if text:
-                        await dispatch_message(
-                            text,
-                            message_id,
-                            str(msg_chat_id),
-                            adj_dir,
-                            bot_token=bot_token,
-                            chat_id=chat_id,
-                        )
+                        if operation_service is not None and not text.startswith("/"):
+                            if str(msg_chat_id) != str(chat_id):
+                                adj_log("messaging", f"Rejected unauthorized sender: {msg_chat_id}")
+                                operation_service.store.advance_telegram_offset(bot_id, next_offset)
+                            elif not _check_rate_limit(adj_dir):
+                                msg_send_text(
+                                    "I'm receiving messages too quickly. Please wait a moment "
+                                    "before sending another.",
+                                    message_id,
+                                    bot_token=bot_token,
+                                    chat_id=chat_id,
+                                )
+                                operation_service.store.advance_telegram_offset(bot_id, next_offset)
+                            else:
+                                acceptance_started = time.monotonic()
+                                operation, inserted = operation_service.accept_telegram_chat(
+                                    bot_id=bot_id,
+                                    update_id=update_id,
+                                    next_offset=next_offset,
+                                    chat_id=str(msg_chat_id),
+                                    message_id=message_id,
+                                    text=text,
+                                    thread_id=message.get("message_thread_id"),
+                                    reply_to_message_id=(message.get("reply_to_message") or {}).get(
+                                        "message_id"
+                                    ),
+                                )
+                                if inserted:
+                                    acknowledgement_delivered = False
+                                    if config.operations.debug:
+                                        receipt = msg_send_text(
+                                            f"Accepted as `{operation.id}`.",
+                                            message_id,
+                                            bot_token=bot_token,
+                                            chat_id=chat_id,
+                                        )
+                                        acknowledgement_delivered = receipt.delivered
+                                        if receipt.delivered and receipt.message_id is not None:
+                                            operation_service.store.set_status_message_id(
+                                                operation.id,
+                                                receipt.message_id,
+                                            )
+                                    adj_log(
+                                        "operations",
+                                        f"Accepted {operation.id} update={update_id} "
+                                        f"debug_ack_delivered={acknowledgement_delivered}",
+                                    )
+                                    acknowledgement_seconds = time.monotonic() - acceptance_started
+                                    if (
+                                        acknowledgement_seconds
+                                        > config.operations.timeouts.acknowledgement_target_seconds
+                                    ):
+                                        adj_log(
+                                            "operations",
+                                            f"Acknowledgement target exceeded for {operation.id}: "
+                                            f"{acknowledgement_seconds:.3f}s",
+                                        )
+                        else:
+                            await dispatch_message(
+                                text,
+                                message_id,
+                                str(msg_chat_id),
+                                adj_dir,
+                                bot_token=bot_token,
+                                chat_id=chat_id,
+                            )
 
-            if skipped:
-                adj_log(
-                    "telegram",
-                    f"Skipped {skipped} duplicate update(s) (already processed)",
-                )
+                if operation_service is not None:
+                    operation_service.store.advance_telegram_offset(bot_id, next_offset)
+                offset = max(offset, next_offset)
+                _save_offset(adj_dir, offset)
 
     finally:
         lock.release()

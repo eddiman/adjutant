@@ -68,7 +68,8 @@ def _load_model_config(adj_dir: Path) -> tuple[dict[str, Any], str | None]:
     if not isinstance(data, dict):
         return (
             {},
-            "Warning: `adjutant.yaml` must contain a YAML mapping, so built-in tier defaults are shown.",
+            "Warning: `adjutant.yaml` must contain a YAML mapping, so built-in "
+            "tier defaults are shown.",
         )
 
     return data, None
@@ -192,6 +193,71 @@ async def _run_opencode_prompt(
     return reply[:3800]
 
 
+def _submit_durable_prompt(
+    prompt_path: Path,
+    *,
+    action: str,
+    message_id: int,
+    adj_dir: Path,
+    model_spec: str,
+    bot_token: str,
+    chat_id: str,
+) -> bool:
+    """Submit a Telegram autonomy prompt when durable operations are enabled."""
+    from adjutant.core.config import load_config, load_typed_config
+
+    typed = load_typed_config(adj_dir / "adjutant.yaml")
+    if not typed.operations.enabled:
+        return False
+    from adjutant.messaging.telegram.send import msg_send_text
+    from adjutant.operations.models import SideEffectClass
+    from adjutant.operations.service import OperationService
+
+    if not prompt_path.is_file():
+        msg_send_text(
+            f"I can't find the prompt at {prompt_path}.",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return True
+    resolved = resolve_model_spec(
+        model_spec,
+        adj_dir / "state",
+        load_config(adj_dir / "adjutant.yaml"),
+    )
+    service = OperationService(adj_dir)
+    operation = service.submit(
+        kind=action,
+        source="telegram",
+        payload={
+            "text": prompt_path.read_text(),
+            "action": action,
+            "reply_to_message_id": message_id,
+        },
+        side_effect_class=SideEffectClass.UNKNOWN,
+        backend=typed.llm.backend,
+        model=resolved.model,
+        variant=resolved.variant,
+        workdir=str(adj_dir),
+        telegram_chat_id=str(chat_id),
+        telegram_message_id=message_id,
+    )
+    if typed.operations.debug:
+        receipt = msg_send_text(
+            f"Accepted {action} as `{operation.id}`.",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        if (
+            getattr(receipt, "delivered", False)
+            and getattr(receipt, "message_id", None) is not None
+        ):
+            service.store.set_status_message_id(operation.id, receipt.message_id)
+    return True
+
+
 def _get_model(adj_dir: Path) -> str:
     """Get the current chat model."""
     from adjutant.messaging.telegram.chat import get_model
@@ -220,7 +286,142 @@ async def cmd_status(
         adj_log("telegram", f"cmd_status error: {exc}")
         status_output = "Could not retrieve status."
 
+    try:
+        from adjutant.core.config import load_typed_config
+        from adjutant.operations.models import OperationState
+        from adjutant.operations.store import OperationStore
+
+        config = load_typed_config(adj_dir / "adjutant.yaml")
+        database_path = adj_dir / "state" / "operations.sqlite3"
+        if not config.operations.enabled and not database_path.is_file():
+            raise FileNotFoundError
+        store = OperationStore(adj_dir)
+        queued = len(store.list_operations(states=(OperationState.QUEUED,), limit=1000))
+        active = len(
+            store.list_operations(
+                states=(
+                    OperationState.STARTING,
+                    OperationState.RUNNING,
+                    OperationState.WAITING_CHILDREN,
+                    OperationState.WAITING_INPUT,
+                    OperationState.CANCEL_REQUESTED,
+                    OperationState.RECONCILING,
+                ),
+                limit=1000,
+            )
+        )
+        status_output += f"\n\nDurable operations: {active} active, {queued} queued"
+    except FileNotFoundError:
+        pass
+    except Exception as exc:  # noqa: BLE001 - status must survive an unavailable store
+        adj_log("telegram", f"operation status unavailable: {exc}")
+
     _send(status_output, message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+async def cmd_operations(
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """List recent durable operations without invoking a model."""
+    from adjutant.operations.store import OperationStore
+
+    operations = OperationStore(adj_dir).list_operations(limit=10)
+    if not operations:
+        message = "No durable operations have been recorded."
+    else:
+        lines = ["Recent operations:"]
+        for operation in operations:
+            lines.append(f"- `{operation.id}`: {operation.state.value} ({operation.kind})")
+        message = "\n".join(lines)
+    _send(message, message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+async def cmd_operation(
+    operation_id: str,
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Show one operation and its latest observable events."""
+    from adjutant.operations.store import OperationStore
+
+    operation_id = operation_id.strip()
+    if not operation_id:
+        _send(
+            "Usage: /operation <operation-id>",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return
+    store = OperationStore(adj_dir)
+    operation = store.get_operation(operation_id)
+    if operation is None:
+        _send(
+            f"Operation `{operation_id}` was not found.",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return
+
+    lines = [
+        f"Operation `{operation.id}`",
+        f"State: {operation.state.value}",
+        f"Type: {operation.kind}",
+        f"Attempts: {operation.attempt_count}",
+    ]
+    if operation.error_type:
+        lines.append(f"Error: {operation.error_type}: {operation.error_message or ''}")
+    events = store.list_events(operation.id)
+    if events:
+        lines.append("Recent events:")
+        for event in events[-5:]:
+            detail = event.public_message or event.event_type
+            lines.append(f"- {event.event_type}: {detail}")
+    if operation.result_text:
+        result = operation.result_text
+        if len(result) > 2200:
+            result = (
+                result[:2200] + "\n… result truncated here; final delivery keeps the full text."
+            )
+        lines.extend(["", "Result:", result])
+    _send("\n".join(lines), message_id, bot_token=bot_token, chat_id=chat_id)
+
+
+async def cmd_cancel_operation(
+    operation_id: str,
+    message_id: int,
+    adj_dir: Path,
+    *,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Request cancellation without waiting for the model worker."""
+    from adjutant.operations.store import OperationStore
+
+    operation_id = operation_id.strip()
+    if not operation_id:
+        _send(
+            "Usage: /cancel <operation-id>",
+            message_id,
+            bot_token=bot_token,
+            chat_id=chat_id,
+        )
+        return
+    try:
+        operation = OperationStore(adj_dir).request_cancel(operation_id)
+    except KeyError:
+        message = f"Operation `{operation_id}` was not found."
+    else:
+        message = f"Operation `{operation.id}` is now {operation.state.value}."
+    _send(message, message_id, bot_token=bot_token, chat_id=chat_id)
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +577,16 @@ async def cmd_pulse(
 
     pulse_prompt = adj_dir / "prompts" / "pulse.md"
     model = _get_model(adj_dir)
+    if _submit_durable_prompt(
+        pulse_prompt,
+        action="pulse",
+        message_id=message_id,
+        adj_dir=adj_dir,
+        model_spec=model,
+        bot_token=bot_token,
+        chat_id=chat_id,
+    ):
+        return
     set_active_operation("pulse", "telegram", adj_dir=adj_dir)
     try:
         result = await _run_opencode_prompt(pulse_prompt, 240.0, adj_dir, model)
@@ -587,6 +798,16 @@ async def cmd_reflect_confirm(
 
     reflect_prompt = adj_dir / "prompts" / "review.md"
     model = "medium"
+    if _submit_durable_prompt(
+        reflect_prompt,
+        action="review",
+        message_id=message_id,
+        adj_dir=adj_dir,
+        model_spec=model,
+        bot_token=bot_token,
+        chat_id=chat_id,
+    ):
+        return
     set_active_operation("review", "telegram", adj_dir=adj_dir)
     try:
         result = await _run_opencode_prompt(reflect_prompt, 300.0, adj_dir, model)
@@ -621,6 +842,9 @@ and I'll look it up and answer.
 Or use a command:
 /status — I'll tell you if I'm running or paused, show \
 registered scheduled jobs, and when I last checked in.
+/operations — List recent durable work and its state.
+/operation <id> — Show one operation, recent progress, and its stored result.
+/cancel <id> — Request cancellation of queued or running work.
 /pulse — I'll run a quick check across your projects \
 and summarise what I find.
 /brief — Morning brief: deadlines, priorities, and \
@@ -815,7 +1039,11 @@ async def cmd_screenshot(
         session_msg = (
             f"[SCREENSHOT] User requested screenshot of {url}. Vision analysis: {vision_result}"
         )
-        await run_chat(session_msg, adj_dir)
+        await run_chat(
+            session_msg,
+            adj_dir,
+            correlation_id=f"telegram-{message_id}-screenshot",
+        )
     except Exception as exc:
         adj_log("telegram", f"Screenshot session injection failed: {exc}")
 
@@ -933,6 +1161,45 @@ async def cmd_kb(
             )
             return
 
+        from adjutant.core.config import load_typed_config
+
+        operations_config = load_typed_config(adj_dir / "adjutant.yaml").operations
+        if operations_config.enabled:
+            try:
+                from adjutant.capabilities.kb.query import kb_submit_query
+                from adjutant.operations.process import worker_start
+                from adjutant.operations.store import OperationStore
+
+                operation = kb_submit_query(
+                    kb_name,
+                    query,
+                    adj_dir,
+                    telegram_chat_id=chat_id,
+                    telegram_message_id=message_id,
+                )
+                worker_start(adj_dir)
+                if operations_config.debug:
+                    receipt = msg_send_text(
+                        f"[{kb_name}] Accepted as `{operation.id}`.",
+                        message_id,
+                        bot_token=bot_token,
+                        chat_id=chat_id,
+                    )
+                    if receipt.delivered and receipt.message_id is not None:
+                        OperationStore(adj_dir).set_status_message_id(
+                            operation.id,
+                            receipt.message_id,
+                        )
+            except Exception as exc:
+                adj_log("telegram", f"KB query submission error for {kb_name}: {exc}")
+                _send(
+                    f"KB query submission failed: {exc}",
+                    message_id,
+                    bot_token=bot_token,
+                    chat_id=chat_id,
+                )
+            return
+
         msg_react(message_id, "👀", bot_token=bot_token, chat_id=chat_id)
 
         suffix = f"kb_{message_id}"
@@ -1039,6 +1306,46 @@ async def cmd_kb(
                 bot_token=bot_token,
                 chat_id=chat_id,
             )
+            return
+
+        from adjutant.core.config import load_typed_config
+
+        operations_config = load_typed_config(adj_dir / "adjutant.yaml").operations
+        if operations_config.enabled:
+            try:
+                from adjutant.capabilities.kb.query import kb_submit_write
+                from adjutant.operations.process import worker_start
+                from adjutant.operations.store import OperationStore
+
+                operation = kb_submit_write(
+                    kb_name,
+                    instruction,
+                    adj_dir,
+                    telegram_chat_id=chat_id,
+                    telegram_message_id=message_id,
+                )
+                worker_start(adj_dir)
+                if operations_config.debug:
+                    receipt = msg_send_text(
+                        f"[{kb_name}] Accepted as `{operation.id}`. Completion will include "
+                        "verification evidence.",
+                        message_id,
+                        bot_token=bot_token,
+                        chat_id=chat_id,
+                    )
+                    if receipt.delivered and receipt.message_id is not None:
+                        OperationStore(adj_dir).set_status_message_id(
+                            operation.id,
+                            receipt.message_id,
+                        )
+            except Exception as exc:
+                adj_log("telegram", f"KB write submission error for {kb_name}: {exc}")
+                _send(
+                    f"KB write submission failed: {exc}",
+                    message_id,
+                    bot_token=bot_token,
+                    chat_id=chat_id,
+                )
             return
 
         msg_react(message_id, "👀", bot_token=bot_token, chat_id=chat_id)

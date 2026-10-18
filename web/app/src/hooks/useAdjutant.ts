@@ -4,9 +4,11 @@ export type LifecycleAction = 'pause' | 'resume' | 'pulse' | 'review';
 export type ActionState = 'idle' | 'running' | 'success' | 'error';
 
 interface ActiveOperation {
+  id?: string;
   action: string;
-  started_at: string;
-  pid: number;
+  state?: string;
+  started_at: string | null;
+  pid?: number;
   source: string;
 }
 
@@ -29,6 +31,7 @@ export interface AdjutantStatus {
   processRunning?: boolean;
   listenerPid?: number;
   activeOperation?: ActiveOperation | null;
+  activeOperations?: ActiveOperation[];
   lastHeartbeat?: LastHeartbeat | null;
 }
 
@@ -349,7 +352,7 @@ export function useAdjutant(): AdjutantData {
 
       // For pause/resume: refresh status immediately (they're synchronous).
       // For pulse/review: the detached process may not have written the
-      // active_operation marker yet, so fetch once now and again after a
+      // active operation snapshot yet, so fetch once now and again after a
       // short delay.  The second fetch triggers the polling effect.
       await fetchStatus();
       if (action === 'pulse' || action === 'review') {
@@ -378,9 +381,12 @@ export function useAdjutant(): AdjutantData {
     review: 'idle',
   };
 
-  const activeAction = status?.activeOperation?.action;
-  if (activeAction && activeAction in actionStates) {
-    actionStates[activeAction as LifecycleAction] = 'running';
+  const activeOperations = status?.activeOperations
+    ?? (status?.activeOperation ? [status.activeOperation] : []);
+  for (const operation of activeOperations) {
+    if (operation.action in actionStates) {
+      actionStates[operation.action as LifecycleAction] = 'running';
+    }
   }
 
   // Override with recently-completed (brief "Done" display)

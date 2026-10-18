@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from adjutant.lib.ndjson import NDJSONResult, check_model_not_found, parse_ndjson
+from adjutant.lib.ndjson import (
+    IncrementalNDJSONParser,
+    check_model_not_found,
+    parse_ndjson,
+)
 
 pytestmark = pytest.mark.backend_opencode
 
@@ -124,3 +128,16 @@ class TestCheckModelNotFound:
 
     def test_empty_inputs(self):
         assert check_model_not_found("", stderr="") is False
+
+
+class TestIncrementalNdjson:
+    def test_bounds_retained_raw_events_without_losing_text(self) -> None:
+        parser = IncrementalNDJSONParser(retain_events=2)
+        for index in range(5):
+            parser.feed_line(f'{{"type":"text","part":{{"text":"{index}"}}}}')
+
+        result = parser.result()
+
+        assert result.text == "01234"
+        assert len(result.events) == 2
+        assert result.events[0]["part"]["text"] == "3"

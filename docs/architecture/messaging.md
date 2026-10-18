@@ -52,7 +52,9 @@ Before falling through to chat, the dispatcher checks whether the message matche
 
 All non-command text and photo turns are forwarded as ordered `asyncio.Task` instances. If a new conversational turn arrives before the previous one completes, it waits for the accepted earlier turns. This preserves backend session order, keeps adjacent context available, and avoids retrying an external mutation whose original task was cancelled after the write succeeded.
 
-For photos, the vision model receives an analysis-only prompt. Its output is wrapped as untrusted attachment evidence and passed with the user's caption to the main Adjutant agent. Only the main agent's response is sent to the user. Observable attachment facts remain available to the conversation, while claims in vision text about external actions are not treated as proof.
+For photos, the vision model receives an analysis-only prompt. Its output is wrapped as untrusted attachment evidence and passed with the user's caption to the main Adjutant agent. Only the main agent's response is sent to the user. Observable attachment facts remain available to the conversation, while claims in vision text about external actions are not treated as proof. The durable operation stores the downloaded path and Telegram media-group identifier so a later confirmation can reuse the same files.
+
+For a photo-backed issue request, the project KB creates or updates and verifies the issue from the extracted facts. Telegram and GitHub do not share attachments, so the issue must not say that the photo is attached at this stage. After a successful KB write, the worker guarantees a follow-up question asking whether the saved photo set should be uploaded. The agent uploads only after the user confirms and must then verify GitHub-hosted attachment links in the issue or its comments.
 
 ---
 

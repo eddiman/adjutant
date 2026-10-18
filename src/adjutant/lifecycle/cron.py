@@ -17,12 +17,14 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from adjutant.core.backend import BackendNotFoundError, get_backend
 from adjutant.core.lockfiles import clear_active_operation, set_active_operation
 from adjutant.core.paths import AdjutantDirNotFoundError, get_adj_dir, init_adj_dir
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _format_heartbeat(data: dict[str, Any], action: str, source: str) -> str:  # noqa: C901
@@ -121,9 +123,9 @@ def run_cron_prompt(
     if adj_dir is None:
         try:
             adj_dir = get_adj_dir()
-        except AdjutantDirNotFoundError:
+        except AdjutantDirNotFoundError as exc:
             sys.stderr.write("ERROR: ADJ_DIR not set\n")
-            raise SystemExit(1)
+            raise SystemExit(1) from exc
 
     from adjutant.core.lockfiles import is_paused
 
@@ -135,6 +137,38 @@ def run_cron_prompt(
         raise SystemExit(1)
 
     prompt_text = prompt_file.read_text()
+
+    from adjutant.core.config import load_config, load_typed_config
+
+    typed_config = load_typed_config(adj_dir / "adjutant.yaml")
+    if typed_config.operations.enabled and action in {"pulse", "review"}:
+        from adjutant.core.model import resolve_model_spec
+        from adjutant.operations.models import SideEffectClass
+        from adjutant.operations.process import worker_start
+        from adjutant.operations.service import OperationService
+
+        model_spec = (
+            "medium" if action == "review" else typed_config.messaging.telegram.default_model
+        )
+        resolved = resolve_model_spec(
+            model_spec,
+            adj_dir / "state",
+            load_config(adj_dir / "adjutant.yaml"),
+            default_to_chat=True,
+        )
+        operation = OperationService(adj_dir).submit(
+            kind=action,
+            source=source,
+            payload={"text": prompt_text, "action": action},
+            side_effect_class=SideEffectClass.UNKNOWN,
+            backend=typed_config.llm.backend,
+            model=resolved.model,
+            variant=resolved.variant,
+            workdir=str(adj_dir),
+        )
+        worker_start(adj_dir)
+        sys.stdout.write(f"Accepted {action} as {operation.id}\n")
+        raise SystemExit(0)
 
     try:
         backend = get_backend()

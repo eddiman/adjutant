@@ -12,10 +12,14 @@ from adjutant.core.backend import LLMResult
 from adjutant.messaging.telegram.commands import (
     _journal_append,
     _run_opencode_prompt,
+    _submit_durable_prompt,
+    cmd_cancel_operation,
     cmd_help,
     cmd_kb,
     cmd_kill,
     cmd_model,
+    cmd_operation,
+    cmd_operations,
     cmd_pause,
     cmd_reflect_confirm,
     cmd_reflect_request,
@@ -87,6 +91,71 @@ class TestRunOpencodePrompt:
         }
 
 
+def test_submit_durable_prompt_records_debug_status_destination(tmp_path: Path) -> None:
+    prompt = tmp_path / "prompts" / "pulse.md"
+    prompt.parent.mkdir(parents=True)
+    prompt.write_text("pulse prompt")
+    (tmp_path / "adjutant.yaml").write_text(
+        "operations:\n  enabled: true\n  debug: true\n"
+    )
+    receipt = __import__(
+        "adjutant.messaging.telegram.send",
+        fromlist=["TelegramDeliveryReceipt"],
+    ).TelegramDeliveryReceipt(delivered=True, message_id=77)
+    resolved = SimpleNamespace(model="openai/test", variant="low")
+
+    with (
+        patch("adjutant.messaging.telegram.send.msg_send_text", return_value=receipt),
+        patch("adjutant.messaging.telegram.commands.resolve_model_spec", return_value=resolved),
+    ):
+        submitted = _submit_durable_prompt(
+            prompt,
+            action="pulse",
+            message_id=5,
+            adj_dir=tmp_path,
+            model_spec="cheap",
+            bot_token=BOT,
+            chat_id=CHAT,
+        )
+
+    from adjutant.operations.store import OperationStore
+
+    operation = OperationStore(tmp_path).list_operations()[0]
+    assert submitted is True
+    assert operation.kind == "pulse"
+    assert operation.telegram_chat_id == CHAT
+    assert operation.status_message_id == 77
+
+
+def test_submit_durable_prompt_hides_status_when_debug_is_disabled(tmp_path: Path) -> None:
+    prompt = tmp_path / "prompts" / "pulse.md"
+    prompt.parent.mkdir(parents=True)
+    prompt.write_text("pulse prompt")
+    (tmp_path / "adjutant.yaml").write_text("operations:\n  enabled: true\n  debug: false\n")
+    resolved = SimpleNamespace(model="openai/test", variant="low")
+
+    with (
+        patch("adjutant.messaging.telegram.send.msg_send_text") as send,
+        patch("adjutant.messaging.telegram.commands.resolve_model_spec", return_value=resolved),
+    ):
+        submitted = _submit_durable_prompt(
+            prompt,
+            action="pulse",
+            message_id=5,
+            adj_dir=tmp_path,
+            model_spec="cheap",
+            bot_token=BOT,
+            chat_id=CHAT,
+        )
+
+    from adjutant.operations.store import OperationStore
+
+    operation = OperationStore(tmp_path).list_operations()[0]
+    assert submitted is True
+    assert operation.status_message_id is None
+    send.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # _journal_append
 # ---------------------------------------------------------------------------
@@ -136,6 +205,56 @@ class TestCmdStatus:
             ):
                 await cmd_status(1, tmp_path, bot_token=BOT, chat_id=CHAT)
         assert len(sent) == 1
+
+
+class TestOperationCommands:
+    @pytest.mark.asyncio
+    async def test_lists_and_inspects_operations(self, tmp_path: Path) -> None:
+        from adjutant.operations.store import OperationStore
+
+        store = OperationStore(tmp_path)
+        operation = store.create_operation(kind="chat", source="test", payload={})
+        store.append_event(operation.id, "queued", public_message="Accepted")
+        mock_send, sent = _capture_send()
+
+        with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
+            await cmd_operations(1, tmp_path, bot_token=BOT, chat_id=CHAT)
+            await cmd_operation(operation.id, 2, tmp_path, bot_token=BOT, chat_id=CHAT)
+
+        assert operation.id in sent[0]
+        assert "State: queued" in sent[1]
+        assert "Accepted" in sent[1]
+
+    @pytest.mark.asyncio
+    async def test_cancel_command_is_immediate(self, tmp_path: Path) -> None:
+        from adjutant.operations.models import OperationState
+        from adjutant.operations.store import OperationStore
+
+        store = OperationStore(tmp_path)
+        operation = store.create_operation(kind="chat", source="test", payload={})
+        mock_send, sent = _capture_send()
+
+        with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
+            await cmd_cancel_operation(
+                operation.id,
+                1,
+                tmp_path,
+                bot_token=BOT,
+                chat_id=CHAT,
+            )
+
+        assert store.get_operation(operation.id).state is OperationState.CANCELLED  # type: ignore[union-attr]
+        assert "cancelled" in sent[0]
+
+    @pytest.mark.asyncio
+    async def test_operation_usage_and_missing_id(self, tmp_path: Path) -> None:
+        mock_send, sent = _capture_send()
+        with patch("adjutant.messaging.telegram.send.msg_send_text", mock_send):
+            await cmd_operation("", 1, tmp_path, bot_token=BOT, chat_id=CHAT)
+            await cmd_cancel_operation("missing", 2, tmp_path, bot_token=BOT, chat_id=CHAT)
+
+        assert "Usage" in sent[0]
+        assert "not found" in sent[1]
 
 
 # ---------------------------------------------------------------------------

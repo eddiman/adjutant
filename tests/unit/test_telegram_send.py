@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
-import threading
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from adjutant.messaging.telegram.send import (
+    _TYPING_THREADS,
+    TelegramDeliveryReceipt,
+    TelegramSender,
     _sanitize,
     _tg_url,
     msg_authorize,
+    msg_edit_text,
     msg_react,
     msg_send_text,
     msg_typing_start,
     msg_typing_stop,
-    TelegramSender,
-    _TYPING_THREADS,
 )
-
 
 BOT = "123:testtoken"
 CHAT = "999"
@@ -62,14 +61,16 @@ class TestTgUrl:
 class TestMsgSendText:
     def test_sends_message(self) -> None:
         mock_client = MagicMock()
+        mock_client.post.return_value = {"ok": True, "result": {"message_id": 123}}
         with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
-            msg_send_text("Hello", bot_token=BOT, chat_id=CHAT)
+            receipt = msg_send_text("Hello", bot_token=BOT, chat_id=CHAT)
         mock_client.post.assert_called_once()
         call_kwargs = mock_client.post.call_args
         payload = call_kwargs[1]["json_data"]
         assert payload["text"] == "Hello"
         assert payload["chat_id"] == CHAT
         assert payload["parse_mode"] == "Markdown"
+        assert receipt == TelegramDeliveryReceipt(delivered=True, message_id=123)
 
     def test_sends_with_reply_to(self) -> None:
         mock_client = MagicMock()
@@ -81,8 +82,10 @@ class TestMsgSendText:
     def test_skips_empty_message(self) -> None:
         mock_client = MagicMock()
         with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
-            msg_send_text("", bot_token=BOT, chat_id=CHAT)
+            receipt = msg_send_text("", bot_token=BOT, chat_id=CHAT)
         mock_client.post.assert_not_called()
+        assert receipt.delivered is False
+        assert receipt.error == "empty_message"
 
     def test_skips_control_char_only_message(self) -> None:
         mock_client = MagicMock()
@@ -94,8 +97,54 @@ class TestMsgSendText:
         mock_client = MagicMock()
         mock_client.post.side_effect = Exception("network error")
         with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
-            # Should not raise
-            msg_send_text("Hello", bot_token=BOT, chat_id=CHAT)
+            receipt = msg_send_text("Hello", bot_token=BOT, chat_id=CHAT)
+        assert receipt.delivered is False
+        assert receipt.uncertain is True
+        assert receipt.error == "network error"
+
+    def test_reports_telegram_rejection(self) -> None:
+        mock_client = MagicMock()
+        mock_client.post.return_value = {"ok": False, "description": "chat not found"}
+        with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
+            receipt = msg_send_text("Hello", bot_token=BOT, chat_id=CHAT)
+        assert receipt.delivered is False
+        assert receipt.uncertain is False
+        assert receipt.error == "chat not found"
+
+    def test_reports_plain_text_fallback(self) -> None:
+        mock_client = MagicMock()
+        mock_client.post.side_effect = [
+            Exception("HTTP 400: can't parse entities"),
+            {"ok": True, "result": {"message_id": 456}},
+        ]
+        with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
+            receipt = msg_send_text("Bad _markdown", bot_token=BOT, chat_id=CHAT)
+        assert receipt.delivered is True
+        assert receipt.message_id == 456
+        assert receipt.used_plain_text_fallback is True
+        assert mock_client.post.call_count == 2
+
+
+class TestMsgEditText:
+    def test_edits_known_message(self) -> None:
+        mock_client = MagicMock()
+        mock_client.post.return_value = {"ok": True, "result": {"message_id": 44}}
+        with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
+            receipt = msg_edit_text(44, "Running", bot_token=BOT, chat_id=CHAT)
+
+        payload = mock_client.post.call_args.kwargs["json_data"]
+        assert payload["message_id"] == 44
+        assert payload["text"] == "Running"
+        assert receipt.delivered is True
+        assert receipt.message_id == 44
+
+    def test_message_not_modified_is_success(self) -> None:
+        mock_client = MagicMock()
+        mock_client.post.side_effect = Exception("400: message is not modified")
+        with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
+            receipt = msg_edit_text(44, "Running", bot_token=BOT, chat_id=CHAT)
+
+        assert receipt == TelegramDeliveryReceipt(delivered=True, message_id=44)
 
 
 class TestMsgReact:
@@ -159,14 +208,16 @@ class TestMsgTyping:
 
     def test_max_duration_auto_stops(self) -> None:
         mock_client = MagicMock()
-        with patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client):
-            with patch("adjutant.messaging.telegram.send.adj_log"):
-                msg_typing_start("ceiling_key", BOT, CHAT, max_duration=0.3)
-                thread, _ = _TYPING_THREADS["ceiling_key"]
-                # wait uses min(4.0, remaining) so the thread wakes up promptly
-                thread.join(timeout=2.0)
-                assert not thread.is_alive(), "Typing thread should auto-stop after max_duration"
-                msg_typing_stop("ceiling_key")
+        with (
+            patch("adjutant.messaging.telegram.send.get_client", return_value=mock_client),
+            patch("adjutant.messaging.telegram.send.adj_log"),
+        ):
+            msg_typing_start("ceiling_key", BOT, CHAT, max_duration=0.3)
+            thread, _ = _TYPING_THREADS["ceiling_key"]
+            # wait uses min(4.0, remaining) so the thread wakes up promptly
+            thread.join(timeout=2.0)
+            assert not thread.is_alive(), "Typing thread should auto-stop after max_duration"
+            msg_typing_stop("ceiling_key")
 
 
 class TestMsgAuthorize:
