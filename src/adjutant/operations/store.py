@@ -579,6 +579,36 @@ class OperationStore:
             raise KeyError(operation_id)
         return self._operation_from_row(row)
 
+    def update_operation_payload(
+        self,
+        operation_id: str,
+        updates: dict[str, Any],
+    ) -> Operation:
+        """Merge framework-owned execution metadata into an operation payload."""
+        self.initialize()
+        now = time.time()
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT payload_json FROM operations WHERE id=?",
+                (operation_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(operation_id)
+            payload = json.loads(row["payload_json"])
+            payload.update(updates)
+            conn.execute(
+                "UPDATE operations SET payload_json=?, updated_at=? WHERE id=?",
+                (_json(payload), now, operation_id),
+            )
+            updated = conn.execute(
+                "SELECT * FROM operations WHERE id=?",
+                (operation_id,),
+            ).fetchone()
+        if updated is None:
+            raise KeyError(operation_id)
+        return self._operation_from_row(updated)
+
     def get_operation(self, operation_id: str) -> Operation | None:
         self.initialize()
         with self._connect() as conn:

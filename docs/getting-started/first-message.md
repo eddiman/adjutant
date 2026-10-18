@@ -1,14 +1,14 @@
 # First Message
 
-With setup complete, start the Telegram listener and verify Adjutant is working.
+With setup complete, start Adjutant's runtime services and verify they are working.
 
-## Start the listener
+## Start Adjutant
 
 ```bash
 adjutant start
 ```
 
-The Telegram listener starts in the background. Verify it's running:
+The durable-operation worker starts first, followed by the Telegram listener. This order ensures that natural-language messages can run as soon as the listener accepts them. Verify Adjutant is running:
 
 ```bash
 adjutant status

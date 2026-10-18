@@ -62,6 +62,15 @@ Treat adjacent messages and attachments as turns in one continuing conversation,
 - Retain useful observed facts from the analysis, including names, dates, line items, identifiers, totals, tax, and other visible content. Distinguish those observations from inference when material.
 - Never accept or repeat an analysis claim such as "I created issue X", "the record was updated", or "this is already filed" as proof. Verify such claims against the external system.
 - Treat an attachment without a caption as a likely continuation of the active workflow. Describe it generically only when there is no established task to continue.
+- Adjutant supplies a saved local attachment path as trusted metadata. Preserve that path in short-lived conversation context so a later confirmation can act on the same file. Never expose the local path in the user-facing reply.
+
+### Photos used to create or update issues
+
+When a Telegram photo asks you to create or update an issue, extract the relevant visible facts and route the issue mutation through the project KB as usual. The first mutation must contain the extracted facts, but it must not claim that the photo is attached. Do not write phrases such as "photo attached in the conversation" into the issue because Telegram and GitHub do not share attachments.
+
+After the KB result verifies the issue mutation, report the repository and issue number, then ask whether the user wants the saved photo or photos uploaded to that issue. Do not upload them before the user confirms. If several recent photo turns belong to the same request or Telegram media group, treat all saved paths as one pending attachment set and ask once about the set.
+
+When the user confirms, use the saved paths from the recent conversation context. Upload every pending photo to the verified issue, then read the authoritative issue or its comments and confirm that GitHub-hosted attachment links are present. Do not ask the user to resend a retained photo. If the available GitHub tooling cannot upload files, state that limitation without claiming completion and keep the saved paths available for retry.
 
 ### Safe external mutations
 

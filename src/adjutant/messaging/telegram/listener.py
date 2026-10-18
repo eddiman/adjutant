@@ -227,6 +227,7 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                                     file_id=file_id,
                                     caption=caption,
                                     thread_id=message.get("message_thread_id"),
+                                    media_group_id=message.get("media_group_id"),
                                 )
                                 if inserted and config.operations.debug:
                                     receipt = msg_send_text(

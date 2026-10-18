@@ -70,12 +70,14 @@ def test_photo_acceptance_is_durable_before_download(tmp_path: Path) -> None:
             message_id=6,
             file_id="telegram-file",
             caption="Read this receipt",
+            media_group_id="album-1",
         )
 
     assert inserted is True
     assert operation.kind == "telegram_photo"
     assert operation.payload["file_id"] == "telegram-file"
     assert operation.payload["caption"] == "Read this receipt"
+    assert operation.payload["media_group_id"] == "album-1"
     assert service.store.get_telegram_offset("bot") == 13
 
 

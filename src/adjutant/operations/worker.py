@@ -194,7 +194,7 @@ class OperationWorker:
 
     async def _prepare_photo_prompt(self, operation: Operation) -> str:
         """Download and extract photo evidence inside the tracked attempt."""
-        from adjutant.capabilities.vision.vision import run_vision
+        from adjutant.capabilities.vision.vision import run_vision_async
         from adjutant.core.config import load_typed_config
         from adjutant.core.env import require_telegram_credentials
         from adjutant.messaging.telegram.photos import (
@@ -219,15 +219,27 @@ class OperationWorker:
         )
         if local_path is None:
             return ""
-        analysis = await asyncio.to_thread(
-            run_vision,
+        media_group_id = str(operation.payload.get("media_group_id") or "") or None
+        self.store.update_operation_payload(
+            operation.id,
+            {
+                "local_attachment_path": str(local_path),
+                "attachment_media_type": "photo",
+            },
+        )
+        analysis = await run_vision_async(
             str(local_path),
             _build_vision_prompt(caption),
             self.adj_dir,
         )
         if not analysis:
             return ""
-        return _build_attachment_message(caption, analysis)
+        return _build_attachment_message(
+            caption,
+            analysis,
+            local_path=local_path,
+            media_group_id=media_group_id,
+        )
 
     async def run_claimed(
         self,
@@ -379,9 +391,10 @@ class OperationWorker:
             state = OperationState.SUCCEEDED
             error_type = None
         text = result.text.strip()
+        execution_children = self.store.list_execution_children(operation.id)
         active_children = [
             child
-            for child in self.store.list_execution_children(operation.id)
+            for child in execution_children
             if not child.state.terminal
         ]
         if state is OperationState.SUCCEEDED and active_children:
@@ -400,10 +413,16 @@ class OperationWorker:
             )
         elif not text:
             text = "The operation finished without a text result."
+        if state is OperationState.SUCCEEDED:
+            text = self._ensure_photo_issue_upload_question(
+                operation,
+                text,
+                execution_children,
+            )
         completed = self._complete(
             running,
             state,
-            result_text=result.text or None,
+            result_text=text or None,
             error_type=error_type,
             error_message=error_type,
             delivery_text=text,
@@ -422,6 +441,33 @@ class OperationWorker:
         event_type = "completed" if state is OperationState.SUCCEEDED else "failed"
         self.store.append_event(operation.id, event_type, public_message=text[:500])
         return completed
+
+    @staticmethod
+    def _ensure_photo_issue_upload_question(
+        operation: Operation,
+        text: str,
+        execution_children: list[Operation],
+    ) -> str:
+        """Guarantee the consent step after a photo-backed KB issue write."""
+        if operation.kind != "telegram_photo":
+            return text
+        completed_issue_write = any(
+            child.kind == "kb_write" and child.state is OperationState.SUCCEEDED
+            for child in execution_children
+        )
+        if not completed_issue_write:
+            return text
+        normalized = text.casefold()
+        asks_about_upload = "?" in text and any(
+            phrase in normalized
+            for phrase in ("upload", "attach", "laste opp", "legge ved")
+        )
+        if asks_about_upload:
+            return text
+        return (
+            f"{text.rstrip()}\n\n"
+            "Should I upload the saved photo or photos to the issue?"
+        )
 
     async def _supervise(
         self,

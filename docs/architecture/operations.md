@@ -13,7 +13,7 @@ When durable operations are enabled, the Telegram listener handles a natural-lan
 
 The `(bot_id, update_id)` primary key makes acceptance idempotent. If Telegram repeats an update, Adjutant returns the existing operation instead of creating another execution.
 
-Photos use the same atomic inbox and offset transaction. The worker downloads the Telegram asset and runs vision extraction inside the tracked attempt. Pulse and review requests from Telegram, cron, and Adjutant Web create ordinary operations and return without holding the caller open.
+Photos use the same atomic inbox and offset transaction. The worker downloads the Telegram asset, persists its local path in the operation payload, and runs vision extraction inside the tracked attempt. The bounded conversation context carries that path and Telegram media-group identifier into a later confirmation turn. Pulse and review requests from Telegram, cron, and Adjutant Web create ordinary operations and return without holding the caller open.
 
 The worker sends Telegram's `typing` action while a Telegram operation is running and stops it in a `finally` block after success, failure, timeout, or cancellation. This activity indicator does not depend on the debug acknowledgement. With `operations.debug: false`, Telegram receives the typing indicator followed by the final reply, without operation IDs or lifecycle status edits. The `/operations` and `/operation <id>` commands remain available for explicit inspection.
 

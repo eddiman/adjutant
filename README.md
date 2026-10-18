@@ -48,7 +48,7 @@ llm:
 ## Lifecycle
 
 ```bash
-adjutant start       # Start the Telegram listener
+adjutant start       # Start the operation worker and Telegram listener
 adjutant stop        # Stop the Telegram listener
 adjutant restart     # Restart all services
 adjutant pause       # Silent pause — disable managed cron and autonomous notifications
@@ -86,7 +86,9 @@ Any other message is treated as natural language and routed to the LLM backend.
 | Command | What it does |
 |---------|-------------|
 | `adjutant setup` | Interactive setup wizard |
-| `adjutant start` / `stop` / `restart` | Manage the Telegram listener |
+| `adjutant start` | Start the operation worker and Telegram listener |
+| `adjutant stop` | Stop the Telegram listener |
+| `adjutant restart` | Restart all runtime services |
 | `adjutant pause` / `resume` / `kill` | Lifecycle control |
 | `adjutant startup` | Full startup / recovery |
 | `adjutant status` / `adjutant doctor` | Status and health checks |

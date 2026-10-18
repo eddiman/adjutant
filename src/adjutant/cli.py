@@ -1,7 +1,7 @@
 """CLI entrypoint — Click-based CLI for Adjutant.
 
 Subcommands:
-  start               — Start the Telegram listener
+  start               — Start all runtime services
   stop                — Stop the Telegram listener
   restart             — Restart all services
   status              — Show operational status
@@ -681,15 +681,15 @@ def kb_cross_query_cmd(ctx: click.Context, question: str, kbs: str) -> None:
 @main.command()
 @click.pass_context
 def start(ctx: click.Context) -> None:
-    """Start the Telegram listener."""
+    """Start all runtime services."""
     adj_dir = ctx.obj.get("adj_dir")
     if adj_dir is None:
         click.echo("Adjutant directory not found. Run setup first.", err=True)
         raise SystemExit(1)
 
-    from adjutant.messaging.telegram.service import listener_start
+    from adjutant.lifecycle.control import start as start_services
 
-    click.echo(listener_start(adj_dir))
+    click.echo(start_services(adj_dir))
 
 
 @main.command()

@@ -137,6 +137,24 @@ class TestStatusCommand:
         assert result.exit_code == 0
 
 
+class TestStartCommand:
+    def test_start_uses_full_runtime_lifecycle(
+        self, runner: CliRunner, adj_dir: Path, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("ADJ_DIR", str(adj_dir))
+        monkeypatch.setenv("ADJUTANT_HOME", str(adj_dir))
+        with patch(
+            "adjutant.lifecycle.control.start",
+            return_value="Operation worker started\nTelegram listener started",
+        ) as start_services:
+            result = runner.invoke(main, ["start"])
+
+        assert result.exit_code == 0, result.output
+        start_services.assert_called_once_with(adj_dir)
+        assert "Operation worker started" in result.output
+        assert "Telegram listener started" in result.output
+
+
 class TestDurableKbCli:
     def test_inline_sigterm_guard_restores_handler_after_unwind(self) -> None:
         previous = object()

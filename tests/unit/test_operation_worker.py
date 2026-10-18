@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import patch
@@ -133,9 +134,15 @@ async def test_photo_preparation_runs_inside_tracked_worker(tmp_path: Path, monk
         "adjutant.messaging.telegram.photos.tg_download_photo",
         lambda *_args, **_kwargs: image,
     )
+    worker_loop = asyncio.get_running_loop()
+
+    async def analyze_photo(*_args, **_kwargs):
+        assert asyncio.get_running_loop() is worker_loop
+        return "Total: 12.00"
+
     monkeypatch.setattr(
-        "adjutant.capabilities.vision.vision.run_vision",
-        lambda *_args, **_kwargs: "Total: 12.00",
+        "adjutant.capabilities.vision.vision.run_vision_async",
+        analyze_photo,
     )
 
     prompt = await worker._prepare_photo_prompt(operation)  # noqa: SLF001
@@ -143,6 +150,70 @@ async def test_photo_preparation_runs_inside_tracked_worker(tmp_path: Path, monk
     assert "What is the total?" in prompt
     assert "Total: 12.00" in prompt
     assert "untrusted evidence" in prompt
+    assert f"Saved local attachment path: {image}" in prompt
+    persisted = store.get_operation(operation.id)
+    assert persisted is not None
+    assert persisted.payload["local_attachment_path"] == str(image)
+    assert persisted.payload["attachment_media_type"] == "photo"
+
+
+@pytest.mark.asyncio
+async def test_photo_issue_write_always_asks_for_upload_consent(tmp_path: Path) -> None:
+    store = OperationStore(tmp_path)
+    operation = store.create_operation(
+        kind="telegram_photo",
+        source="telegram",
+        payload={"file_id": "file-1", "caption": "Create an issue"},
+        telegram_chat_id="42",
+    )
+    child = store.create_operation(
+        kind="kb_write",
+        source="kb",
+        payload={"prompt": "Create issue"},
+        parent_id=operation.id,
+        execution_mode="inline",
+    )
+    store.claim_operation(child.id, "child-worker")
+    store.transition(child.id, OperationState.RUNNING, worker_id="child-worker")
+    store.transition(child.id, OperationState.SUCCEEDED, result_text="Created issue #55")
+
+    async def handler(_operation):
+        return LLMResult(text="Created and verified issue #55.")
+
+    worker = OperationWorker(tmp_path, store=store, handler=handler, worker_id="worker")
+    completed = await worker.run_once()
+
+    assert completed is not None
+    assert completed.result_text == (
+        "Created and verified issue #55.\n\n"
+        "Should I upload the saved photo or photos to the issue?"
+    )
+    deliveries = store.list_deliveries(operation.id)
+    assert deliveries[0].payload["text"].endswith("photos to the issue?")
+
+
+def test_photo_issue_write_preserves_existing_upload_question(tmp_path: Path) -> None:
+    store = OperationStore(tmp_path)
+    operation = store.create_operation(
+        kind="telegram_photo",
+        source="telegram",
+        payload={},
+    )
+    child = store.create_operation(
+        kind="kb_write",
+        source="kb",
+        payload={},
+        parent_id=operation.id,
+    )
+    child = replace(child, state=OperationState.SUCCEEDED)
+
+    text = OperationWorker._ensure_photo_issue_upload_question(  # noqa: SLF001
+        operation,
+        "Created issue #55. Should I upload the photos?",
+        [child],
+    )
+
+    assert text == "Created issue #55. Should I upload the photos?"
 
 
 @pytest.mark.asyncio

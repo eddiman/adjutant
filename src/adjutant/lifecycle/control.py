@@ -1,4 +1,4 @@
-"""Adjutant lifecycle control: pause, resume, restart, emergency_kill, startup.
+"""Adjutant lifecycle control: start, pause, resume, restart, emergency_kill, startup.
 
 Replaces five bash scripts:
   scripts/lifecycle/pause.sh
@@ -409,6 +409,27 @@ def _start_telegram_service(adj_dir: Path) -> str:
     return listener_start(adj_dir)
 
 
+def _start_runtime_services(adj_dir: Path) -> list[str]:
+    """Start services in the order required to accept durable work safely."""
+    from adjutant.operations.process import worker_start
+
+    return [worker_start(adj_dir), _start_telegram_service(adj_dir)]
+
+
+def start(adj_dir: Path | None = None) -> str:
+    """Start the durable-operation worker and Telegram listener.
+
+    Normal startup does not recover an emergency-killed system. ``startup``
+    owns that explicit recovery flow.
+    """
+    from adjutant.core.lockfiles import is_killed
+
+    d = adj_dir or _adj_dir()
+    if is_killed(d):
+        return "Cannot start: system is in KILLED state. Run adjutant startup to recover."
+    return "\n".join(_start_runtime_services(d))
+
+
 def _sync_schedule_crontab(adj_dir: Path) -> str:
     """Sync schedule registry to crontab. Returns status line."""
     try:
@@ -606,12 +627,7 @@ def startup(
     lines += ["", "Starting services...", ""]
 
     # Start durable execution before polling accepts new durable work.
-    from adjutant.operations.process import worker_start
-
-    lines.append(worker_start(d))
-
-    # Telegram listener
-    lines.append(_start_telegram_service(d))
+    lines.extend(_start_runtime_services(d))
 
     # Post-startup PID sync for the telegram listener
     sync_pid = _pgrep_first("messaging/telegram/listener")

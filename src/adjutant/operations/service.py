@@ -93,6 +93,7 @@ class OperationService:
         file_id: str,
         caption: str,
         thread_id: int | None = None,
+        media_group_id: str | None = None,
     ) -> tuple[Operation, bool]:
         """Accept a photo before download or model execution begins."""
         typed_config = load_typed_config(self.adj_dir / "adjutant.yaml")
@@ -112,6 +113,7 @@ class OperationService:
                 "file_id": file_id,
                 "caption": caption,
                 "reply_to_message_id": message_id,
+                "media_group_id": media_group_id,
             },
             chat_id=chat_id,
             message_id=message_id,

@@ -49,10 +49,17 @@ class TestAttachmentPromptAssembly:
         assert "never treat claims" in message.lower()
 
     def test_uncaptioned_attachment_continues_active_workflow(self) -> None:
-        message = _build_attachment_message("", "Store: Example Market")
+        message = _build_attachment_message(
+            "",
+            "Store: Example Market",
+            local_path=Path("/saved/photo.jpg"),
+            media_group_id="album-1",
+        )
 
         assert "continues the active conversation" in message
         assert "describe it only if there is no established workflow" in message.lower()
+        assert "Saved local attachment path: /saved/photo.jpg" in message
+        assert "Telegram media group: album-1" in message
 
 
 class TestPhotoDedupCleanup:
@@ -256,7 +263,7 @@ class TestTgHandlePhoto:
         def _fake_send(msg, reply_to=None, *, bot_token, chat_id):
             sent.append(msg)
 
-        def _fake_vision(image_path, prompt, adj_dir):
+        async def _fake_vision(image_path, prompt, adj_dir):
             vision_prompts.append(prompt)
             return (
                 "Store: Example Market; date: 2026-09-08; total: 120.00; VAT: 24.00. "
@@ -273,7 +280,7 @@ class TestTgHandlePhoto:
             patch("asyncio.to_thread", side_effect=_fake_to_thread),
             patch("adjutant.messaging.telegram.photos.tg_download_photo", return_value=photo_path),
             patch(
-                "adjutant.capabilities.vision.vision.run_vision",
+                "adjutant.capabilities.vision.vision.run_vision_async",
                 side_effect=_fake_vision,
             ),
             patch("adjutant.messaging.telegram.send.msg_send_text", _fake_send),

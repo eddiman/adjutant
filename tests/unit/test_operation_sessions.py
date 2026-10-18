@@ -75,6 +75,34 @@ def test_resolves_explicit_id_and_status_reply(tmp_path: Path) -> None:
     assert reply is not None and reply.id == operation.id
 
 
+def test_photo_path_is_available_to_later_confirmation(tmp_path: Path) -> None:
+    store = OperationStore(tmp_path)
+    photo = store.create_operation(
+        kind="telegram_photo",
+        source="telegram",
+        payload={
+            "caption": "Create an issue from this",
+            "local_attachment_path": "/adjutant/photos/photo.jpg",
+            "media_group_id": "album-1",
+        },
+        telegram_chat_id="42",
+    )
+    _complete(store, photo.id, "Created issue #55. Should I upload the photo?")
+    confirmation = store.create_operation(
+        kind="telegram_chat",
+        source="telegram",
+        payload={"text": "Yes, upload it"},
+        telegram_chat_id="42",
+    )
+
+    prompt = build_conversation_prompt(confirmation, store)
+
+    assert "Photo caption: Create an issue from this" in prompt
+    assert "Saved local attachment path: /adjutant/photos/photo.jpg" in prompt
+    assert "Telegram media group: album-1" in prompt
+    assert prompt.endswith("Yes, upload it")
+
+
 def test_acceptance_links_only_explicit_unfinished_followup(tmp_path: Path) -> None:
     (tmp_path / "adjutant.yaml").write_text("operations:\n  enabled: true\n")
     store = OperationStore(tmp_path)

@@ -87,7 +87,7 @@ Run from your terminal after adding the `adjutant` alias to your shell profile.
 ### Service management
 
 ```bash
-adjutant start        # Start the Telegram listener
+adjutant start        # Start the operation worker and Telegram listener
 adjutant stop         # Stop the Telegram listener
 adjutant restart      # Restart all services
 adjutant status       # Show system status (OPERATIONAL/PAUSED/KILLED)

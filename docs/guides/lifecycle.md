@@ -10,7 +10,7 @@ Adjutant has three possible states:
 
 | State | What it means | How to enter | How to exit |
 |-------|--------------|-------------|------------|
-| **RUNNING** | Listener is active and polling for messages | `adjutant start` | `adjutant stop`, `adjutant pause`, or `adjutant kill` |
+| **RUNNING** | Operation worker and listener are active | `adjutant start` | `adjutant stop`, `adjutant pause`, or `adjutant kill` |
 | **PAUSED** | Silent autonomous state; managed cron entries are removed and autonomous notifications are suppressed | `adjutant pause` or `/pause` | `adjutant resume` or `/resume` |
 | **KILLED** | Hard stop; `KILLED` lockfile exists; nothing will start until explicit recovery | `adjutant kill` or `/kill` | `adjutant startup` (clears lockfile, restores crontab, starts fresh) |
 
@@ -36,7 +36,7 @@ Or from Telegram:
 adjutant start
 ```
 
-Starts the Telegram listener in the background. The listener polls the Telegram API in a continuous loop. Acquires a directory-based mutex (`state/listener.lock/`) to prevent duplicate instances.
+Starts the durable-operation worker, then starts the Telegram listener in the background. Starting the worker first ensures that natural-language messages do not enter the durable queue without a process available to execute them. The listener polls the Telegram API in a continuous loop and acquires a directory-based mutex (`state/listener.lock/`) to prevent duplicate instances.
 
 If a `KILLED` lockfile exists, use `adjutant startup` for full recovery (see below).
 

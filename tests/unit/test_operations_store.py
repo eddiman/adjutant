@@ -53,6 +53,27 @@ class TestOperations:
         updated = store.set_status_message_id(operation.id, 99)
         assert updated.status_message_id == 99
 
+    def test_update_operation_payload_merges_framework_metadata(
+        self,
+        store: OperationStore,
+    ) -> None:
+        operation = store.create_operation(
+            kind="telegram_photo",
+            source="telegram",
+            payload={"caption": "Create an issue"},
+        )
+
+        updated = store.update_operation_payload(
+            operation.id,
+            {"local_attachment_path": "/tmp/photo.jpg"},
+        )
+
+        assert updated.payload == {
+            "caption": "Create an issue",
+            "local_attachment_path": "/tmp/photo.jpg",
+        }
+        assert store.get_operation(operation.id).payload == updated.payload  # type: ignore[union-attr]
+
     def test_claim_and_complete(self, store: OperationStore) -> None:
         operation = store.create_operation(kind="chat", source="test", payload={})
 

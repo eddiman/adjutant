@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from adjutant.core.backend import LLMResult
 from adjutant.capabilities.vision.vision import (
     _DEFAULT_VISION_TIER,
+    main,
     resolve_vision_model,
     run_vision,
+    run_vision_async,
     run_vision_multi,
-    main,
+    run_vision_multi_async,
 )
+from adjutant.core.backend import LLMResult
 
 
 def _llm_result(text="", error_type=None, timed_out=False):
@@ -307,6 +310,33 @@ class TestRunVisionMulti:
         ):
             result = run_vision_multi([str(img)], "Describe", tmp_path)
         assert "doesn't support image analysis" in result
+
+
+@pytest.mark.asyncio
+async def test_async_vision_stays_on_callers_event_loop(tmp_path: Path) -> None:
+    img = tmp_path / "image.png"
+    img.write_bytes(b"fake png")
+    caller_loop = asyncio.get_running_loop()
+    backend = _mock_backend(_llm_result(text="Observed facts"))
+
+    async def run_on_current_loop(*args, **kwargs):
+        assert asyncio.get_running_loop() is caller_loop
+        return _llm_result(text="Observed facts")
+
+    backend.run.side_effect = run_on_current_loop
+    with (
+        patch("adjutant.core.backend.get_backend", return_value=backend),
+        patch("adjutant.core.logging.adj_log"),
+        patch(
+            "adjutant.capabilities.vision.vision.resolve_vision_model_spec",
+            return_value=MagicMock(model="vision-model", variant=None),
+        ),
+    ):
+        multi_result = await run_vision_multi_async([str(img)], "Describe", tmp_path)
+        single_result = await run_vision_async(str(img), "Describe", tmp_path)
+
+    assert multi_result == "Observed facts"
+    assert single_result == "Observed facts"
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,21 @@ _MAX_CONTEXT_CHARS = 12000
 _MAX_TURN_CHARS = 3000
 
 
+def _request_context(operation: Operation) -> str:
+    """Render user input plus trusted attachment continuity metadata."""
+    if operation.kind != "telegram_photo":
+        return str(operation.payload.get("text") or operation.payload.get("prompt") or "")
+    caption = str(operation.payload.get("caption") or "").strip()
+    parts = [f"Photo caption: {caption or '(none)'}"]
+    local_path = str(operation.payload.get("local_attachment_path") or "").strip()
+    if local_path:
+        parts.append(f"Saved local attachment path: {local_path}")
+    media_group_id = str(operation.payload.get("media_group_id") or "").strip()
+    if media_group_id:
+        parts.append(f"Telegram media group: {media_group_id}")
+    return "\n".join(parts)
+
+
 def resolve_followup_target(
     store: OperationStore,
     *,
@@ -33,7 +48,7 @@ def resolve_followup_target(
 
 def build_conversation_prompt(operation: Operation, store: OperationStore) -> str:
     """Build bounded deterministic context for an operation-owned session."""
-    prompt = str(operation.payload.get("text") or operation.payload.get("prompt") or "")
+    prompt = _request_context(operation)
     if operation.kind != "telegram_chat" or operation.telegram_chat_id is None:
         return prompt
 
@@ -51,7 +66,7 @@ def build_conversation_prompt(operation: Operation, store: OperationStore) -> st
     blocks: list[str] = []
     used = 0
     for previous in context_by_id.values():
-        request = str(previous.payload.get("text") or previous.payload.get("prompt") or "")
+        request = _request_context(previous)
         answer = previous.result_text or ""
         block = (
             f"Previous user turn ({previous.id}):\n{request[:_MAX_TURN_CHARS]}\n"
