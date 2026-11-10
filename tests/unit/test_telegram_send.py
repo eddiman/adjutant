@@ -217,6 +217,7 @@ class TestMsgTyping:
             # wait uses min(4.0, remaining) so the thread wakes up promptly
             thread.join(timeout=2.0)
             assert not thread.is_alive(), "Typing thread should auto-stop after max_duration"
+            assert "ceiling_key" not in _TYPING_THREADS
             msg_typing_stop("ceiling_key")
 
 

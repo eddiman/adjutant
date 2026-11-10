@@ -68,6 +68,29 @@ def _save_offset(adj_dir: Path, offset: int) -> None:
         (adj_dir / "state" / _OFFSET_FILE_NAME).write_text(str(offset) + "\n")
 
 
+def _acknowledge_accepted_chat(
+    operation_id: str,
+    message_id: int,
+    bot_token: str,
+    chat_id: str,
+) -> None:
+    """Make durable queue acceptance visible before a worker claims the operation.
+
+    The reaction persists if the operation waits in the queue. The short typing
+    pulse covers the normal handoff to the worker, which then owns the longer
+    typing indicator for the execution lifetime.
+    """
+    from adjutant.messaging.telegram.send import msg_react, msg_typing_start
+
+    msg_react(message_id, bot_token=bot_token, chat_id=chat_id)
+    msg_typing_start(
+        f"accepted_{operation_id}",
+        bot_token,
+        chat_id,
+        max_duration=5,
+    )
+
+
 async def _poll_once(
     bot_token: str,
     offset: int,
@@ -282,6 +305,12 @@ async def main() -> None:  # noqa: C901 — complexity is inherent to a polling 
                                     ),
                                 )
                                 if inserted:
+                                    _acknowledge_accepted_chat(
+                                        operation.id,
+                                        message_id,
+                                        bot_token,
+                                        chat_id,
+                                    )
                                     acknowledgement_delivered = False
                                     if config.operations.debug:
                                         receipt = msg_send_text(

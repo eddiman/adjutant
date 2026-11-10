@@ -6,16 +6,20 @@ The main() polling loop is integration-level and not covered here.
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import TYPE_CHECKING
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from adjutant.messaging.telegram.listener import (
+    _acknowledge_accepted_chat,
     _load_offset,
     _poll_once,
     _save_offset,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +81,23 @@ class TestSaveOffset:
     def test_handles_missing_state_dir_gracefully(self, tmp_path: Path) -> None:
         # State dir doesn't exist — should not raise
         _save_offset(tmp_path, 5)
+
+
+class TestAcceptedChatAcknowledgement:
+    def test_reacts_and_starts_short_typing_pulse(self) -> None:
+        with (
+            patch("adjutant.messaging.telegram.send.msg_react") as react,
+            patch("adjutant.messaging.telegram.send.msg_typing_start") as typing_start,
+        ):
+            _acknowledge_accepted_chat("op-123", 9, "token", "42")
+
+        react.assert_called_once_with(9, bot_token="token", chat_id="42")
+        typing_start.assert_called_once_with(
+            "accepted_op-123",
+            "token",
+            "42",
+            max_duration=5,
+        )
 
 
 # ---------------------------------------------------------------------------

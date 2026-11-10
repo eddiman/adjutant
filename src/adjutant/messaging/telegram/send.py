@@ -337,21 +337,28 @@ def msg_typing_start(
     payload: dict[str, Any] = {"chat_id": chat_id, "action": "typing"}
 
     def _loop() -> None:
-        deadline = time.monotonic() + max_duration
-        while not stop_event.is_set():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                adj_log(
-                    "telegram",
-                    f"Typing indicator '{suffix}' auto-stopped after {max_duration}s ceiling",
-                )
-                break
-            try:
-                client = get_client()
-                client.post(url, json_data=payload)
-            except Exception:  # noqa: BLE001 — non-fatal typing indicator
-                pass
-            stop_event.wait(min(4.0, remaining))
+        try:
+            deadline = time.monotonic() + max_duration
+            while not stop_event.is_set():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    adj_log(
+                        "telegram",
+                        f"Typing indicator '{suffix}' auto-stopped after {max_duration}s ceiling",
+                    )
+                    break
+                try:
+                    client = get_client()
+                    client.post(url, json_data=payload)
+                except Exception:  # noqa: BLE001 — non-fatal typing indicator
+                    pass
+                stop_event.wait(min(4.0, remaining))
+        finally:
+            # Short acknowledgement pulses end without an explicit stop call.
+            # Remove only this thread's entry so a replacement with the same
+            # suffix remains registered.
+            if _TYPING_THREADS.get(suffix, (None, None))[1] is stop_event:
+                _TYPING_THREADS.pop(suffix, None)
 
     t = threading.Thread(target=_loop, daemon=True, name=f"typing-{suffix}")
     _TYPING_THREADS[suffix] = (t, stop_event)
