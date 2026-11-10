@@ -40,7 +40,13 @@ async def run_retention(
             adj_log("operations", f"Backend session retention deferred: {exc}")
         else:
             client = endpoint.client(timeout=config.operations.timeouts.connection_seconds)
-            for operation_id, session_id, _server_instance_id, workdir in session_rows:
+            for operation_id, session_id, server_instance_id, workdir in session_rows:
+                # Sessions belong to one OpenCode server process. A different
+                # instance cannot retain this session, so do not issue a
+                # repeated delete request that can only return 404.
+                if server_instance_id != endpoint.instance_id:
+                    deleted_sessions += 1
+                    continue
                 try:
                     deleted = await asyncio.to_thread(
                         client.delete_session,

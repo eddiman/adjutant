@@ -69,6 +69,7 @@ async def test_retention_deletes_only_recorded_owned_session(tmp_path: Path) -> 
     client = MagicMock()
     client.delete_session.return_value = True
     endpoint = MagicMock()
+    endpoint.instance_id = "ocs-owned"
     endpoint.client.return_value = client
 
     with patch(
@@ -82,6 +83,37 @@ async def test_retention_deletes_only_recorded_owned_session(tmp_path: Path) -> 
     assert store.get_operation(operation_id) is None
     assert result["backend_sessions"] == 1
     assert result["operations"] == 1
+
+
+@pytest.mark.asyncio
+async def test_retention_prunes_session_from_a_replaced_server(tmp_path: Path) -> None:
+    (tmp_path / "adjutant.yaml").write_text(
+        "operations:\n"
+        "  enabled: true\n"
+        "  retention:\n"
+        "    completed_days: 0\n"
+        "    events_days: 0\n"
+        "    deliveries_days: 0\n"
+        "    backend_sessions_days: 0\n"
+        "  persistent_opencode:\n"
+        "    enabled: true\n"
+    )
+    store = OperationStore(tmp_path)
+    operation_id = _completed_with_session(store, completed_at=1.0)
+    client = MagicMock()
+    endpoint = MagicMock()
+    endpoint.instance_id = "ocs-replacement"
+    endpoint.client.return_value = client
+
+    with patch(
+        "adjutant.operations.retention.ManagedOpenCodeServer.ensure_ready",
+        new=AsyncMock(return_value=endpoint),
+    ):
+        result = await run_retention(tmp_path, store=store, now=100.0)
+
+    client.delete_session.assert_not_called()
+    assert store.get_operation(operation_id) is None
+    assert result["backend_sessions"] == 1
 
 
 @pytest.mark.asyncio
@@ -102,6 +134,7 @@ async def test_failed_owned_session_cleanup_preserves_operation(tmp_path: Path) 
     client = MagicMock()
     client.delete_session.return_value = False
     endpoint = MagicMock()
+    endpoint.instance_id = "ocs-owned"
     endpoint.client.return_value = client
 
     with patch(
