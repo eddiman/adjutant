@@ -537,6 +537,35 @@ class TestOperations:
         assert store.get_operation(parent.id) is not None
         assert store.get_operation(child.id) is not None
 
+    def test_retention_keeps_parent_until_terminal_child_is_pruned(
+        self, store: OperationStore
+    ) -> None:
+        parent = store.create_operation(kind="prompt", source="test", payload={})
+        store.claim_next("worker")
+        store.transition(parent.id, OperationState.RUNNING, worker_id="worker")
+        store.transition(parent.id, OperationState.SUCCEEDED)
+        child = store.create_operation(
+            kind="prompt",
+            source="test",
+            payload={},
+            parent_id=parent.id,
+        )
+        store.claim_next("worker")
+        store.transition(child.id, OperationState.RUNNING, worker_id="worker")
+        store.transition(child.id, OperationState.SUCCEEDED)
+        with store._connect() as conn:  # noqa: SLF001 - arrange retention age
+            conn.execute("UPDATE operations SET completed_at=1")
+
+        counts = store.prune_retention(
+            completed_before=2,
+            events_before=0,
+            deliveries_before=0,
+        )
+
+        assert counts["operations"] == 1
+        assert store.get_operation(parent.id) is not None
+        assert store.get_operation(child.id) is None
+
 
 class TestTelegramInbox:
     def test_accept_and_offset_are_atomic_and_idempotent(self, store: OperationStore) -> None:

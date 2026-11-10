@@ -833,7 +833,11 @@ class OperationStore:
                     protected.add(str(row["parent_id"]))
                 protected.update(str(value) for value in json.loads(row["dependency_ids_json"]))
             candidates = conn.execute(
-                "SELECT id FROM operations WHERE completed_at IS NOT NULL AND completed_at<?",
+                "SELECT candidate.id FROM operations AS candidate "
+                "WHERE candidate.completed_at IS NOT NULL AND candidate.completed_at<? "
+                "AND NOT EXISTS ("
+                "SELECT 1 FROM operations AS child WHERE child.parent_id=candidate.id"
+                ")",
                 (completed_before,),
             ).fetchall()
             operation_ids = [
