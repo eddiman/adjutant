@@ -34,6 +34,12 @@ The result and its delivery records commit in one transaction. A process failure
 
 `adjutant.operations.daemon` runs as a separate managed process. Startup launches the worker before the Telegram listener accepts new durable work. The worker claims queued records with `BEGIN IMMEDIATE`, respects successful dependencies, and limits active tasks with `operations.worker_concurrency`.
 
+The daemon keeps one SQLite connection open while execution and maintenance run. This connection holds no transaction; each store operation continues to use a separate connection and commits or rolls back before closing it. Keeping a connection open prevents SQLite from deleting and recreating `operations.sqlite3-wal` and `operations.sqlite3-shm` during every idle poll. The configured polling interval remains unchanged.
+
+Each `OperationStore` initializes its schema once, protected by a thread lock. Schema checks, column additions, data backfills, and the schema-version update run in one write transaction so concurrent processes serialize initialization and failed migrations can be retried. Connection-local foreign-key and busy-timeout settings still apply to every connection. WAL mode is set during initialization and persists in the database.
+
+The daemon closes its retained connection after execution and maintenance finish, including when startup or execution raises an exception. SQLite performs its usual final-connection checkpoint and sidecar cleanup when no other connections remain. Automatic checkpointing stays enabled, and crash recovery continues to use SQLite's surviving WAL together with Adjutant's lease recovery.
+
 Each claim has a renewable lease. The first attempt fixes an absolute deadline, and later recovery never extends it. Lease renewal, state transitions, attempt evidence, and terminal completion are fenced by the current attempt ID and lease owner. A late worker therefore cannot overwrite a state that recovery or a newer attempt has claimed.
 
 Attached KB children use `execution_mode=inline`. Adjutant creates the child, claims it, creates its attempt, records CLI process evidence, and appends the accepted event in one transaction. The daemon queue ignores inline children, so the daemon and submitting CLI cannot execute the same child. The child deadline is the lower of its configured runtime ceiling and the parent's remaining budget after cancellation and persistence reserves. Conversational follow-ups can still use `parent_id`, but only inline execution children inherit deadlines and cancellation.

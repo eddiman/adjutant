@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 import time
 import uuid
 from contextlib import contextmanager
@@ -95,13 +96,25 @@ class OperationStore:
     def __init__(self, adj_dir: Path, *, database_path: Path | None = None) -> None:
         self.adj_dir = adj_dir
         self.database_path = database_path or adj_dir / "state" / "operations.sqlite3"
+        self._initialized = False
+        self._initialize_lock = threading.Lock()
 
     def initialize(self) -> None:
-        """Create or migrate the operation database."""
+        """Create or migrate the database once per store, retrying failed setup."""
+        with self._initialize_lock:
+            if self._initialized:
+                return
+            self._initialize()
+            self._initialized = True
+
+    def _initialize(self) -> None:
+        """Serialize schema checks and backfills with other database writers."""
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(
                 """
+                BEGIN IMMEDIATE;
+
                 CREATE TABLE IF NOT EXISTS metadata (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
@@ -224,11 +237,6 @@ class OperationStore:
                     ON deliveries(state, next_attempt_at, created_at);
                 """
             )
-            conn.execute(
-                "INSERT INTO metadata(key, value) VALUES('schema_version', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (str(_SCHEMA_VERSION),),
-            )
             columns = {
                 str(row["name"]) for row in conn.execute("PRAGMA table_info(operations)").fetchall()
             }
@@ -276,14 +284,21 @@ class OperationStore:
                 ),
             )
 
+            conn.execute(
+                "INSERT INTO metadata(key, value) VALUES('schema_version', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (str(_SCHEMA_VERSION),),
+            )
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         conn = sqlite3.connect(self.database_path, timeout=5.0)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA busy_timeout = 5000")
-        conn.execute("PRAGMA journal_mode = WAL")
         try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA busy_timeout = 5000")
+            if not self._initialized:
+                conn.execute("PRAGMA journal_mode = WAL")
             yield conn
             conn.commit()
         except Exception:
@@ -291,6 +306,20 @@ class OperationStore:
             raise
         finally:
             conn.close()
+
+    @contextmanager
+    def keep_open(self) -> Iterator[None]:
+        """Keep WAL files open without holding a transaction or sharing a connection.
+
+        The caller must enter and exit this context on the same thread. Store
+        operations continue to use their own short-lived transaction connections.
+        """
+        self.initialize()
+        with self._connect() as conn:
+            # Access the database to attach this connection to the WAL. Exhaust
+            # the cursor so it cannot retain a read transaction during polling.
+            conn.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchall()
+            yield
 
     def create_operation(
         self,

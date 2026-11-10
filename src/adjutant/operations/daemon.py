@@ -78,47 +78,50 @@ async def main() -> None:
         adj_log("operations", f"Another operation worker is running (PID {lock.held_pid}).")
         sys.exit(1)
 
-    bot_token, chat_id = require_telegram_credentials(adj_dir / ".env")
-    store = OperationStore(adj_dir)
-    delivery = DeliveryWorker(
-        adj_dir,
-        bot_token=bot_token,
-        chat_id=chat_id,
-        store=store,
-        worker_id=f"delivery-{os.getpid()}",
-        max_attempts=config.operations.delivery_max_attempts,
-        retry_base_seconds=config.operations.delivery_retry_base_seconds,
-        lease_seconds=config.operations.timeouts.lease_seconds,
-    )
-    worker = OperationWorker(
-        adj_dir,
-        store=store,
-        concurrency=config.operations.worker_concurrency,
-        poll_interval_seconds=config.operations.poll_interval_seconds,
-        lease_seconds=config.operations.timeouts.lease_seconds,
-        startup_seconds=config.operations.timeouts.startup_seconds,
-        connection_seconds=config.operations.timeouts.connection_seconds,
-        runtime_seconds=config.operations.timeouts.runtime_seconds,
-        progress_warning_seconds=config.operations.timeouts.progress_warning_seconds,
-        cancellation_grace_seconds=config.operations.timeouts.cancellation_grace_seconds,
-        delivery_worker=delivery,
-    )
-    loop = asyncio.get_running_loop()
-    for signal_name in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(signal_name, worker.stop)
-    maintenance = asyncio.create_task(_maintenance_loop(adj_dir, store))
     try:
-        await worker.run_forever()
-    finally:
-        maintenance.cancel()
-        await asyncio.gather(maintenance, return_exceptions=True)
-        if config.operations.persistent_opencode.enabled:
-            from adjutant.core.opencode_server import ManagedOpenCodeServer
-
-            await ManagedOpenCodeServer(
+        bot_token, chat_id = require_telegram_credentials(adj_dir / ".env")
+        store = OperationStore(adj_dir)
+        with store.keep_open():
+            delivery = DeliveryWorker(
                 adj_dir,
-                config.operations.persistent_opencode,
-            ).stop()
+                bot_token=bot_token,
+                chat_id=chat_id,
+                store=store,
+                worker_id=f"delivery-{os.getpid()}",
+                max_attempts=config.operations.delivery_max_attempts,
+                retry_base_seconds=config.operations.delivery_retry_base_seconds,
+                lease_seconds=config.operations.timeouts.lease_seconds,
+            )
+            worker = OperationWorker(
+                adj_dir,
+                store=store,
+                concurrency=config.operations.worker_concurrency,
+                poll_interval_seconds=config.operations.poll_interval_seconds,
+                lease_seconds=config.operations.timeouts.lease_seconds,
+                startup_seconds=config.operations.timeouts.startup_seconds,
+                connection_seconds=config.operations.timeouts.connection_seconds,
+                runtime_seconds=config.operations.timeouts.runtime_seconds,
+                progress_warning_seconds=config.operations.timeouts.progress_warning_seconds,
+                cancellation_grace_seconds=config.operations.timeouts.cancellation_grace_seconds,
+                delivery_worker=delivery,
+            )
+            loop = asyncio.get_running_loop()
+            for signal_name in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(signal_name, worker.stop)
+            maintenance = asyncio.create_task(_maintenance_loop(adj_dir, store))
+            try:
+                await worker.run_forever()
+            finally:
+                maintenance.cancel()
+                await asyncio.gather(maintenance, return_exceptions=True)
+                if config.operations.persistent_opencode.enabled:
+                    from adjutant.core.opencode_server import ManagedOpenCodeServer
+
+                    await ManagedOpenCodeServer(
+                        adj_dir,
+                        config.operations.persistent_opencode,
+                    ).stop()
+    finally:
         lock.release()
         adj_log("operations", "Operation worker stopped.")
 
